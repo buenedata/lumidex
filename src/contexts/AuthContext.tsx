@@ -84,11 +84,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const handleUserProfile = useCallback(async (user: User) => {
     try {
       // First check if profile exists
-      const { data: existingProfile } = await supabase
+      const { data: existingProfile, error: selectError } = await supabase
         .from('profiles')
         .select('id, avatar_url')
         .eq('id', user.id)
         .single()
+
+      // If we get permission errors, refresh the session and retry
+      if (selectError && (selectError.message.includes('permission') || selectError.message.includes('RLS'))) {
+        console.log('Permission error detected, refreshing session...')
+        await supabase.auth.refreshSession()
+        return // Exit and let auth state change handler retry
+      }
 
       // Prepare update data
       const updateData: any = {
@@ -113,6 +120,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error('Error upserting user profile:', error.message)
+        // If permission error, try refreshing session
+        if (error.message.includes('permission') || error.message.includes('RLS')) {
+          console.log('Profile upsert permission error, refreshing session...')
+          await supabase.auth.refreshSession()
+        }
       }
     } catch (error) {
       console.error('Error handling user profile:', error)
