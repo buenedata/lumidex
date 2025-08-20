@@ -441,6 +441,38 @@ export interface Database {
           variant?: 'normal' | 'holo' | 'reverse_holo' | 'pokeball_pattern' | 'masterball_pattern' | '1st_edition'
         }
       }
+      wishlist_lists: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          description: string | null
+          is_default: boolean
+          is_public: boolean
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          description?: string | null
+          is_default?: boolean
+          is_public?: boolean
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          description?: string | null
+          is_default?: boolean
+          is_public?: boolean
+          created_at?: string | null
+          updated_at?: string | null
+        }
+      }
       wishlists: {
         Row: {
           id: string
