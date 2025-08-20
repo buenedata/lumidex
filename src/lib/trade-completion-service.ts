@@ -114,10 +114,12 @@ class TradeCompletionService {
       // Handle initiator's cards (going to recipient)
       // Scenario: Initiator gives cards to recipient
       for (const item of initiatorItems) {
-        console.log(`Processing initiator's card: ${item.card.name} -> going to recipient`)
+        const card = Array.isArray(item.card) ? item.card[0] : item.card
+        const cardName = card?.name || 'Unknown Card'
+        console.log(`Processing initiator's card: ${cardName} -> going to recipient`)
         
         // Determine the correct variant for this card
-        const variant = determineCardVariant(item.card, item.is_foil)
+        const variant = determineCardVariant(card, item.is_foil)
         
         // Remove from initiator's collection (they're giving this card away)
         const removeResult = await collectionService.removeFromCollection(
@@ -131,9 +133,9 @@ class TradeCompletionService {
         )
 
         if (removeResult.success) {
-          removedFromCollection.push(`${item.card.name} (${item.quantity}x ${variant})`)
+          removedFromCollection.push(`${cardName} (${item.quantity}x ${variant})`)
         } else {
-          console.error(`Failed to remove ${item.card.name} from initiator's collection:`, removeResult.error)
+          console.error(`Failed to remove ${cardName} from initiator's collection:`, removeResult.error)
         }
 
         // Add to recipient's collection (they're receiving this card)
@@ -148,23 +150,25 @@ class TradeCompletionService {
         )
 
         if (addResult.success) {
-          addedToCollection.push(`${item.card.name} (${item.quantity}x ${variant})`)
+          addedToCollection.push(`${cardName} (${item.quantity}x ${variant})`)
         } else {
-          console.error(`Failed to add ${item.card.name} to recipient's collection:`, addResult.error)
+          console.error(`Failed to add ${cardName} to recipient's collection:`, addResult.error)
         }
 
         // IMPORTANT: Remove from recipient's wishlist if it exists
         // (They wanted this card, now they have it, so remove from wishlist)
-        await this.removeFromWishlistIfExists(trade.recipient_id, item.card_id, removedFromWishlist, item.card.name)
+        await this.removeFromWishlistIfExists(trade.recipient_id, item.card_id, removedFromWishlist, cardName)
       }
 
       // Handle recipient's cards (going to initiator)
       // Scenario: Recipient gives cards to initiator
       for (const item of recipientItems) {
-        console.log(`Processing recipient's card: ${item.card.name} -> going to initiator`)
+        const card = Array.isArray(item.card) ? item.card[0] : item.card
+        const cardName = card?.name || 'Unknown Card'
+        console.log(`Processing recipient's card: ${cardName} -> going to initiator`)
         
         // Determine the correct variant for this card
-        const variant = determineCardVariant(item.card, item.is_foil)
+        const variant = determineCardVariant(card, item.is_foil)
         
         // Remove from recipient's collection (they're giving this card away)
         const removeResult = await collectionService.removeFromCollection(
@@ -178,9 +182,9 @@ class TradeCompletionService {
         )
 
         if (removeResult.success) {
-          removedFromCollection.push(`${item.card.name} (${item.quantity}x ${variant})`)
+          removedFromCollection.push(`${cardName} (${item.quantity}x ${variant})`)
         } else {
-          console.error(`Failed to remove ${item.card.name} from recipient's collection:`, removeResult.error)
+          console.error(`Failed to remove ${cardName} from recipient's collection:`, removeResult.error)
         }
 
         // Add to initiator's collection (they're receiving this card)
@@ -195,14 +199,14 @@ class TradeCompletionService {
         )
 
         if (addResult.success) {
-          addedToCollection.push(`${item.card.name} (${item.quantity}x ${variant})`)
+          addedToCollection.push(`${cardName} (${item.quantity}x ${variant})`)
         } else {
-          console.error(`Failed to add ${item.card.name} to initiator's collection:`, addResult.error)
+          console.error(`Failed to add ${cardName} to initiator's collection:`, addResult.error)
         }
 
         // IMPORTANT: Remove from initiator's wishlist if it exists
         // (They wanted this card, now they have it, so remove from wishlist)
-        await this.removeFromWishlistIfExists(trade.initiator_id, item.card_id, removedFromWishlist, item.card.name)
+        await this.removeFromWishlistIfExists(trade.initiator_id, item.card_id, removedFromWishlist, cardName)
       }
 
       // Mark trade as completed

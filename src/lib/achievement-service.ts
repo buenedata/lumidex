@@ -1041,10 +1041,12 @@ class AchievementService {
 
       // Group collection items by card to calculate variant-specific pricing
       const cardGroups = userCollections?.reduce((acc, item) => {
-        const cardId = item.cards.id
+        // Handle the case where cards might be an array (fix Supabase type issue)
+        const card = Array.isArray(item.cards) ? item.cards[0] : item.cards
+        const cardId = card?.id
         if (!acc[cardId]) {
           acc[cardId] = {
-            card: item.cards,
+            card: card,
             variants: {
               normal: 0,
               holo: 0,
@@ -1084,7 +1086,7 @@ class AchievementService {
 
       const totalCards = userCollections?.reduce((sum, item) => sum + item.quantity, 0) || 0
       const uniqueCards = Object.keys(cardGroups).length
-      const totalValueEur = Object.values(cardGroups).reduce((sum, { card, variants }) => {
+      const totalValueEur = Object.values(cardGroups).reduce((sum, { card, variants }): number => {
         if (!card) return sum
         
         const cardValue = calculateCardVariantValue(
@@ -1142,17 +1144,21 @@ class AchievementService {
       }
 
       // Calculate themed achievement stats based on available card data
-      const cardDetails = userCollections?.map(item => ({
-        name: item.cards.name || '',
-        rarity: item.cards.rarity || '',
-        variant: (item as any).variant || 'normal',
-        quantity: item.quantity
-      })) || []
+      const cardDetails = userCollections?.map(item => {
+        const card = Array.isArray(item.cards) ? item.cards[0] : item.cards
+        return {
+          name: card?.name || '',
+          rarity: card?.rarity || '',
+          variant: (item as any).variant || 'normal',
+          quantity: item.quantity
+        }
+      }) || []
 
       // Get rare cards count
-      const rareCardCount = userCollections?.filter((item: any) =>
-        ['rare', 'ultra rare', 'secret rare', 'rainbow rare'].includes(item.cards.rarity.toLowerCase())
-      ).length || 0
+      const rareCardCount = userCollections?.filter((item: any) => {
+        const card = Array.isArray(item.cards) ? item.cards[0] : item.cards
+        return ['rare', 'ultra rare', 'secret rare', 'rainbow rare'].includes(card?.rarity?.toLowerCase() || '')
+      }).length || 0
 
       // Pokémon-specific counts (basic name matching)
       const pikachuCards = cardDetails.filter(card =>

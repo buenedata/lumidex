@@ -249,18 +249,20 @@ class ProfileService {
 
       if (recentCards) {
         recentCards.forEach(card => {
+          const cardData = Array.isArray(card.cards) ? card.cards[0] : card.cards
+          const setData = Array.isArray(cardData?.sets) ? cardData?.sets[0] : cardData?.sets
           activities.push({
             id: `card_${card.id}`,
             type: 'card_added',
             title: 'Added new card',
-            description: `Added ${card.quantity}x ${card.cards.name} to collection`,
+            description: `Added ${card.quantity}x ${cardData?.name || 'Unknown'} to collection`,
             timestamp: card.created_at,
             metadata: {
-              cardId: card.cards.id,
-              cardName: card.cards.name,
-              cardImage: card.cards.image_small,
-              setId: card.cards.set_id,
-              setName: card.cards.sets.name
+              cardId: cardData?.id || '',
+              cardName: cardData?.name || 'Unknown',
+              cardImage: cardData?.image_small || '',
+              setId: cardData?.set_id || '',
+              setName: setData?.name || 'Unknown Set'
             }
           })
         })
@@ -310,11 +312,12 @@ class ProfileService {
 
       if (recentFriends) {
         recentFriends.forEach(friendship => {
-          const friendProfile = friendship.requester_id === userId 
-            ? friendship.profiles 
-            : friendship.profiles
+          // Handle cases where profiles might be arrays
+          const requesterProfile = Array.isArray(friendship.profiles) ? friendship.profiles[0] : friendship.profiles
+          const addresseeProfile = Array.isArray(friendship.profiles) ? friendship.profiles[0] : friendship.profiles
+          const friendProfile = friendship.requester_id === userId ? addresseeProfile : requesterProfile
 
-          if (friendProfile) {
+          if (friendProfile && friendProfile.username) {
             activities.push({
               id: `friend_${friendship.id}`,
               type: 'friend_added',

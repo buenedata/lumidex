@@ -122,10 +122,12 @@ class CollectionStatsService {
 
       // Group collection items by card to calculate variant-specific pricing
       const cardGroups = collection.reduce((acc, item) => {
-        const cardId = item.cards.id
+        // Handle the case where cards might be an array (fix Supabase type issue)
+        const card = Array.isArray(item.cards) ? item.cards[0] : item.cards
+        const cardId = card?.id
         if (!acc[cardId]) {
           acc[cardId] = {
-            card: item.cards,
+            card: card,
             variants: {
               normal: 0,
               holo: 0,
@@ -195,7 +197,11 @@ class CollectionStatsService {
       }
 
       const totalSets = allSets?.length || 0
-      const userSets = new Set(collection.map(item => item.cards.sets.id))
+      const userSets = new Set(collection.map(item => {
+        const card = Array.isArray(item.cards) ? item.cards[0] : item.cards
+        const sets = Array.isArray(card?.sets) ? card?.sets[0] : card?.sets
+        return sets?.id
+      }).filter(Boolean))
       const setsWithCards = userSets.size
       const completionPercentage = totalSets > 0 ? (setsWithCards / totalSets) * 100 : 0
 
@@ -238,6 +244,8 @@ class CollectionStatsService {
         .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         .slice(0, 10)
         .map(item => {
+          const card = Array.isArray(item.cards) ? item.cards[0] : item.cards
+          const sets = Array.isArray(card?.sets) ? card?.sets[0] : card?.sets
           const variant = (item as any).variant || 'normal'
           const variantQuantities = {
             normal: variant === 'normal' ? item.quantity : 0,
@@ -249,26 +257,26 @@ class CollectionStatsService {
           }
           const estimatedValue = calculateCardVariantValue(
             {
-              cardmarket_avg_sell_price: item.cards.cardmarket_avg_sell_price,
-              cardmarket_low_price: item.cards.cardmarket_low_price,
-              cardmarket_trend_price: item.cards.cardmarket_trend_price,
-              cardmarket_reverse_holo_sell: (item.cards as any).cardmarket_reverse_holo_sell,
-              cardmarket_reverse_holo_low: (item.cards as any).cardmarket_reverse_holo_low,
-              cardmarket_reverse_holo_trend: (item.cards as any).cardmarket_reverse_holo_trend,
+              cardmarket_avg_sell_price: card?.cardmarket_avg_sell_price,
+              cardmarket_low_price: card?.cardmarket_low_price,
+              cardmarket_trend_price: card?.cardmarket_trend_price,
+              cardmarket_reverse_holo_sell: card?.cardmarket_reverse_holo_sell,
+              cardmarket_reverse_holo_low: card?.cardmarket_reverse_holo_low,
+              cardmarket_reverse_holo_trend: card?.cardmarket_reverse_holo_trend,
             },
             variantQuantities
           ) / item.quantity // Get per-card value
           
           return {
-            cardId: item.cards.id,
-            cardName: item.cards.name,
-            setId: item.cards.set_id,
-            setName: item.cards.sets.name,
-            imageSmall: item.cards.image_small,
+            cardId: card?.id || '',
+            cardName: card?.name || '',
+            setId: card?.set_id || '',
+            setName: sets?.name || '',
+            imageSmall: card?.image_small || '',
             addedAt: item.created_at,
             quantity: item.quantity,
             estimatedValue,
-            rarity: item.cards.rarity
+            rarity: card?.rarity || ''
           }
         })
 
@@ -356,18 +364,21 @@ class CollectionStatsService {
     const cardsBySet = new Map<string, Map<string, { quantity: number; price: number }>>()
     
     userCards?.forEach(item => {
-      const setId = item.cards.set_id
-      const cardId = item.cards.id
+      const card = Array.isArray(item.cards) ? item.cards[0] : item.cards
+      const setId = card?.set_id
+      const cardId = card?.id
       
-      if (!cardsBySet.has(setId)) {
+      if (setId && cardId && !cardsBySet.has(setId)) {
         cardsBySet.set(setId, new Map())
       }
       
       // Only store one entry per unique card ID (prevents duplicates)
-      cardsBySet.get(setId)!.set(cardId, {
-        quantity: item.quantity,
-        price: item.cards.cardmarket_avg_sell_price || 0
-      })
+      if (setId && cardId) {
+        cardsBySet.get(setId)!.set(cardId, {
+          quantity: item.quantity,
+          price: card?.cardmarket_avg_sell_price || 0
+        })
+      }
     })
 
     // Calculate progress for each set
@@ -423,11 +434,12 @@ class CollectionStatsService {
       let cumulativeValue = 0
 
       collectionHistory.forEach(item => {
+        const card = Array.isArray(item.cards) ? item.cards[0] : item.cards
         const month = new Date(item.created_at).toISOString().substring(0, 7) // YYYY-MM
         
         cumulativeCards += item.quantity
         cumulativeUnique += 1
-        cumulativeValue += item.quantity * (item.cards.cardmarket_avg_sell_price || 0)
+        cumulativeValue += item.quantity * (card?.cardmarket_avg_sell_price || 0)
 
         monthlyData.set(month, {
           totalCards: cumulativeCards,
@@ -581,7 +593,10 @@ class CollectionStatsService {
       return []
     }
 
-    return collection.map(item => item.cards.id)
+    return collection.map(item => {
+      const card = Array.isArray(item.cards) ? item.cards[0] : item.cards
+      return card?.id
+    }).filter(Boolean) as string[]
   }
 
   /**

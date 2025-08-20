@@ -377,7 +377,9 @@ class OptimizedCommunityStatsService {
 
       collectionData.forEach((item) => {
         const userId = item.user_id
-        const cardId = item.card_id || item.cards?.id || 'unknown'
+        // Handle the case where cards might be an array (fix Supabase type issue)
+        const card = Array.isArray(item.cards) ? item.cards[0] : item.cards
+        const cardId = item.card_id || card?.id || 'unknown'
         
         if (!userCardGroups.has(userId)) {
           userCardGroups.set(userId, new Map())
@@ -386,7 +388,7 @@ class OptimizedCommunityStatsService {
         const userCards = userCardGroups.get(userId)!
         if (!userCards.has(cardId)) {
           userCards.set(cardId, {
-            card: item.cards,
+            card: card,
             variants: {
               normal: 0,
               holo: 0,

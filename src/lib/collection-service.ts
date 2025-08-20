@@ -506,11 +506,13 @@ class CollectionService {
       const totalCards = collection.reduce((sum, item) => sum + item.quantity, 0)
       const uniqueCards = collection.length
       // Group collection items by card to calculate variant-specific pricing
-      const cardGroups = collection.reduce((acc, item) => {
+      const cardGroups: Record<string, { card: any; variants: any }> = collection.reduce((acc, item) => {
         const cardId = item.card_id
+        // Handle the case where cards might be an array (fix Supabase type issue)
+        const card = Array.isArray(item.cards) ? item.cards[0] : item.cards
         if (!acc[cardId]) {
           acc[cardId] = {
-            card: item.cards,
+            card: card,
             variants: {
               normal: 0,
               holo: 0,
@@ -549,8 +551,9 @@ class CollectionService {
       }, {} as Record<string, { card: any; variants: any }>)
 
       // Calculate total value using variant-specific pricing
-      const totalValue = Object.values(cardGroups).reduce((sum, { card, variants }) => {
-        if (!card) return sum
+      let totalValue = 0
+      for (const { card, variants } of Object.values(cardGroups)) {
+        if (!card) continue
         
         const cardValue = calculateCardVariantValue(
           {
@@ -564,13 +567,14 @@ class CollectionService {
           variants
         )
         
-        return sum + cardValue
-      }, 0)
+        totalValue += cardValue
+      }
 
       // Rarity breakdown
       const rarityBreakdown: Record<string, number> = {}
       collection.forEach(item => {
-        const rarity = item.cards?.rarity || 'Unknown'
+        const card = Array.isArray(item.cards) ? item.cards[0] : item.cards
+        const rarity = card?.rarity || 'Unknown'
         rarityBreakdown[rarity] = (rarityBreakdown[rarity] || 0) + item.quantity
       })
 
@@ -582,7 +586,8 @@ class CollectionService {
       // Set completion (simplified - would need more complex logic for full implementation)
       const setCompletion: Record<string, { owned: number; total: number; percentage: number }> = {}
       const setGroups = collection.reduce((acc, item) => {
-        const setId = item.cards?.set_id
+        const card = Array.isArray(item.cards) ? item.cards[0] : item.cards
+        const setId = card?.set_id
         if (setId) {
           acc[setId] = (acc[setId] || 0) + 1
         }
@@ -591,9 +596,10 @@ class CollectionService {
 
       // For now, just show owned cards per set (would need total cards per set from database)
       Object.entries(setGroups).forEach(([setId, owned]) => {
+        const ownedCount = Number(owned)
         setCompletion[setId] = {
-          owned,
-          total: owned, // Placeholder - would need actual set totals
+          owned: ownedCount,
+          total: ownedCount, // Placeholder - would need actual set totals
           percentage: 100 // Placeholder
         }
       })
