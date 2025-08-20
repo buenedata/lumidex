@@ -126,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password,
         options: {
           data: userData,
-          emailRedirectTo: `${window.location.origin}/auth/callback`
+          emailRedirectTo: `https://lumidex.app/auth/callback`
         }
       })
       return { error }
@@ -152,7 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback`
+          redirectTo: `https://lumidex.app/auth/callback`
         }
       })
       return { error }
@@ -173,7 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const resetPassword = useCallback(async (email: string) => {
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/reset-password`
+        redirectTo: `https://lumidex.app/auth/reset-password`
       })
       return { error }
     } catch (error) {
