@@ -107,12 +107,12 @@ export function DashboardSearch({
             id: card.id,
             type: 'card',
             title: card.name,
-            subtitle: `${card.sets?.name || 'Unknown Set'} #${card.number}`,
+            subtitle: `${card.sets?.[0]?.name || 'Unknown Set'} #${card.number}`,
             description: card.rarity,
             image: card.image_small,
             metadata: {
               price: card.cardmarket_avg_sell_price,
-              setSymbol: card.sets?.symbol_url,
+              setSymbol: card.sets?.[0]?.symbol_url,
               rarity: card.rarity,
               setId: card.set_id
             },
