@@ -1545,6 +1545,7 @@ export function CardDetailsModal({ cardId, isOpen, onClose, onCollectionChange, 
                   
                   <Tab.Panel>
                     <PriceGraph
+                      cardId={card.id}
                       currentPrice={card.cardmarket_avg_sell_price}
                       reverseHoloPrice={card.cardmarket_reverse_holo_sell}
                       avg7Days={card.cardmarket_avg_7_days}
