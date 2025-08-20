@@ -119,12 +119,6 @@ class CardSocialService {
         collectionsCount: collections?.length || 0
       })
       
-      const error = null // No error for now
-
-      if (error) {
-        return { success: false, error: error.message }
-      }
-
       // Process the results
       const friendsWithCard: FriendCardOwnership[] = friends.map(friend => {
         const friendCollections = collections?.filter(c => c.user_id === friend.friend_id) || []
@@ -236,7 +230,7 @@ class CardSocialService {
       //   return { success: false, error: error.message }
       // }
 
-      return { success: true, data }
+      return { success: true, data: data || undefined }
     } catch (error) {
       return {
         success: false,
