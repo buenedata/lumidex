@@ -84,17 +84,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const handleUserProfile = useCallback(async (user: User) => {
     try {
       // First check if profile exists
-      const { data: existingProfile, error: selectError } = await supabase
+      let { data: existingProfile, error: selectError } = await supabase
         .from('profiles')
         .select('id, avatar_url')
         .eq('id', user.id)
         .single()
 
-      // If we get permission errors, refresh the session and retry
+      // If we get permission errors, refresh session silently without causing loops
       if (selectError && (selectError.message.includes('permission') || selectError.message.includes('RLS'))) {
-        console.log('Permission error detected, refreshing session...')
-        await supabase.auth.refreshSession()
-        return // Exit and let auth state change handler retry
+        console.log('Permission error detected, attempting silent session refresh...')
+        try {
+          const { error: refreshError } = await supabase.auth.refreshSession()
+          if (refreshError) {
+            console.error('Session refresh failed:', refreshError.message)
+            return
+          }
+          // Give a small delay for the new session to propagate
+          await new Promise(resolve => setTimeout(resolve, 100))
+          
+          // Retry the profile check with refreshed session
+          const retryResult = await supabase
+            .from('profiles')
+            .select('id, avatar_url')
+            .eq('id', user.id)
+            .single()
+          
+          if (retryResult.error && !retryResult.error.message.includes('No rows')) {
+            console.error('Profile check failed after session refresh:', retryResult.error.message)
+            return
+          }
+          
+          // Use the retry result for further processing
+          existingProfile = retryResult.data
+          selectError = retryResult.error
+        } catch (refreshError) {
+          console.error('Session refresh error:', refreshError)
+          return
+        }
       }
 
       // Prepare update data
@@ -120,11 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error('Error upserting user profile:', error.message)
-        // If permission error, try refreshing session
-        if (error.message.includes('permission') || error.message.includes('RLS')) {
-          console.log('Profile upsert permission error, refreshing session...')
-          await supabase.auth.refreshSession()
-        }
+        // Don't refresh session again here to avoid loops
       }
     } catch (error) {
       console.error('Error handling user profile:', error)
