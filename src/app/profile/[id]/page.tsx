@@ -282,7 +282,6 @@ function UserProfileContent() {
             collectionStats={profileData.stats}
             achievementStats={null}
             isOwnProfile={false}
-            onEditProfile={() => {}}
             onAvatarChange={() => {}}
             onBannerChange={() => {}}
             onOpenSettings={() => {}}
