@@ -32,11 +32,14 @@ class UserPreferencesService {
         return { success: false, error: error.message }
       }
 
+      // Type assertion to handle Supabase type inference issues
+      const profileData = data as any
+
       // Validate and sanitize the preferences
       const preferences: UserPreferences = {
-        preferred_language: this.validateLocale(data.preferred_language),
-        preferred_currency: this.validateCurrency(data.preferred_currency),
-        preferred_price_source: this.validatePriceSource(data.preferred_price_source || 'cardmarket')
+        preferred_language: this.validateLocale(profileData?.preferred_language || 'en'),
+        preferred_currency: this.validateCurrency(profileData?.preferred_currency || 'EUR'),
+        preferred_price_source: this.validatePriceSource(profileData?.preferred_price_source || 'cardmarket')
       }
 
       return { success: true, data: preferences }
@@ -90,10 +93,13 @@ class UserPreferencesService {
         persistLocale(updates.preferred_language)
       }
 
+      // Type assertion to handle Supabase type inference issues
+      const profileData = data as any
+
       const updatedPreferences: UserPreferences = {
-        preferred_language: this.validateLocale(data.preferred_language),
-        preferred_currency: this.validateCurrency(data.preferred_currency),
-        preferred_price_source: this.validatePriceSource(data.preferred_price_source || 'cardmarket')
+        preferred_language: this.validateLocale(profileData?.preferred_language || 'en'),
+        preferred_currency: this.validateCurrency(profileData?.preferred_currency || 'EUR'),
+        preferred_price_source: this.validatePriceSource(profileData?.preferred_price_source || 'cardmarket')
       }
 
       return { success: true, data: updatedPreferences }
