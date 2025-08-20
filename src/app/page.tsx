@@ -17,30 +17,9 @@ export default function HomePage() {
       if (loading) return
 
       if (user) {
-        // Check if user has completed setup
-        try {
-          const { data, error } = await supabase
-            .from('profiles')
-            .select('setup_completed')
-            .eq('id', user.id)
-            .single()
-
-          if (error) {
-            console.error('Error checking setup status:', error)
-            // If error, redirect to setup to be safe
-            router.push('/setup')
-          } else {
-            // Redirect based on setup completion status
-            if ((data as any)?.setup_completed) {
-              router.push('/dashboard')
-            } else {
-              router.push('/setup')
-            }
-          }
-        } catch (error) {
-          console.error('Error in auth redirect:', error)
-          router.push('/setup')
-        }
+        // For authenticated users, always redirect to dashboard
+        // The dashboard can handle setup checks if needed
+        router.push('/dashboard')
       }
     }
 
