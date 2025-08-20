@@ -1,0 +1,6 @@
+export { default as SetupWizard } from './SetupWizard'
+export { default as WelcomeStep } from './WelcomeStep'
+export { default as LanguageStep } from './LanguageStep'
+export { default as CurrencyStep } from './CurrencyStep'
+export { default as PriceSourceStep } from './PriceSourceStep'
+export { default as CompletionStep } from './CompletionStep'
