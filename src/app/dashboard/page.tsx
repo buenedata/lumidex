@@ -18,6 +18,9 @@ import { PriceDisplay } from '@/components/PriceDisplay'
 import { usePreferredPriceSource } from '@/contexts/UserPreferencesContext'
 import { getCardPrice } from '@/lib/price-utils'
 import { supabase } from '@/lib/supabase'
+import { loadingStateManager } from '@/lib/loading-state-manager'
+import { EnhancedErrorBoundary } from '@/components/ui/EnhancedErrorBoundary'
+import LoadingDebugPanel from '@/components/dev/LoadingDebugPanel'
 import {
   StatCardSkeleton,
   CommunityOverviewSkeleton,

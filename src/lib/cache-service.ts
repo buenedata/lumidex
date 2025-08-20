@@ -11,6 +11,7 @@ interface CacheEntry<T> {
 
 class CacheService {
   private cache = new Map<string, CacheEntry<any>>()
+  private pendingRequests = new Map<string, Promise<any>>()
   private readonly DEFAULT_TTL = 5 * 60 * 1000 // 5 minutes
 
   /**
@@ -96,8 +97,8 @@ class CacheService {
    * Get cached data or execute function and cache result
    */
   async getOrSet<T>(
-    key: string, 
-    fetchFunction: () => Promise<T>, 
+    key: string,
+    fetchFunction: () => Promise<T>,
     ttl?: number
   ): Promise<T> {
     // Try to get from cache first
@@ -109,15 +110,29 @@ class CacheService {
 
     this.misses++
 
-    // Not in cache, fetch and store
-    try {
-      const data = await fetchFunction()
-      this.set(key, data, ttl)
-      return data
-    } catch (error) {
-      // Don't cache errors
-      throw error
+    // Check if we're already fetching this key to prevent duplicate requests
+    if (this.pendingRequests.has(key)) {
+      return this.pendingRequests.get(key)!
     }
+
+    // Not in cache, fetch and store
+    const fetchPromise = (async () => {
+      try {
+        const data = await fetchFunction()
+        this.set(key, data, ttl)
+        return data
+      } catch (error) {
+        // Don't cache errors, but clean up pending request
+        throw error
+      } finally {
+        this.pendingRequests.delete(key)
+      }
+    })()
+
+    // Store the promise to prevent duplicate requests
+    this.pendingRequests.set(key, fetchPromise)
+    
+    return fetchPromise
   }
 
   /**

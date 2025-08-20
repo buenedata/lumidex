@@ -14,6 +14,8 @@ import { friendsService } from '@/lib/friends-service'
 import { CollectionStats } from '@/lib/collection-stats-service'
 import { Profile } from '@/types'
 import { useNotifications } from '@/hooks/useNotifications'
+import { loadingStateManager } from '@/lib/loading-state-manager'
+import { EnhancedErrorBoundary } from '@/components/ui/EnhancedErrorBoundary'
 import {
   User,
   ArrowLeft,
@@ -74,51 +76,73 @@ function UserProfileContent() {
     setLoading(true)
     setError(null)
 
-    try {
-      // Get public profile data
-      const profileResult = await profileService.getPublicProfile(userId)
-      if (profileResult.success && profileResult.data) {
-        // Transform the data to match the expected format
-        const transformedProfile: Profile = {
-          ...profileResult.data.profile,
-          privacy_level: profileResult.data.profile.privacy_level as 'public' | 'friends' | 'private',
-          show_collection_value: true,
-          preferred_currency: 'EUR',
-          preferred_language: 'en',
-          updated_at: new Date().toISOString()
-        }
-
-        const transformedStats: CollectionStats | undefined = profileResult.data.stats ? {
-          totalCards: profileResult.data.stats.totalCards,
-          uniqueCards: profileResult.data.stats.uniqueCards,
-          setsWithCards: profileResult.data.stats.setsWithCards,
-          totalSets: 0, // Not available in public stats
-          totalValueEur: 0, // Not available in public stats
-          averageCardValue: 0,
-          completionPercentage: 0,
-          rarityBreakdown: {},
-          setProgress: [],
-          topValueCards: profileResult.data.stats.topValueCards || [],
-          recentAdditions: [],
-          collectionGrowth: []
-        } : undefined
+    const loadingKey = `profile-${userId}`
+    
+    const result = await loadingStateManager.executeWithTimeout(
+      loadingKey,
+      async () => {
+        // Get public profile data
+        const profileResult = await profileService.getPublicProfile(userId)
         
-        const transformedData: PublicProfileData = {
-          profile: transformedProfile,
-          stats: transformedStats
-        }
-        
-        setProfileData(transformedData)
-
-        // If profile is public, try to get achievement progress
-        if (profileResult.data.profile.privacy_level === 'public') {
+        let achievementProgress: AchievementProgress[] = []
+        if (profileResult.success && profileResult.data &&
+            profileResult.data.profile.privacy_level === 'public') {
           const progressResult = await achievementService.getAchievementProgress(userId)
           if (progressResult.success && progressResult.data) {
-            setAchievementProgress(progressResult.data)
+            achievementProgress = progressResult.data
           }
         }
+        
+        return { profileResult, achievementProgress }
+      },
+      {
+        timeout: 15000, // 15 second timeout
+        maxRetries: 2
+      }
+    )
+
+    try {
+      if (result.success && result.data) {
+        const { profileResult, achievementProgress } = result.data
+        
+        if (profileResult.success && profileResult.data) {
+          // Transform the data to match the expected format
+          const transformedProfile: Profile = {
+            ...profileResult.data.profile,
+            privacy_level: profileResult.data.profile.privacy_level as 'public' | 'friends' | 'private',
+            show_collection_value: true,
+            preferred_currency: 'EUR',
+            preferred_language: 'en',
+            updated_at: new Date().toISOString()
+          }
+
+          const transformedStats: CollectionStats | undefined = profileResult.data.stats ? {
+            totalCards: profileResult.data.stats.totalCards,
+            uniqueCards: profileResult.data.stats.uniqueCards,
+            setsWithCards: profileResult.data.stats.setsWithCards,
+            totalSets: 0, // Not available in public stats
+            totalValueEur: 0, // Not available in public stats
+            averageCardValue: 0,
+            completionPercentage: 0,
+            rarityBreakdown: {},
+            setProgress: [],
+            topValueCards: profileResult.data.stats.topValueCards || [],
+            recentAdditions: [],
+            collectionGrowth: []
+          } : undefined
+          
+          const transformedData: PublicProfileData = {
+            profile: transformedProfile,
+            stats: transformedStats
+          }
+          
+          setProfileData(transformedData)
+          setAchievementProgress(achievementProgress)
+        } else {
+          setError(profileResult.error || 'Profile not found or is private')
+        }
       } else {
-        setError(profileResult.error || 'Profile not found or is private')
+        setError(result.error || 'Failed to load profile')
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
