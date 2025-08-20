@@ -102,6 +102,8 @@ interface UserCard {
     cardmarket_avg_sell_price?: number | null
     set: {
       name: string
+    }[] | {
+      name: string
     }
   }
 }
@@ -291,7 +293,14 @@ export default function TradeModal({
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setUserCards(data || [])
+      
+      // Transform the data to fix card array issue
+      const transformedData = (data || []).map(item => ({
+        ...item,
+        card: Array.isArray(item.card) ? item.card[0] : item.card
+      }))
+      
+      setUserCards(transformedData)
     } catch (error) {
       console.error('Error loading user cards:', error)
     } finally {
@@ -343,7 +352,14 @@ export default function TradeModal({
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setRecipientCards(data || [])
+      
+      // Transform the data to fix card array issue
+      const transformedData = (data || []).map(item => ({
+        ...item,
+        card: Array.isArray(item.card) ? item.card[0] : item.card
+      }))
+      
+      setRecipientCards(transformedData)
     } catch (error) {
       console.error('Error loading recipient cards:', error)
     } finally {
@@ -375,7 +391,7 @@ export default function TradeModal({
           name: userCard.card.name,
           image_small: userCard.card.image_small,
           price: userCard.card.cardmarket_avg_sell_price || 0, // Store EUR price
-          set_name: userCard.card.set.name,
+          set_name: Array.isArray(userCard.card.set) ? userCard.card.set[0]?.name || 'Unknown Set' : userCard.card.set.name,
           quantity: 1,
           condition: userCard.condition
         }]
@@ -432,7 +448,7 @@ export default function TradeModal({
           name: userCard.card.name,
           image_small: userCard.card.image_small,
           price: userCard.card.cardmarket_avg_sell_price || 0,
-          set_name: userCard.card.set.name,
+          set_name: Array.isArray(userCard.card.set) ? userCard.card.set[0]?.name || 'Unknown Set' : userCard.card.set.name,
           quantity: 1,
           condition: userCard.condition
         }]
@@ -645,7 +661,7 @@ export default function TradeModal({
       const query = searchQuery.toLowerCase()
       filtered = filtered.filter(card =>
         card.card.name.toLowerCase().includes(query) ||
-        card.card.set.name.toLowerCase().includes(query)
+        (Array.isArray(card.card.set) ? card.card.set[0]?.name || '' : card.card.set.name).toLowerCase().includes(query)
       )
     }
 
@@ -669,7 +685,9 @@ export default function TradeModal({
           const priceB = (b.card.cardmarket_avg_sell_price || 0) * 11.5
           return priceB - priceA // Highest price first
         case 'set':
-          return a.card.set.name.localeCompare(b.card.set.name)
+          const setNameA = Array.isArray(a.card.set) ? a.card.set[0]?.name || '' : a.card.set.name
+          const setNameB = Array.isArray(b.card.set) ? b.card.set[0]?.name || '' : b.card.set.name
+          return setNameA.localeCompare(setNameB)
         default:
           return 0
       }
@@ -707,7 +725,7 @@ export default function TradeModal({
       const query = searchQuery.toLowerCase()
       filtered = filtered.filter(card =>
         card.card.name.toLowerCase().includes(query) ||
-        card.card.set.name.toLowerCase().includes(query)
+        (Array.isArray(card.card.set) ? card.card.set[0]?.name || '' : card.card.set.name).toLowerCase().includes(query)
       )
     }
 
@@ -721,7 +739,9 @@ export default function TradeModal({
           const priceB = (b.card.cardmarket_avg_sell_price || 0) * 11.5
           return priceB - priceA // Highest price first
         case 'set':
-          return a.card.set.name.localeCompare(b.card.set.name)
+          const setNameA = Array.isArray(a.card.set) ? a.card.set[0]?.name || '' : a.card.set.name
+          const setNameB = Array.isArray(b.card.set) ? b.card.set[0]?.name || '' : b.card.set.name
+          return setNameA.localeCompare(setNameB)
         default:
           return 0
       }
@@ -1376,7 +1396,9 @@ export default function TradeModal({
                                   </div>
                                   <div className="space-y-1">
                                     <div className="text-xs text-white truncate font-medium">{userCard.card.name}</div>
-                                    <div className="text-xs text-gray-400 truncate">{userCard.card.set.name}</div>
+                                    <div className="text-xs text-gray-400 truncate">
+                                      {Array.isArray(userCard.card.set) ? userCard.card.set[0]?.name || 'Unknown Set' : userCard.card.set.name}
+                                    </div>
                                     {cardPrice > 0 && (
                                       <div className="text-center">
                                         <span className="text-xs font-bold text-white">
@@ -1492,7 +1514,9 @@ export default function TradeModal({
                                   </div>
                                   <div className="space-y-1">
                                     <div className="text-xs text-white truncate font-medium">{userCard.card.name}</div>
-                                    <div className="text-xs text-gray-400 truncate">{userCard.card.set.name}</div>
+                                    <div className="text-xs text-gray-400 truncate">
+                                      {Array.isArray(userCard.card.set) ? userCard.card.set[0]?.name || 'Unknown Set' : userCard.card.set.name}
+                                    </div>
                                     {cardPrice > 0 && (
                                       <div className="text-center">
                                         <span className="text-xs font-bold text-white">

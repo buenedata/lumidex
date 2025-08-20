@@ -576,5 +576,65 @@ export interface Database {
         }
       }
     }
+    Relationships: [
+      {
+        foreignKeyName: "cards_set_id_fkey"
+        columns: ["set_id"]
+        isOneToOne: false
+        referencedRelation: "sets"
+        referencedColumns: ["id"]
+      },
+      {
+        foreignKeyName: "user_collections_card_id_fkey"
+        columns: ["card_id"]
+        isOneToOne: false
+        referencedRelation: "cards"
+        referencedColumns: ["id"]
+      },
+      {
+        foreignKeyName: "user_collections_user_id_fkey"
+        columns: ["user_id"]
+        isOneToOne: false
+        referencedRelation: "profiles"
+        referencedColumns: ["id"]
+      },
+      {
+        foreignKeyName: "trade_items_card_id_fkey"
+        columns: ["card_id"]
+        isOneToOne: false
+        referencedRelation: "cards"
+        referencedColumns: ["id"]
+      },
+      {
+        foreignKeyName: "trade_items_trade_id_fkey"
+        columns: ["trade_id"]
+        isOneToOne: false
+        referencedRelation: "trades"
+        referencedColumns: ["id"]
+      },
+      {
+        foreignKeyName: "trade_items_user_id_fkey"
+        columns: ["user_id"]
+        isOneToOne: false
+        referencedRelation: "profiles"
+        referencedColumns: ["id"]
+      }
+    ]
+  }
+}
+
+
+// Helper types for queries with relations
+export type CardWithSet = Database['public']['Tables']['cards']['Row'] & {
+  sets?: Database['public']['Tables']['sets']['Row']
+}
+
+export type UserCollectionWithCard = Database['public']['Tables']['user_collections']['Row'] & {
+  cards?: CardWithSet
+}
+
+export type UserCollectionWithCardAndSet = Database['public']['Tables']['user_collections']['Row'] & {
+  cards?: Database['public']['Tables']['cards']['Row'] & {
+    sets?: Database['public']['Tables']['sets']['Row']
   }
 }
