@@ -1,5 +1,5 @@
 import { supabase, createServerClient } from './supabase'
-import { Database } from '@/types/database'
+import { Database } from '@/types/supabase'
 
 type PriceHistoryRow = Database['public']['Tables']['price_history']['Row']
 type PriceHistoryInsert = Database['public']['Tables']['price_history']['Insert']
@@ -63,41 +63,86 @@ class HistoricalPricingService {
    */
   async storePriceSnapshot(snapshot: PriceSnapshot): Promise<{ success: boolean; error?: string }> {
     try {
-      const priceHistoryRecord: PriceHistoryInsert = {
-        card_id: snapshot.cardId,
-        date: snapshot.date,
-        
-        // CardMarket data
-        cardmarket_avg_sell_price: snapshot.cardmarketData?.avgSellPrice || null,
-        cardmarket_low_price: snapshot.cardmarketData?.lowPrice || null,
-        cardmarket_trend_price: snapshot.cardmarketData?.trendPrice || null,
-        cardmarket_suggested_price: snapshot.cardmarketData?.suggestedPrice || null,
-        cardmarket_reverse_holo_sell: snapshot.cardmarketData?.reverseHoloSell || null,
-        cardmarket_reverse_holo_low: snapshot.cardmarketData?.reverseHoloLow || null,
-        cardmarket_reverse_holo_trend: snapshot.cardmarketData?.reverseHoloTrend || null,
-        
-        // TCGPlayer data
-        tcgplayer_price: snapshot.tcgplayerData?.price || null,
-        tcgplayer_normal_market: snapshot.tcgplayerData?.normalMarket || null,
-        tcgplayer_normal_low: snapshot.tcgplayerData?.normalLow || null,
-        tcgplayer_normal_mid: snapshot.tcgplayerData?.normalMid || null,
-        tcgplayer_normal_high: snapshot.tcgplayerData?.normalHigh || null,
-        tcgplayer_holofoil_market: snapshot.tcgplayerData?.holofoilMarket || null,
-        tcgplayer_holofoil_low: snapshot.tcgplayerData?.holofoilLow || null,
-        tcgplayer_holofoil_mid: snapshot.tcgplayerData?.holofoilMid || null,
-        tcgplayer_holofoil_high: snapshot.tcgplayerData?.holofoilHigh || null,
-        tcgplayer_reverse_holo_market: snapshot.tcgplayerData?.reverseHoloMarket || null,
-        tcgplayer_reverse_holo_low: snapshot.tcgplayerData?.reverseHoloLow || null,
-        tcgplayer_reverse_holo_mid: snapshot.tcgplayerData?.reverseHoloMid || null,
-        tcgplayer_reverse_holo_high: snapshot.tcgplayerData?.reverseHoloHigh || null,
-        
-        data_source: snapshot.dataSource || 'daily_sync'
+      const records: PriceHistoryInsert[] = []
+
+      // Create records for CardMarket data
+      if (snapshot.cardmarketData) {
+        const data = snapshot.cardmarketData
+        if (data.avgSellPrice) {
+          records.push({
+            card_id: snapshot.cardId,
+            source: 'cardmarket',
+            price_type: 'avg_sell',
+            price: data.avgSellPrice,
+            currency: 'EUR',
+            recorded_at: snapshot.date
+          })
+        }
+        if (data.lowPrice) {
+          records.push({
+            card_id: snapshot.cardId,
+            source: 'cardmarket',
+            price_type: 'low',
+            price: data.lowPrice,
+            currency: 'EUR',
+            recorded_at: snapshot.date
+          })
+        }
+        if (data.trendPrice) {
+          records.push({
+            card_id: snapshot.cardId,
+            source: 'cardmarket',
+            price_type: 'trend',
+            price: data.trendPrice,
+            currency: 'EUR',
+            recorded_at: snapshot.date
+          })
+        }
+        if (data.reverseHoloSell) {
+          records.push({
+            card_id: snapshot.cardId,
+            source: 'cardmarket',
+            price_type: 'reverse_holo_sell',
+            price: data.reverseHoloSell,
+            currency: 'EUR',
+            recorded_at: snapshot.date
+          })
+        }
+      }
+
+      // Create records for TCGPlayer data
+      if (snapshot.tcgplayerData) {
+        const data = snapshot.tcgplayerData
+        if (data.price) {
+          records.push({
+            card_id: snapshot.cardId,
+            source: 'tcgplayer',
+            price_type: 'market',
+            price: data.price,
+            currency: 'USD',
+            recorded_at: snapshot.date
+          })
+        }
+        if (data.normalMarket) {
+          records.push({
+            card_id: snapshot.cardId,
+            source: 'tcgplayer',
+            price_type: 'normal_market',
+            price: data.normalMarket,
+            currency: 'USD',
+            recorded_at: snapshot.date
+          })
+        }
+      }
+
+      if (records.length === 0) {
+        return { success: true } // No data to store
       }
 
       const { error } = await this.serverClient
         .from('price_history')
-        .upsert(priceHistoryRecord, {
-          onConflict: 'card_id,date',
+        .upsert(records, {
+          onConflict: 'card_id,source,price_type,recorded_at',
           ignoreDuplicates: false
         })
 
@@ -124,46 +169,73 @@ class HistoricalPricingService {
     let stored = 0
 
     try {
-      const records: PriceHistoryInsert[] = snapshots.map(snapshot => ({
-        card_id: snapshot.cardId,
-        date: snapshot.date,
-        
-        // CardMarket data
-        cardmarket_avg_sell_price: snapshot.cardmarketData?.avgSellPrice || null,
-        cardmarket_low_price: snapshot.cardmarketData?.lowPrice || null,
-        cardmarket_trend_price: snapshot.cardmarketData?.trendPrice || null,
-        cardmarket_suggested_price: snapshot.cardmarketData?.suggestedPrice || null,
-        cardmarket_reverse_holo_sell: snapshot.cardmarketData?.reverseHoloSell || null,
-        cardmarket_reverse_holo_low: snapshot.cardmarketData?.reverseHoloLow || null,
-        cardmarket_reverse_holo_trend: snapshot.cardmarketData?.reverseHoloTrend || null,
-        
-        // TCGPlayer data
-        tcgplayer_price: snapshot.tcgplayerData?.price || null,
-        tcgplayer_normal_market: snapshot.tcgplayerData?.normalMarket || null,
-        tcgplayer_normal_low: snapshot.tcgplayerData?.normalLow || null,
-        tcgplayer_normal_mid: snapshot.tcgplayerData?.normalMid || null,
-        tcgplayer_normal_high: snapshot.tcgplayerData?.normalHigh || null,
-        tcgplayer_holofoil_market: snapshot.tcgplayerData?.holofoilMarket || null,
-        tcgplayer_holofoil_low: snapshot.tcgplayerData?.holofoilLow || null,
-        tcgplayer_holofoil_mid: snapshot.tcgplayerData?.holofoilMid || null,
-        tcgplayer_holofoil_high: snapshot.tcgplayerData?.holofoilHigh || null,
-        tcgplayer_reverse_holo_market: snapshot.tcgplayerData?.reverseHoloMarket || null,
-        tcgplayer_reverse_holo_low: snapshot.tcgplayerData?.reverseHoloLow || null,
-        tcgplayer_reverse_holo_mid: snapshot.tcgplayerData?.reverseHoloMid || null,
-        tcgplayer_reverse_holo_high: snapshot.tcgplayerData?.reverseHoloHigh || null,
-        
-        data_source: snapshot.dataSource || 'daily_sync'
-      }))
+      const allRecords: PriceHistoryInsert[] = []
+
+      for (const snapshot of snapshots) {
+        // Create records for CardMarket data
+        if (snapshot.cardmarketData) {
+          const data = snapshot.cardmarketData
+          if (data.avgSellPrice) {
+            allRecords.push({
+              card_id: snapshot.cardId,
+              source: 'cardmarket',
+              price_type: 'avg_sell',
+              price: data.avgSellPrice,
+              currency: 'EUR',
+              recorded_at: snapshot.date
+            })
+          }
+          if (data.lowPrice) {
+            allRecords.push({
+              card_id: snapshot.cardId,
+              source: 'cardmarket',
+              price_type: 'low',
+              price: data.lowPrice,
+              currency: 'EUR',
+              recorded_at: snapshot.date
+            })
+          }
+          if (data.reverseHoloSell) {
+            allRecords.push({
+              card_id: snapshot.cardId,
+              source: 'cardmarket',
+              price_type: 'reverse_holo_sell',
+              price: data.reverseHoloSell,
+              currency: 'EUR',
+              recorded_at: snapshot.date
+            })
+          }
+        }
+
+        // Create records for TCGPlayer data
+        if (snapshot.tcgplayerData) {
+          const data = snapshot.tcgplayerData
+          if (data.price) {
+            allRecords.push({
+              card_id: snapshot.cardId,
+              source: 'tcgplayer',
+              price_type: 'market',
+              price: data.price,
+              currency: 'USD',
+              recorded_at: snapshot.date
+            })
+          }
+        }
+      }
+
+      if (allRecords.length === 0) {
+        return { success: true, stored: 0, errors: [] }
+      }
 
       // Process in batches to avoid overwhelming the database
       const batchSize = 100
-      for (let i = 0; i < records.length; i += batchSize) {
-        const batch = records.slice(i, i + batchSize)
+      for (let i = 0; i < allRecords.length; i += batchSize) {
+        const batch = allRecords.slice(i, i + batchSize)
         
         const { error, count } = await this.serverClient
           .from('price_history')
           .upsert(batch, {
-            onConflict: 'card_id,date',
+            onConflict: 'card_id,source,price_type,recorded_at',
             ignoreDuplicates: false,
             count: 'exact'
           })
@@ -202,9 +274,9 @@ class HistoricalPricingService {
         .from('price_history')
         .select('*')
         .eq('card_id', cardId)
-        .gte('date', startDate.toISOString().split('T')[0])
-        .lte('date', endDate.toISOString().split('T')[0])
-        .order('date', { ascending: true })
+        .gte('recorded_at', startDate.toISOString().split('T')[0])
+        .lte('recorded_at', endDate.toISOString().split('T')[0])
+        .order('recorded_at', { ascending: true })
 
       if (error) {
         console.error('Error fetching price history:', error)
@@ -224,36 +296,70 @@ class HistoricalPricingService {
         }
       }
 
+      // Group data by date
+      const dataByDate = new Map<string, {
+        date: string,
+        cardmarketAvg?: number | null,
+        cardmarketLow?: number | null,
+        cardmarketReverseHolo?: number | null,
+        tcgplayerMarket?: number | null
+      }>()
+
+      for (const record of priceHistory) {
+        const date = record.recorded_at?.split('T')[0] || ''
+        if (!date) continue
+
+        if (!dataByDate.has(date)) {
+          dataByDate.set(date, { date })
+        }
+
+        const dayData = dataByDate.get(date)!
+        
+        if (record.source === 'cardmarket') {
+          if (record.price_type === 'avg_sell') {
+            dayData.cardmarketAvg = record.price
+          } else if (record.price_type === 'low') {
+            dayData.cardmarketLow = record.price
+          } else if (record.price_type === 'reverse_holo_sell') {
+            dayData.cardmarketReverseHolo = record.price
+          }
+        } else if (record.source === 'tcgplayer') {
+          if (record.price_type === 'market' || record.price_type === 'normal_market') {
+            dayData.tcgplayerMarket = record.price
+          }
+        }
+      }
+
       // Transform data based on variant
-      const transformedData: PricePoint[] = priceHistory.map(record => {
+      const transformedData: PricePoint[] = Array.from(dataByDate.values()).map(dayData => {
         let price: number | null = null
         let reverseHoloPrice: number | null = null
         let tcgplayerPrice: number | null = null
 
         switch (variant) {
           case 'normal':
-            price = record.cardmarket_avg_sell_price
-            reverseHoloPrice = record.cardmarket_reverse_holo_sell
-            tcgplayerPrice = record.tcgplayer_normal_market || record.tcgplayer_price
+            price = dayData.cardmarketAvg ?? null
+            reverseHoloPrice = dayData.cardmarketReverseHolo ?? null
+            tcgplayerPrice = dayData.tcgplayerMarket ?? null
             break
           case 'reverse_holo':
-            price = record.cardmarket_reverse_holo_sell
-            reverseHoloPrice = record.cardmarket_reverse_holo_sell
-            tcgplayerPrice = record.tcgplayer_reverse_holo_market
+            price = dayData.cardmarketReverseHolo ?? null
+            reverseHoloPrice = dayData.cardmarketReverseHolo ?? null
+            tcgplayerPrice = dayData.tcgplayerMarket ?? null
             break
           case 'tcgplayer':
-            price = record.tcgplayer_price || record.tcgplayer_normal_market
-            tcgplayerPrice = record.tcgplayer_price || record.tcgplayer_normal_market
+            price = dayData.tcgplayerMarket ?? null
+            tcgplayerPrice = dayData.tcgplayerMarket ?? null
             break
           case 'all':
-            price = record.cardmarket_avg_sell_price
-            reverseHoloPrice = record.cardmarket_reverse_holo_sell
-            tcgplayerPrice = record.tcgplayer_price || record.tcgplayer_normal_market
+            price = dayData.cardmarketAvg ?? null
+            reverseHoloPrice = dayData.cardmarketReverseHolo ?? null
+            tcgplayerPrice = dayData.tcgplayerMarket ?? null
             break
         }
 
         return {
-          date: record.date,
+          date: dayData.date,
           price,
           reverseHoloPrice,
           tcgplayerPrice
