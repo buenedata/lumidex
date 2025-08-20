@@ -112,7 +112,8 @@ function getFlagEmoji(locale: Locale): string {
     'es': '🇪🇸',
     'it': '🇮🇹',
     'nl': '🇳🇱',
-    'pt': '🇵🇹'
+    'pt': '🇵🇹',
+    'no': '🇳🇴'
   }
   return flags[locale] || '🌍'
 }
