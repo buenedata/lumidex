@@ -121,7 +121,7 @@ export function getVariantPricing(cardData: CardPriceData, availableVariants: Ca
   return variantPricing
 }
 
-function getVariantPricingData(cardData: CardPriceData, variant: CardVariant): VariantPricing | null {
+function getVariantPricingData(cardData: CardPriceData, variant: CardVariant, priceSource: PriceSource = 'cardmarket'): VariantPricing | null {
   switch (variant) {
     case 'normal':
       if (cardData.cardmarket_avg_sell_price || cardData.cardmarket_low_price || cardData.cardmarket_trend_price) {
@@ -156,9 +156,9 @@ function getVariantPricingData(cardData: CardPriceData, variant: CardVariant): V
           name: 'Holo',
           color: 'bg-purple-500',
           gradient: false,
-          average: cardData.cardmarket_avg_sell_price,
-          low: cardData.cardmarket_low_price,
-          trend: cardData.cardmarket_trend_price,
+          average: cardData.cardmarket_avg_sell_price ?? null,
+          low: cardData.cardmarket_low_price ?? null,
+          trend: cardData.cardmarket_trend_price ?? null,
           currency: 'EUR'
         }
       }
@@ -184,9 +184,9 @@ function getVariantPricingData(cardData: CardPriceData, variant: CardVariant): V
           name: 'Reverse Holo',
           color: 'bg-blue-500',
           gradient: false,
-          average: cardData.cardmarket_reverse_holo_sell,
-          low: cardData.cardmarket_reverse_holo_low,
-          trend: cardData.cardmarket_reverse_holo_trend,
+          average: cardData.cardmarket_reverse_holo_sell ?? null,
+          low: cardData.cardmarket_reverse_holo_low ?? null,
+          trend: cardData.cardmarket_reverse_holo_trend ?? null,
           currency: 'EUR'
         }
       }
@@ -196,9 +196,9 @@ function getVariantPricingData(cardData: CardPriceData, variant: CardVariant): V
           name: 'Reverse Holo',
           color: 'bg-blue-500',
           gradient: false,
-          average: cardData.tcgplayer_reverse_foil_market,
-          low: cardData.tcgplayer_reverse_foil_low,
-          trend: cardData.tcgplayer_reverse_foil_mid,
+          average: cardData.tcgplayer_reverse_foil_market ?? null,
+          low: cardData.tcgplayer_reverse_foil_low ?? null,
+          trend: cardData.tcgplayer_reverse_foil_mid ?? null,
           note: 'TCGPlayer USD pricing',
           currency: 'USD'
         }
@@ -212,9 +212,9 @@ function getVariantPricingData(cardData: CardPriceData, variant: CardVariant): V
           name: '1st Edition',
           color: 'bg-green-500',
           gradient: false,
-          average: cardData.cardmarket_1st_edition_avg,
-          low: cardData.cardmarket_1st_edition_low,
-          trend: cardData.cardmarket_1st_edition_trend,
+          average: cardData.cardmarket_1st_edition_avg ?? null,
+          low: cardData.cardmarket_1st_edition_low ?? null,
+          trend: cardData.cardmarket_1st_edition_trend ?? null,
           currency: 'EUR'
         }
       }
@@ -229,9 +229,9 @@ function getVariantPricingData(cardData: CardPriceData, variant: CardVariant): V
             name: '1st Edition Holo',
             color: 'bg-gradient-to-r from-green-500 to-purple-500',
             gradient: true,
-            average: cardData.tcgplayer_1st_edition_holofoil_market,
-            low: cardData.tcgplayer_1st_edition_holofoil_low,
-            trend: cardData.tcgplayer_1st_edition_holofoil_mid,
+            average: cardData.tcgplayer_1st_edition_holofoil_market ?? null,
+            low: cardData.tcgplayer_1st_edition_holofoil_low ?? null,
+            trend: cardData.tcgplayer_1st_edition_holofoil_mid ?? null,
             note: 'TCGPlayer USD pricing',
             currency: 'USD'
           }
@@ -240,9 +240,9 @@ function getVariantPricingData(cardData: CardPriceData, variant: CardVariant): V
             name: '1st Edition Normal',
             color: 'bg-green-500',
             gradient: false,
-            average: cardData.tcgplayer_1st_edition_normal_market,
-            low: cardData.tcgplayer_1st_edition_normal_low,
-            trend: cardData.tcgplayer_1st_edition_normal_mid,
+            average: cardData.tcgplayer_1st_edition_normal_market ?? null,
+            low: cardData.tcgplayer_1st_edition_normal_low ?? null,
+            trend: cardData.tcgplayer_1st_edition_normal_mid ?? null,
             note: 'TCGPlayer USD pricing',
             currency: 'USD'
           }
@@ -269,9 +269,9 @@ function getVariantPricingData(cardData: CardPriceData, variant: CardVariant): V
           name: 'Poké Ball Pattern',
           color: 'bg-gradient-to-r from-red-500 to-white',
           gradient: true,
-          average: cardData.cardmarket_avg_sell_price,
-          low: cardData.cardmarket_low_price,
-          trend: cardData.cardmarket_trend_price,
+          average: cardData.cardmarket_avg_sell_price ?? null,
+          low: cardData.cardmarket_low_price ?? null,
+          trend: cardData.cardmarket_trend_price ?? null,
           note: 'Estimated pricing based on normal variant',
           currency: 'EUR'
         }
