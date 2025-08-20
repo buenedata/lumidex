@@ -78,58 +78,72 @@ function DashboardContent() {
   const fetchStats = useCallback(async (forceRefresh = false) => {
     if (!user) return
     
+    const loadingKey = `dashboard-stats-${user.id}`
+    
     // Only show loading skeleton if we don't have initial data yet or force refresh
     if (!hasInitialData || forceRefresh) {
       setStatsLoading(true)
     }
     
+    const result = await loadingStateManager.executeWithTimeout(
+      loadingKey,
+      async () => {
+        // Clear cache to get fresh data - force refresh to fix user count
+        if (forceRefresh) {
+          communityStatsService.clearCache()
+          console.log('Cache cleared - fetching fresh community stats')
+        }
+        
+        // Fetch only essential stats initially - lazy load the rest
+        const [communityResult, userResult, profileResult] = await Promise.all([
+          communityStatsService.getCommunityStats(),
+          collectionStatsService.getCollectionStats(user.id),
+          profileService.getProfileData(user.id, user.email)
+        ])
+
+        return { communityResult, userResult, profileResult }
+      },
+      {
+        timeout: 3000, // 3 second timeout - fast UX
+        maxRetries: 1
+      }
+    )
+
     try {
-      // Clear cache to get fresh data - force refresh to fix user count
-      communityStatsService.clearCache()
-      console.log('Cache cleared - fetching fresh community stats')
-      
-      // Debug: Check raw user_collections data
-      const { data: rawCollections, error: rawError } = await supabase
-        .from('user_collections')
-        .select('user_id, quantity, card_id')
-      
-      console.log('Raw user_collections data:', { rawCollections, rawError })
-      
-      if (rawCollections) {
-        const userTotals = new Map()
-        rawCollections.forEach(item => {
-          const current = userTotals.get(item.user_id) || 0
-          userTotals.set(item.user_id, current + item.quantity)
-        })
-        console.log('User totals from raw data:', Array.from(userTotals.entries()))
-      }
-      
-      // Fetch only essential stats initially - lazy load the rest
-      const [communityResult, userResult, profileResult] = await Promise.all([
-        communityStatsService.getCommunityStats(),
-        collectionStatsService.getCollectionStats(user.id),
-        profileService.getProfileData(user.id, user.email)
-      ])
+      if (result.success && result.data) {
+        const { communityResult, userResult, profileResult } = result.data
 
-      if (communityResult.success && communityResult.data) {
-        setCommunityStats(communityResult.data)
-        console.log('Community Stats:', communityResult.data) // Debug log
-      }
+        if (communityResult.success && communityResult.data) {
+          setCommunityStats(communityResult.data)
+          console.log('Community Stats loaded successfully')
+        } else {
+          console.warn('Community stats failed:', communityResult.error)
+        }
 
-      if (userResult.success && userResult.data) {
-        setUserBasicStats(userResult.data)
-        console.log('User Stats:', userResult.data) // Debug log
-      }
+        if (userResult.success && userResult.data) {
+          setUserBasicStats(userResult.data)
+          console.log('User Stats loaded successfully')
+        } else {
+          console.warn('User stats failed:', userResult.error)
+        }
 
-      if (profileResult.success && profileResult.data) {
-        setUserProfile(profileResult.data.profile)
-        console.log('User Profile:', profileResult.data.profile) // Debug log
+        if (profileResult.success && profileResult.data) {
+          setUserProfile(profileResult.data.profile)
+          console.log('User Profile loaded successfully')
+        } else {
+          console.warn('Profile failed:', profileResult.error)
+        }
+        
+        // Mark that we have initial data
+        setHasInitialData(true)
+      } else {
+        console.error('Dashboard stats fetch failed:', result.error)
+        // Show error state after timeout
+        setStatsLoading(false)
+        setHasInitialData(true) // Stop showing skeletons
       }
-      
-      // Mark that we have initial data
-      setHasInitialData(true)
     } catch (error) {
-      console.error('Error fetching stats:', error)
+      console.error('Error processing dashboard stats:', error)
     } finally {
       setStatsLoading(false)
     }

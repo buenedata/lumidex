@@ -23,10 +23,10 @@ class LoadingStateManager {
   private states = new Map<string, LoadingState>()
   private timeouts = new Map<string, NodeJS.Timeout>()
   private defaultConfig: LoadingConfig = {
-    timeout: 15000, // 15 seconds
-    maxRetries: 3,
-    retryDelay: 1000, // 1 second
-    fallbackDelay: 30000 // 30 seconds fallback
+    timeout: 3000, // 3 seconds - acceptable UX
+    maxRetries: 2,
+    retryDelay: 500, // 0.5 seconds
+    fallbackDelay: 5000 // 5 seconds fallback
   }
 
   /**
@@ -159,7 +159,7 @@ class LoadingStateManager {
    */
   cleanup(): void {
     const now = Date.now()
-    const stuckThreshold = 60000 // 1 minute
+    const stuckThreshold = 5000 // 5 seconds - aggressive cleanup
 
     Array.from(this.states.entries()).forEach(([key, state]) => {
       if (state.isLoading && now - state.lastAttempt > stuckThreshold) {

@@ -96,8 +96,8 @@ function UserProfileContent() {
         return { profileResult, achievementProgress }
       },
       {
-        timeout: 15000, // 15 second timeout
-        maxRetries: 2
+        timeout: 3000, // 3 second timeout - fast UX
+        maxRetries: 1
       }
     )
 
