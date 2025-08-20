@@ -132,7 +132,7 @@ class ProfileService {
       const friendRequestsResult = await friendsService.getPendingRequests(userId)
       const friendRequests = friendRequestsResult.success ? friendRequestsResult.data || [] : []
 
-      // Get wishlist data from all lists
+      // Get wishlist data from all lists - gracefully handle missing table
       let wishlistItems: WishlistItemWithCard[] = []
       let wishlistStats: WishlistStats | null = null
       
@@ -179,13 +179,22 @@ class ProfileService {
           wishlistStats = statsResult.success ? statsResult.data || null : null
         }
       } catch (error) {
-        console.error('Error loading wishlist data for profile:', error)
-        // Fallback to old method if new method fails
-        const fallbackResult = await wishlistService.getUserWishlist(userId, { limit: 12 })
-        wishlistItems = fallbackResult.success ? fallbackResult.data || [] : []
-        
-        const fallbackStatsResult = await wishlistService.getWishlistStats(userId)
-        wishlistStats = fallbackStatsResult.success ? fallbackStatsResult.data || null : null
+        console.error('Error loading wishlist data for profile (gracefully ignoring):', error)
+        // Gracefully handle wishlist table issues - don't fail profile creation
+        // New users may not have wishlists yet, and that's perfectly fine
+        try {
+          // Try fallback method only if it's a different error
+          const fallbackResult = await wishlistService.getUserWishlist(userId, { limit: 12 })
+          wishlistItems = fallbackResult.success ? fallbackResult.data || [] : []
+          
+          const fallbackStatsResult = await wishlistService.getWishlistStats(userId)
+          wishlistStats = fallbackStatsResult.success ? fallbackStatsResult.data || null : null
+        } catch (fallbackError) {
+          console.warn('Fallback wishlist loading also failed (ignoring):', fallbackError)
+          // Completely ignore wishlist errors during profile creation
+          wishlistItems = []
+          wishlistStats = null
+        }
       }
 
       // Get recent activity
