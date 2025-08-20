@@ -274,6 +274,38 @@ export interface Database {
           setup_completed_at?: string | null
         }
       }
+      price_history: {
+        Row: {
+          id: string
+          card_id: string
+          source: string
+          price_type: string
+          price: number
+          currency: string
+          recorded_at: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          card_id: string
+          source: string
+          price_type: string
+          price: number
+          currency?: string
+          recorded_at?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          card_id?: string
+          source?: string
+          price_type?: string
+          price?: number
+          currency?: string
+          recorded_at?: string | null
+          created_at?: string | null
+        }
+      }
       sets: {
         Row: {
           id: string
@@ -398,6 +430,38 @@ export interface Database {
           initiator_shipping_included?: boolean | null
           recipient_shipping_included?: boolean | null
           parent_trade_id?: string | null
+        }
+      }
+      user_achievements: {
+        Row: {
+          id: string
+          user_id: string
+          achievement_type: string
+          achievement_key: string
+          unlocked_at: string | null
+          progress: number | null
+          metadata: Json | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          achievement_type: string
+          achievement_key: string
+          unlocked_at?: string | null
+          progress?: number | null
+          metadata?: Json | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          achievement_type?: string
+          achievement_key?: string
+          unlocked_at?: string | null
+          progress?: number | null
+          metadata?: Json | null
+          created_at?: string | null
         }
       }
       user_collections: {
