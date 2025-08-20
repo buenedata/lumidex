@@ -346,7 +346,7 @@ function TradingContent() {
       if (error) throw error
 
       // Add default money offer values for backward compatibility
-      const tradesWithDefaults = (data || []).map(trade => ({
+      const tradesWithDefaults = (data || []).map((trade: any) => ({
         ...trade,
         initiator_money_offer: null as number | null,
         recipient_money_offer: null as number | null,
