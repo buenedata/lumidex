@@ -304,6 +304,7 @@ export function CollectionStatsCard({ stats, loading = false, onViewDetails }: C
         </h4>
         {convertedStats.collectionGrowth.length > 0 ? (
           <PriceGraph
+            cardId="collection-value"
             currentPrice={convertedStats.totalValueEur}
             cardName="Collection Value"
             isCollectionValue={true}
