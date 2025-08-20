@@ -310,11 +310,7 @@ function TradingContent() {
           status,
           initiator_message,
           recipient_message,
-          initiator_money_offer,
-          recipient_money_offer,
           trade_method,
-          initiator_shipping_included,
-          recipient_shipping_included,
           created_at,
           updated_at,
           expires_at,
@@ -349,9 +345,17 @@ function TradingContent() {
 
       if (error) throw error
 
-      const trades = data || []
-      setActiveTrades(trades.filter(t => ['pending', 'accepted'].includes(t.status)))
-      setTradeHistory(trades.filter(t => ['completed', 'declined', 'cancelled'].includes(t.status)))
+      // Add default money offer values for backward compatibility
+      const tradesWithDefaults = (data || []).map(trade => ({
+        ...trade,
+        initiator_money_offer: null as number | null,
+        recipient_money_offer: null as number | null,
+        initiator_shipping_included: null as boolean | null,
+        recipient_shipping_included: null as boolean | null
+      } as Trade))
+
+      setActiveTrades(tradesWithDefaults.filter(t => ['pending', 'accepted'].includes(t.status)))
+      setTradeHistory(tradesWithDefaults.filter(t => ['completed', 'declined', 'cancelled'].includes(t.status)))
     } catch (error) {
       console.error('Error loading trades:', error)
       throw error
