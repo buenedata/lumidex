@@ -504,7 +504,7 @@ export interface Database {
           updated_at?: string | null
           variant?: 'normal' | 'holo' | 'reverse_holo' | 'pokeball_pattern' | 'masterball_pattern' | '1st_edition'
         }
-      }
+      },
       wishlist_lists: {
         Row: {
           id: string
