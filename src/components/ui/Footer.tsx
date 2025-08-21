@@ -23,7 +23,9 @@ export default function Footer() {
           {/* Social Media Icons */}
           <div className="flex items-center space-x-3">
             <a
-              href="#"
+              href="https://discord.gg/HYsr4gZjj6"
+              target="_blank"
+              rel="noopener noreferrer"
               className="w-12 h-12 bg-gray-800/50 rounded-xl flex items-center justify-center text-gray-400 hover:text-white hover:bg-gray-700/50 transition-all duration-300 hover:scale-110"
               aria-label="Discord"
             >
