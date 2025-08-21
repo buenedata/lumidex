@@ -7,7 +7,6 @@ import Image from 'next/image'
 import { useNavigation } from '@/contexts/NavigationContext'
 import {
   Search,
-  ChevronDown,
   ChevronRight,
   Sparkles,
   Calendar,
@@ -43,6 +42,7 @@ export default function MobileMegaMenu({
   const TrendingUpIcon = TrendingUp
   const StarIcon = Star
   const ZapIcon = Zap
+  const ArrowRightIcon = ArrowRight
 
   // Quick access items for mobile
   const quickAccessItems = [
