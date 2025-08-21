@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState, useMemo, useCallback, useRef } from 'react'
+import { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react'
 import { User, Session, AuthError } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 
@@ -21,137 +21,107 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
-  const profileHandledRef = useRef<Set<string>>(new Set())
+  const [initialized, setInitialized] = useState(false)
 
   useEffect(() => {
     let mounted = true
+    let timeoutId: NodeJS.Timeout
 
-    // Get initial session
-    const getInitialSession = async () => {
+    // Simple, reliable auth initialization
+    const initializeAuth = async () => {
       try {
+        // Set a maximum 5 second timeout for initialization
+        timeoutId = setTimeout(() => {
+          if (mounted && !initialized) {
+            console.warn('Auth initialization timeout - proceeding without session')
+            setLoading(false)
+            setInitialized(true)
+          }
+        }, 5000)
+
+        // Get current session
         const { data: { session }, error } = await supabase.auth.getSession()
-        if (error) {
-          console.error('Error getting session:', error.message)
-        } else if (mounted) {
+        
+        if (mounted) {
+          clearTimeout(timeoutId)
+          
+          if (error) {
+            console.error('Auth session error:', error.message)
+          }
+          
           setSession(session)
           setUser(session?.user ?? null)
-        }
-        if (mounted) {
           setLoading(false)
+          setInitialized(true)
         }
       } catch (error) {
-        console.error('Exception in getInitialSession:', error)
+        console.error('Auth initialization error:', error)
         if (mounted) {
+          clearTimeout(timeoutId)
+          setSession(null)
+          setUser(null)
           setLoading(false)
+          setInitialized(true)
         }
       }
     }
 
-    getInitialSession()
+    initializeAuth()
 
-    // Listen for auth changes
+    // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return
 
+        console.log('Auth state change:', event, session?.user?.id)
+        
         setSession(session)
         setUser(session?.user ?? null)
-        setLoading(false)
-
-        // Handle user profile creation/update (avoid duplicate calls)
-        if (event === 'SIGNED_IN' && session?.user && !profileHandledRef.current.has(session.user.id)) {
-          profileHandledRef.current.add(session.user.id)
-          try {
-            await handleUserProfile(session.user)
-          } catch (error) {
-            console.error('Error handling user profile:', error)
-          }
+        
+        // Only set loading to false after initial auth check
+        if (initialized) {
+          setLoading(false)
         }
-
-        // Clear profile handled cache on sign out
-        if (event === 'SIGNED_OUT') {
-          profileHandledRef.current.clear()
+        
+        // Handle profile creation for new users (simplified)
+        if (event === 'SIGNED_IN' && session?.user) {
+          // Fire and forget profile creation - don't block auth flow
+          handleUserProfile(session.user).catch(error => {
+            console.error('Profile creation error (non-blocking):', error)
+          })
         }
       }
     )
 
     return () => {
       mounted = false
+      if (timeoutId) clearTimeout(timeoutId)
       subscription.unsubscribe()
     }
-  }, [])
+  }, [initialized])
 
-  const handleUserProfile = useCallback(async (user: User) => {
+  // Simplified profile handling - no blocking, no complex retries
+  const handleUserProfile = async (user: User) => {
     try {
-      // First check if profile exists
-      let { data: existingProfile, error: selectError } = await supabase
-        .from('profiles')
-        .select('id, avatar_url')
-        .eq('id', user.id)
-        .single()
-
-      // If we get permission errors, refresh session silently without causing loops
-      if (selectError && (selectError.message.includes('permission') || selectError.message.includes('RLS'))) {
-        console.log('Permission error detected, attempting silent session refresh...')
-        try {
-          const { error: refreshError } = await supabase.auth.refreshSession()
-          if (refreshError) {
-            console.error('Session refresh failed:', refreshError.message)
-            return
-          }
-          // Give a small delay for the new session to propagate
-          await new Promise(resolve => setTimeout(resolve, 100))
-          
-          // Retry the profile check with refreshed session
-          const retryResult = await supabase
-            .from('profiles')
-            .select('id, avatar_url')
-            .eq('id', user.id)
-            .single()
-          
-          if (retryResult.error && !retryResult.error.message.includes('No rows')) {
-            console.error('Profile check failed after session refresh:', retryResult.error.message)
-            return
-          }
-          
-          // Use the retry result for further processing
-          existingProfile = retryResult.data
-          selectError = retryResult.error
-        } catch (refreshError) {
-          console.error('Session refresh error:', refreshError)
-          return
-        }
-      }
-
-      // Prepare update data
-      const updateData: any = {
-        id: user.id,
-        username: user.email!.split('@')[0],
-        display_name: user.user_metadata?.full_name || user.email!.split('@')[0],
-        updated_at: new Date().toISOString()
-      }
-
-      // Only update avatar_url if user has one in metadata AND profile doesn't already have one
-      // This prevents overwriting uploaded avatars with OAuth provider avatars
-      if (user.user_metadata?.avatar_url && !existingProfile?.avatar_url) {
-        updateData.avatar_url = user.user_metadata.avatar_url
-      }
-
-      // Use upsert for better performance and atomic operation
       const { error } = await supabase
         .from('profiles')
-        .upsert(updateData, {
+        .upsert({
+          id: user.id,
+          username: user.email!.split('@')[0],
+          display_name: user.user_metadata?.full_name || user.email!.split('@')[0],
+          avatar_url: user.user_metadata?.avatar_url,
+          updated_at: new Date().toISOString()
+        }, {
           onConflict: 'id'
         })
 
       if (error) {
-        console.error('Error upserting user profile:', error.message)
-        // Don't refresh session again here to avoid loops
+        console.error('Profile upsert error:', error.message)
       }
     } catch (error) {
-      console.error('Error handling user profile:', error)
+      console.error('Profile handling error:', error)
     }
-  }, [])
+  }
 
   const signUp = useCallback(async (email: string, password: string, userData?: any) => {
     try {

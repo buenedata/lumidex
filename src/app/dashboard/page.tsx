@@ -195,39 +195,39 @@ function DashboardContent() {
   // User profile from dashboard data
   const userProfile = dashboardData?.profile || null
 
+  // Pre-define icons to avoid temporal dead zone issues
+  const SearchIcon = Search
+  const PlusIcon = Plus
+  const UsersIcon = Users
+  const ArrowLeftRightIcon = ArrowLeftRight
+
   const quickActions = useMemo(() => {
-    // Ensure icons are available before creating the array
-    const searchIcon = Search
-    const plusIcon = Plus
-    const usersIcon = Users
-    const arrowLeftRightIcon = ArrowLeftRight
-    
     return [
       {
         title: "Browse Cards",
         href: "/cards",
-        icon: searchIcon,
+        icon: SearchIcon,
         description: "Discover new cards",
         color: "from-blue-500 to-blue-600"
       },
       {
         title: "Add to Collection",
         href: "/collection",
-        icon: plusIcon,
+        icon: PlusIcon,
         description: "Quick add cards",
         color: "from-green-500 to-green-600"
       },
       {
         title: "Find Friends",
         href: "/friends",
-        icon: usersIcon,
+        icon: UsersIcon,
         description: "Connect with collectors",
         color: "from-purple-500 to-purple-600"
       },
       {
         title: "Start Trading",
         href: "/trades",
-        icon: arrowLeftRightIcon,
+        icon: ArrowLeftRightIcon,
         description: "Trade with others",
         color: "from-orange-500 to-orange-600"
       }

@@ -2,8 +2,15 @@
 
 import { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { profileService, ProfileData } from '@/lib/profile-service'
+import { supabase } from '@/lib/supabase'
 import { Profile } from '@/types'
+
+interface ProfileData {
+  profile: Profile
+  collections: any[]
+  achievements: any[]
+  stats: any
+}
 
 interface ProfileContextType {
   profile: Profile | null
@@ -31,15 +38,62 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     setError(null)
 
     try {
-      const result = await profileService.getProfileData(user.id, user.email)
-      if (result.success && result.data) {
-        setProfileData(result.data)
-        setProfile(result.data.profile)
-      } else {
-        setError(result.error || 'Failed to load profile')
+      // Set a timeout for profile loading
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Profile loading timeout')), 8000)
+      })
+
+      const profilePromise = async () => {
+        // Get basic profile
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single()
+
+        if (profileError) {
+          throw new Error(`Profile error: ${profileError.message}`)
+        }
+
+        // Create minimal profile data structure
+        const result: ProfileData = {
+          profile: profileData,
+          collections: [],
+          achievements: [],
+          stats: {
+            totalCards: 0,
+            totalValue: 0,
+            completionRate: 0
+          }
+        }
+
+        return result
       }
+
+      const result = await Promise.race([profilePromise(), timeoutPromise]) as ProfileData
+      
+      setProfileData(result)
+      setProfile(result.profile)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error')
+      console.error('Profile loading error:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load profile')
+      
+      // Create a minimal profile if loading fails
+      if (user) {
+        const fallbackProfile: Profile = {
+          id: user.id,
+          username: user.email?.split('@')[0] || 'user',
+          display_name: user.email?.split('@')[0] || 'User',
+          avatar_url: undefined,
+          privacy_level: 'public',
+          show_collection_value: true,
+          preferred_currency: 'EUR',
+          preferred_language: 'en',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+        setProfile(fallbackProfile)
+      }
     } finally {
       setLoading(false)
     }
@@ -54,6 +108,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
       setProfile(null)
       setProfileData(null)
       setError(null)
+      setLoading(false)
     }
   }, [user, authLoading, loadProfile])
 
