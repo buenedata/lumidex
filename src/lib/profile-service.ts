@@ -294,43 +294,47 @@ class ProfileService {
         })
       }
 
-      // Get recent friendships
+      // Get recent friendships (simplified query to avoid 400 errors)
       const { data: recentFriends } = await supabase
         .from('friendships')
-        .select(`
-          id,
-          updated_at,
-          requester_id,
-          addressee_id,
-          profiles!friendships_requester_id_fkey(username, display_name),
-          profiles!friendships_addressee_id_fkey(username, display_name)
-        `)
+        .select('id, updated_at, requester_id, addressee_id')
         .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`)
         .eq('status', 'accepted')
         .order('updated_at', { ascending: false })
         .limit(5)
 
-      if (recentFriends) {
-        recentFriends.forEach(friendship => {
-          // Handle cases where profiles might be arrays
-          const requesterProfile = Array.isArray(friendship.profiles) ? friendship.profiles[0] : friendship.profiles
-          const addresseeProfile = Array.isArray(friendship.profiles) ? friendship.profiles[0] : friendship.profiles
-          const friendProfile = friendship.requester_id === userId ? addresseeProfile : requesterProfile
+      if (recentFriends && recentFriends.length > 0) {
+        // Get friend IDs
+        const friendIds = recentFriends.map(f =>
+          f.requester_id === userId ? f.addressee_id : f.requester_id
+        )
 
-          if (friendProfile && friendProfile.username) {
-            activities.push({
-              id: `friend_${friendship.id}`,
-              type: 'friend_added',
-              title: 'New friend',
-              description: `Connected with ${friendProfile.display_name || friendProfile.username}`,
-              timestamp: friendship.updated_at,
-              metadata: {
-                friendId: friendship.requester_id === userId ? friendship.addressee_id : friendship.requester_id,
-                friendName: friendProfile.display_name || friendProfile.username
-              }
-            })
-          }
-        })
+        // Get friend profiles separately to avoid complex join issues
+        const { data: friendProfiles } = await supabase
+          .from('profiles')
+          .select('id, username, display_name')
+          .in('id', friendIds)
+
+        if (friendProfiles) {
+          recentFriends.forEach(friendship => {
+            const friendId = friendship.requester_id === userId ? friendship.addressee_id : friendship.requester_id
+            const friendProfile = friendProfiles.find(p => p.id === friendId)
+
+            if (friendProfile && friendProfile.username) {
+              activities.push({
+                id: `friend_${friendship.id}`,
+                type: 'friend_added',
+                title: 'New friend',
+                description: `Connected with ${friendProfile.display_name || friendProfile.username}`,
+                timestamp: friendship.updated_at,
+                metadata: {
+                  friendId,
+                  friendName: friendProfile.display_name || friendProfile.username
+                }
+              })
+            }
+          })
+        }
       }
 
       // Sort all activities by timestamp
