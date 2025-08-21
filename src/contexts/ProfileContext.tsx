@@ -2,15 +2,8 @@
 
 import { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { supabase } from '@/lib/supabase'
+import { profileService, ProfileData } from '@/lib/profile-service'
 import { Profile } from '@/types'
-
-interface ProfileData {
-  profile: Profile
-  collections: any[]
-  achievements: any[]
-  stats: any
-}
 
 interface ProfileContextType {
   profile: Profile | null
@@ -43,42 +36,21 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
         setTimeout(() => reject(new Error('Profile loading timeout')), 8000)
       })
 
-      const profilePromise = async () => {
-        // Get basic profile
-        const { data: profileData, error: profileError } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', user.id)
-          .single()
-
-        if (profileError) {
-          throw new Error(`Profile error: ${profileError.message}`)
-        }
-
-        // Create minimal profile data structure
-        const result: ProfileData = {
-          profile: profileData,
-          collections: [],
-          achievements: [],
-          stats: {
-            totalCards: 0,
-            totalValue: 0,
-            completionRate: 0
-          }
-        }
-
-        return result
-      }
-
-      const result = await Promise.race([profilePromise(), timeoutPromise]) as ProfileData
+      const profilePromise = profileService.getProfileData(user.id, user.email)
       
-      setProfileData(result)
-      setProfile(result.profile)
+      const result = await Promise.race([profilePromise, timeoutPromise]) as any
+      
+      if (result.success && result.data) {
+        setProfileData(result.data)
+        setProfile(result.data.profile)
+      } else {
+        throw new Error(result.error || 'Failed to load profile')
+      }
     } catch (err) {
       console.error('Profile loading error:', err)
       setError(err instanceof Error ? err.message : 'Failed to load profile')
       
-      // Create a minimal profile if loading fails
+      // Create a minimal fallback profile if loading fails
       if (user) {
         const fallbackProfile: Profile = {
           id: user.id,
@@ -92,7 +64,20 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }
+        
+        const fallbackProfileData: ProfileData = {
+          profile: fallbackProfile,
+          collectionStats: null,
+          achievementStats: null,
+          friends: [],
+          friendRequests: [],
+          recentActivity: [],
+          wishlistItems: [],
+          wishlistStats: null
+        }
+        
         setProfile(fallbackProfile)
+        setProfileData(fallbackProfileData)
       }
     } finally {
       setLoading(false)
