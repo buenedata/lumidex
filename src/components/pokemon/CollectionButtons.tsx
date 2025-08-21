@@ -14,6 +14,10 @@ export const CollectionButtons: React.FC<CollectionButtonProps> = memo(({
 }) => {
   const inCollection = collectionData && collectionData.totalQuantity > 0;
 
+  // Pre-define icon components to avoid temporal dead zone issues
+  const PlusIcon = Plus;
+  const CheckIcon = Check;
+
   const handleVariantClick = (e: React.MouseEvent, variant: CardVariant) => {
     e.stopPropagation();
     if (loading) return;
@@ -83,9 +87,9 @@ export const CollectionButtons: React.FC<CollectionButtonProps> = memo(({
         title={inCollection ? 'Card is in collection' : 'Card not in collection'}
       >
         {inCollection ? (
-          <Check className="w-3 h-3" />
+          <CheckIcon className="w-3 h-3" />
         ) : (
-          <Plus className="w-3 h-3" />
+          <PlusIcon className="w-3 h-3" />
         )}
       </div>
 

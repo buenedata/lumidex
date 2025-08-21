@@ -195,36 +195,44 @@ function DashboardContent() {
   // User profile from dashboard data
   const userProfile = dashboardData?.profile || null
 
-  const quickActions = useMemo(() => [
-    {
-      title: "Browse Cards",
-      href: "/cards",
-      icon: Search,
-      description: "Discover new cards",
-      color: "from-blue-500 to-blue-600"
-    },
-    {
-      title: "Add to Collection",
-      href: "/collection",
-      icon: Plus,
-      description: "Quick add cards",
-      color: "from-green-500 to-green-600"
-    },
-    {
-      title: "Find Friends",
-      href: "/friends",
-      icon: Users,
-      description: "Connect with collectors",
-      color: "from-purple-500 to-purple-600"
-    },
-    {
-      title: "Start Trading",
-      href: "/trades",
-      icon: ArrowLeftRight,
-      description: "Trade with others",
-      color: "from-orange-500 to-orange-600"
-    }
-  ], [])
+  const quickActions = useMemo(() => {
+    // Ensure icons are available before creating the array
+    const searchIcon = Search
+    const plusIcon = Plus
+    const usersIcon = Users
+    const arrowLeftRightIcon = ArrowLeftRight
+    
+    return [
+      {
+        title: "Browse Cards",
+        href: "/cards",
+        icon: searchIcon,
+        description: "Discover new cards",
+        color: "from-blue-500 to-blue-600"
+      },
+      {
+        title: "Add to Collection",
+        href: "/collection",
+        icon: plusIcon,
+        description: "Quick add cards",
+        color: "from-green-500 to-green-600"
+      },
+      {
+        title: "Find Friends",
+        href: "/friends",
+        icon: usersIcon,
+        description: "Connect with collectors",
+        color: "from-purple-500 to-purple-600"
+      },
+      {
+        title: "Start Trading",
+        href: "/trades",
+        icon: arrowLeftRightIcon,
+        description: "Trade with others",
+        color: "from-orange-500 to-orange-600"
+      }
+    ]
+  }, [])
 
   return (
     <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
