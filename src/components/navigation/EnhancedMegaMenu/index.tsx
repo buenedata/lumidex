@@ -115,6 +115,17 @@ export default function EnhancedMegaMenu({ className = '' }: EnhancedMegaMenuPro
     fromCache
   } = useMenuSets()
 
+  // Check if mobile on mount and resize
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 1024)
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    return () => window.removeEventListener('resize', checkMobile)
+  }, [])
+
   // Process sets data into mega menu format
   const megaMenuData = React.useMemo(() => {
     if (!setsData) return null
@@ -171,6 +182,46 @@ export default function EnhancedMegaMenu({ className = '' }: EnhancedMegaMenuPro
     const totalCards = seriesArray.reduce((sum, series) => sum + series.totalCards, 0)
     const totalSets = seriesArray.reduce((sum, series) => sum + series.totalSets, 0)
 
+    // Static quick access items (no circular dependency)
+    const quickAccessItems: QuickAccessItem[] = [
+      {
+        id: 'all-cards',
+        label: 'All Cards',
+        href: '/cards',
+        icon: Sparkles,
+        description: 'Browse entire collection',
+        count: totalCards
+      },
+      {
+        id: 'new-releases',
+        label: 'New Releases',
+        href: '/cards?sort=release_date&order=desc',
+        icon: Calendar,
+        description: 'Latest card releases'
+      },
+      {
+        id: 'popular',
+        label: 'Popular Cards',
+        href: '/cards?sort=popularity',
+        icon: TrendingUp,
+        description: 'Community favorites'
+      },
+      {
+        id: 'high-value',
+        label: 'High Value Cards',
+        href: '/cards?sort=price&order=desc',
+        icon: Star,
+        description: 'Premium collectibles'
+      },
+      {
+        id: 'promos',
+        label: 'Promo Cards',
+        href: '/cards?rarity=Promo',
+        icon: Zap,
+        description: 'Special promotional cards'
+      }
+    ]
+
     return {
       quickAccess: quickAccessItems,
       typeFilters,
@@ -201,57 +252,6 @@ export default function EnhancedMegaMenu({ className = '' }: EnhancedMegaMenuPro
       }
     }
   }, [setsData])
-
-  // Check if mobile on mount and resize
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024)
-    }
-    
-    checkMobile()
-    window.addEventListener('resize', checkMobile)
-    return () => window.removeEventListener('resize', checkMobile)
-  }, [])
-
-  // Quick access items configuration
-  const quickAccessItems: QuickAccessItem[] = [
-    {
-      id: 'all-cards',
-      label: 'All Cards',
-      href: '/cards',
-      icon: Sparkles,
-      description: 'Browse entire collection',
-      count: megaMenuData?.statistics.totalCards
-    },
-    {
-      id: 'new-releases',
-      label: 'New Releases',
-      href: '/cards?sort=release_date&order=desc',
-      icon: Calendar,
-      description: 'Latest card releases'
-    },
-    {
-      id: 'popular',
-      label: 'Popular Cards',
-      href: '/cards?sort=popularity',
-      icon: TrendingUp,
-      description: 'Community favorites'
-    },
-    {
-      id: 'high-value',
-      label: 'High Value Cards',
-      href: '/cards?sort=price&order=desc',
-      icon: Star,
-      description: 'Premium collectibles'
-    },
-    {
-      id: 'promos',
-      label: 'Promo Cards',
-      href: '/cards?rarity=Promo',
-      icon: Zap,
-      description: 'Special promotional cards'
-    }
-  ]
 
   // Pokemon type filters
   const typeFilters: TypeFilter[] = [
@@ -467,7 +467,7 @@ export default function EnhancedMegaMenu({ className = '' }: EnhancedMegaMenuPro
                         Quick Access
                       </h3>
                       <div className="space-y-2">
-                        {quickAccessItems.map((item) => {
+                        {megaMenuData?.quickAccess.map((item) => {
                           const Icon = item.icon
                           return (
                             <Link
