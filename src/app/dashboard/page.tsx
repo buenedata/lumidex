@@ -94,18 +94,22 @@ function DashboardContent() {
           console.log('Cache cleared - fetching fresh community stats')
         }
         
-        // Fetch only essential stats initially - lazy load the rest
-        const [communityResult, userResult, profileResult] = await Promise.all([
+        // Fetch stats with proper error handling for each service
+        const results = await Promise.allSettled([
           communityStatsService.getCommunityStats(),
           collectionStatsService.getCollectionStats(user.id),
           profileService.getProfileData(user.id, user.email)
         ])
 
-        return { communityResult, userResult, profileResult }
+        return {
+          communityResult: results[0].status === 'fulfilled' ? results[0].value : { success: false, error: 'Community stats failed' },
+          userResult: results[1].status === 'fulfilled' ? results[1].value : { success: false, error: 'User stats failed' },
+          profileResult: results[2].status === 'fulfilled' ? results[2].value : { success: false, error: 'Profile failed' }
+        }
       },
       {
-        timeout: 3000, // 3 second timeout - fast UX
-        maxRetries: 1
+        timeout: 5000, // Increased to 5 seconds for dashboard
+        maxRetries: 2
       }
     )
 
@@ -113,11 +117,13 @@ function DashboardContent() {
       if (result.success && result.data) {
         const { communityResult, userResult, profileResult } = result.data
 
+        // Only update state if we got successful results to prevent showing wrong data
         if (communityResult.success && communityResult.data) {
           setCommunityStats(communityResult.data)
           console.log('Community Stats loaded successfully')
         } else {
           console.warn('Community stats failed:', communityResult.error)
+          // Don't clear existing data, just keep what we have
         }
 
         if (userResult.success && userResult.data) {
@@ -125,6 +131,7 @@ function DashboardContent() {
           console.log('User Stats loaded successfully')
         } else {
           console.warn('User stats failed:', userResult.error)
+          // Don't clear existing data, just keep what we have
         }
 
         if (profileResult.success && profileResult.data) {
@@ -132,18 +139,19 @@ function DashboardContent() {
           console.log('User Profile loaded successfully')
         } else {
           console.warn('Profile failed:', profileResult.error)
+          // Don't clear existing data, just keep what we have
         }
         
         // Mark that we have initial data
         setHasInitialData(true)
       } else {
         console.error('Dashboard stats fetch failed:', result.error)
-        // Show error state after timeout
-        setStatsLoading(false)
+        // Don't clear existing data on failure - just stop loading
         setHasInitialData(true) // Stop showing skeletons
       }
     } catch (error) {
       console.error('Error processing dashboard stats:', error)
+      setHasInitialData(true)
     } finally {
       setStatsLoading(false)
     }
@@ -156,8 +164,12 @@ function DashboardContent() {
   // Refresh data when tab becomes visible again, but don't show loading state
   useEffect(() => {
     if (isTabVisible && hasInitialData && user) {
-      // Refresh data in background without showing loading state
-      fetchStats(false)
+      // Add debouncing to prevent race conditions and avoid excessive refreshes
+      const refreshTimer = setTimeout(() => {
+        fetchStats(false)
+      }, 1000) // Longer delay for dashboard to prevent data corruption
+      
+      return () => clearTimeout(refreshTimer)
     }
   }, [isTabVisible, hasInitialData, user, fetchStats])
 

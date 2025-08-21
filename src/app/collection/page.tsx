@@ -18,6 +18,7 @@ import { CardDetailsModal } from '@/components/pokemon/CardDetailsModal'
 import { usePreferredCurrency } from '@/contexts/UserPreferencesContext'
 import { currencyService } from '@/lib/currency-service'
 import { useI18n } from '@/contexts/I18nContext'
+import { loadingStateManager } from '@/lib/loading-state-manager'
 
 // Extended interface for collection items with variant data
 interface ExtendedCollectionItem extends UserCollectionWithCard {
@@ -98,9 +99,13 @@ function CollectionContent() {
   // Refresh data when tab becomes visible again, but don't show loading state
   useEffect(() => {
     if (isVisible && hasInitialData && user) {
-      // Refresh data in background without showing loading state
-      loadCollection(false)
-      loadStats()
+      // Add debouncing to prevent race conditions
+      const refreshTimer = setTimeout(() => {
+        loadCollection(false)
+        loadStats()
+      }, 500)
+      
+      return () => clearTimeout(refreshTimer)
     }
   }, [isVisible, hasInitialData, user])
 
@@ -113,37 +118,54 @@ function CollectionContent() {
   const loadCollection = async (forceRefresh = true) => {
     if (!user) return
 
+    const loadingKey = `collection-${user.id}`
+    
     // Only show loading if we don't have initial data yet or force refresh
     if (!hasInitialData || forceRefresh) {
       setLoading(true)
     }
     
-    try {
-      // Load collection data directly from supabase with variant support
-      const { data, error } = await supabase
-        .from('user_collections')
-        .select(`
-          *,
-          cards!inner(
-            id,
-            name,
-            set_id,
-            number,
-            rarity,
-            types,
-            image_small,
-            image_large,
-            cardmarket_avg_sell_price,
-            cardmarket_trend_price,
-            sets!inner(name, symbol_url)
-          )
-        `)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
+    const result = await loadingStateManager.executeWithTimeout(
+      loadingKey,
+      async () => {
+        // Load collection data directly from supabase with variant support
+        const { data, error } = await supabase
+          .from('user_collections')
+          .select(`
+            *,
+            cards!inner(
+              id,
+              name,
+              set_id,
+              number,
+              rarity,
+              types,
+              image_small,
+              image_large,
+              cardmarket_avg_sell_price,
+              cardmarket_trend_price,
+              sets!inner(name, symbol_url)
+            )
+          `)
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
 
-      if (error) {
-        console.error('Error loading collection:', error)
-      } else if (data) {
+        if (error) {
+          throw new Error(`Failed to load collection: ${error.message}`)
+        }
+
+        return data || []
+      },
+      {
+        timeout: 5000, // 5 second timeout
+        maxRetries: 2
+      }
+    )
+
+    try {
+      if (result.success && result.data) {
+        const data = result.data
+        
         // Group by card_id and aggregate variants
         const collectionMap: Record<string, ExtendedCollectionItem> = {}
         
@@ -205,9 +227,14 @@ function CollectionContent() {
         
         // Mark that we have initial data
         setHasInitialData(true)
+      } else {
+        console.error('Collection loading failed:', result.error)
+        // Show error state but don't prevent UI from working
+        setHasInitialData(true)
       }
     } catch (error) {
-      console.error('Error loading collection:', error)
+      console.error('Error processing collection data:', error)
+      setHasInitialData(true)
     } finally {
       setLoading(false)
     }

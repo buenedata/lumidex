@@ -21,6 +21,7 @@ import { toastService } from '@/lib/toast-service'
 import MatchCardPreview from '@/components/trading/MatchCardPreview'
 import CardSelectionModal from '@/components/trading/CardSelectionModal'
 import { useTabVisibility } from '@/hooks/useTabVisibility'
+import { loadingStateManager } from '@/lib/loading-state-manager'
 import {
   Users,
   Heart,
@@ -195,8 +196,12 @@ function TradingContent() {
   // Handle tab visibility changes - refresh data when returning to tab
   useEffect(() => {
     if (user && hasInitialData && isTabVisible) {
-      // Background refresh when tab becomes visible again
-      loadAllData(true) // Force refresh but don't show loading state
+      // Add debouncing to prevent race conditions
+      const refreshTimer = setTimeout(() => {
+        loadAllData(true) // Force refresh but don't show loading state
+      }, 500)
+      
+      return () => clearTimeout(refreshTimer)
     }
   }, [isTabVisible, user, hasInitialData])
 
@@ -218,20 +223,45 @@ function TradingContent() {
   }
 
   const loadAllData = async (forceRefresh = false) => {
+    if (!user) return
+
+    const loadingKey = `trading-data-${user.id}`
+    
     if (!forceRefresh) {
       setLoading(true)
     }
     setError(null)
 
+    const result = await loadingStateManager.executeWithTimeout(
+      loadingKey,
+      async () => {
+        // Load all trading data with timeout protection
+        const [wishlistResult, tradesResult] = await Promise.all([
+          loadWishlistMatches(),
+          loadTrades()
+        ])
+        
+        return { wishlistResult, tradesResult }
+      },
+      {
+        timeout: 8000, // 8 second timeout for complex trading data
+        maxRetries: 2
+      }
+    )
+
     try {
-      await Promise.all([
-        loadWishlistMatches(),
-        loadTrades()
-      ])
-      setHasInitialData(true)
+      if (result.success) {
+        setHasInitialData(true)
+        setError(null)
+      } else {
+        console.error('Trading data loading failed:', result.error)
+        setError('Failed to load trading data. Please refresh the page.')
+        setHasInitialData(true) // Still show UI
+      }
     } catch (err) {
-      console.error('Error loading trading data:', err)
+      console.error('Error processing trading data:', err)
       setError('Failed to load trading data')
+      setHasInitialData(true)
     } finally {
       if (!forceRefresh) {
         setLoading(false)
@@ -240,7 +270,7 @@ function TradingContent() {
   }
 
   const loadWishlistMatches = async () => {
-    if (!user) return
+    if (!user) return { success: false, error: 'No user' }
 
     try {
       // Get cards I want that my friends have
@@ -291,14 +321,16 @@ function TradingContent() {
           friends: []
         })
       }
+
+      return { success: true }
     } catch (error) {
       console.error('Error loading wishlist matches:', error)
-      throw error
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to load wishlist matches' }
     }
   }
 
   const loadTrades = async () => {
-    if (!user) return
+    if (!user) return { success: false, error: 'No user' }
 
     try {
       const { data, error } = await supabase
@@ -356,9 +388,11 @@ function TradingContent() {
 
       setActiveTrades(tradesWithDefaults.filter(t => ['pending', 'accepted'].includes(t.status)))
       setTradeHistory(tradesWithDefaults.filter(t => ['completed', 'declined', 'cancelled'].includes(t.status)))
+
+      return { success: true }
     } catch (error) {
       console.error('Error loading trades:', error)
-      throw error
+      return { success: false, error: error instanceof Error ? error.message : 'Failed to load trades' }
     }
   }
 

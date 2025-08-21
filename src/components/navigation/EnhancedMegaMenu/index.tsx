@@ -7,6 +7,7 @@ import Image from 'next/image'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { useTabVisibility } from '@/hooks/useTabVisibility'
 import { supabase } from '@/lib/supabase'
+import { loadingStateManager } from '@/lib/loading-state-manager'
 import {
   Search,
   ChevronDown,
@@ -185,8 +186,12 @@ export default function EnhancedMegaMenu({ className = '' }: EnhancedMegaMenuPro
   // Refresh data when tab becomes visible again, but don't show loading state
   useEffect(() => {
     if (isTabVisible && hasInitialData && state.megaMenuOpen) {
-      // Refresh data in background without showing loading state
-      fetchMegaMenuData(false)
+      // Add debouncing to prevent race conditions
+      const refreshTimer = setTimeout(() => {
+        fetchMegaMenuData(false)
+      }, 500)
+      
+      return () => clearTimeout(refreshTimer)
     }
   }, [isTabVisible, hasInitialData, state.megaMenuOpen])
 
@@ -245,118 +250,149 @@ export default function EnhancedMegaMenu({ className = '' }: EnhancedMegaMenuPro
   }, [state.megaMenuOpen, toggleMegaMenu])
 
   const fetchMegaMenuData = async (forceRefresh = true) => {
+    const loadingKey = 'mega-menu-data'
+    
+    // Only show loading if we don't have initial data yet or force refresh
+    if (!hasInitialData || forceRefresh) {
+      setLoading(true)
+    }
+
+    const result = await loadingStateManager.executeWithTimeout(
+      loadingKey,
+      async () => {
+        // Fetch series and sets data
+        const { data: setsData, error: setsError } = await supabase
+          .from('sets')
+          .select('*')
+          .order('release_date', { ascending: false })
+
+        if (setsError) {
+          throw new Error(`Failed to fetch sets: ${setsError.message}`)
+        }
+
+        return setsData || []
+      },
+      {
+        timeout: 4000, // 4 second timeout for menu data
+        maxRetries: 1
+      }
+    )
+
     try {
-      // Only show loading if we don't have initial data yet or force refresh
-      if (!hasInitialData || forceRefresh) {
-        setLoading(true)
-      }
+      if (result.success && result.data) {
+        const setsData = result.data
 
-      // Fetch series and sets data
-      const { data: setsData, error: setsError } = await supabase
-        .from('sets')
-        .select('*')
-        .order('release_date', { ascending: false })
+        // Process and group data by series
+        const seriesMap = new Map<string, EnhancedSeries>()
+        
+        setsData.forEach((set) => {
+          if (!seriesMap.has(set.series)) {
+            seriesMap.set(set.series, {
+              id: set.series.toLowerCase().replace(/\s+/g, '-'),
+              name: set.series,
+              displayName: set.series,
+              releaseYear: new Date(set.release_date).getFullYear(),
+              totalSets: 0,
+              totalCards: 0,
+              isPopular: false,
+              isFeatured: false,
+              sets: []
+            })
+          }
 
-      if (setsError) {
-        console.error('Error fetching sets:', setsError)
-        return
-      }
-
-      // Process and group data by series
-      const seriesMap = new Map<string, EnhancedSeries>()
-      
-      setsData?.forEach((set) => {
-        if (!seriesMap.has(set.series)) {
-          seriesMap.set(set.series, {
-            id: set.series.toLowerCase().replace(/\s+/g, '-'),
-            name: set.series,
-            displayName: set.series,
-            releaseYear: new Date(set.release_date).getFullYear(),
-            totalSets: 0,
-            totalCards: 0,
+          const series = seriesMap.get(set.series)!
+          series.sets.push({
+            id: set.id,
+            name: set.name,
+            series: set.series,
+            seriesId: series.id,
+            totalCards: set.total_cards,
+            releaseDate: set.release_date,
+            symbolUrl: set.symbol_url || undefined,
+            logoUrl: set.logo_url || undefined,
+            isLatest: false,
             isPopular: false,
-            isFeatured: false,
-            sets: []
+            averagePrice: 0
           })
-        }
-
-        const series = seriesMap.get(set.series)!
-        series.sets.push({
-          id: set.id,
-          name: set.name,
-          series: set.series,
-          seriesId: series.id,
-          totalCards: set.total_cards,
-          releaseDate: set.release_date,
-          symbolUrl: set.symbol_url || undefined,
-          logoUrl: set.logo_url || undefined,
-          isLatest: false,
-          isPopular: false,
-          averagePrice: 0
+          series.totalSets++
+          series.totalCards += set.total_cards
         })
-        series.totalSets++
-        series.totalCards += set.total_cards
-      })
 
-      // Convert to array and mark popular series
-      const seriesArray = Array.from(seriesMap.values())
-        .sort((a, b) => {
-          // Always put "Other" at the bottom
-          if (a.name === 'Other') return 1
-          if (b.name === 'Other') return -1
-          // Sort other series by release year in descending order
-          return b.releaseYear - a.releaseYear
+        // Convert to array and mark popular series
+        const seriesArray = Array.from(seriesMap.values())
+          .sort((a, b) => {
+            // Always put "Other" at the bottom
+            if (a.name === 'Other') return 1
+            if (b.name === 'Other') return -1
+            // Sort other series by release year in descending order
+            return b.releaseYear - a.releaseYear
+          })
+          .map((series, index) => ({
+            ...series,
+            isPopular: index < 6, // Top 6 series are popular
+            isFeatured: index < 3  // Top 3 series are featured
+          }))
+
+        // Get statistics
+        const totalCards = seriesArray.reduce((sum, series) => sum + series.totalCards, 0)
+        const totalSets = seriesArray.reduce((sum, series) => sum + series.totalSets, 0)
+
+        // Create featured content
+        const featuredContent: FeaturedContent[] = [
+          {
+            type: 'set',
+            title: setsData?.[0]?.name || 'Latest Release',
+            subtitle: 'New Set Available',
+            href: `/sets/${setsData?.[0]?.id}`,
+            badge: 'New',
+            isNew: true
+          },
+          {
+            type: 'series',
+            title: 'Popular Series',
+            subtitle: 'Most collected',
+            href: '/cards?sort=popularity',
+            badge: 'Trending'
+          }
+        ]
+
+        setMegaMenuData({
+          quickAccess: quickAccessItems,
+          typeFilters,
+          series: seriesArray,
+          featuredContent,
+          statistics: {
+            totalCards,
+            totalSets,
+            totalSeries: seriesArray.length,
+            averagePrice: 2.50, // Placeholder
+            lastUpdated: new Date().toISOString()
+          }
         })
-        .map((series, index) => ({
-          ...series,
-          isPopular: index < 6, // Top 6 series are popular
-          isFeatured: index < 3  // Top 3 series are featured
-        }))
 
-      // Get statistics
-      const totalCards = seriesArray.reduce((sum, series) => sum + series.totalCards, 0)
-      const totalSets = seriesArray.reduce((sum, series) => sum + series.totalSets, 0)
-
-      // Create featured content
-      const featuredContent: FeaturedContent[] = [
-        {
-          type: 'set',
-          title: setsData?.[0]?.name || 'Latest Release',
-          subtitle: 'New Set Available',
-          href: `/sets/${setsData?.[0]?.id}`,
-          badge: 'New',
-          isNew: true
-        },
-        {
-          type: 'series',
-          title: 'Popular Series',
-          subtitle: 'Most collected',
-          href: '/cards?sort=popularity',
-          badge: 'Trending'
-        }
-      ]
-
-      setMegaMenuData({
-        quickAccess: quickAccessItems,
-        typeFilters,
-        series: seriesArray,
-        featuredContent,
-        statistics: {
-          totalCards,
-          totalSets,
-          totalSeries: seriesArray.length,
-          averagePrice: 2.50, // Placeholder
-          lastUpdated: new Date().toISOString()
-        }
-      })
-
-      // Mark that we have initial data
-      setHasInitialData(true)
-
-      // Series will be collapsed by default via Headless UI
-
+        // Mark that we have initial data
+        setHasInitialData(true)
+      } else {
+        console.error('Mega menu data loading failed:', result.error)
+        // Set fallback data to prevent infinite loading
+        setMegaMenuData({
+          quickAccess: quickAccessItems,
+          typeFilters,
+          series: [],
+          featuredContent: [],
+          statistics: {
+            totalCards: 0,
+            totalSets: 0,
+            totalSeries: 0,
+            averagePrice: 0,
+            lastUpdated: new Date().toISOString()
+          }
+        })
+        setHasInitialData(true)
+      }
     } catch (error) {
-      console.error('Error fetching mega menu data:', error)
+      console.error('Error processing mega menu data:', error)
+      setHasInitialData(true)
     } finally {
       setLoading(false)
     }
