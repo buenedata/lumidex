@@ -73,20 +73,31 @@ export default function MobileDrawer({ className = '' }: MobileDrawerProps) {
     toggleMobileDrawer(false)
   }
 
+  // Pre-define icon components to avoid temporal dead zone issues
+  const HomeIcon = Home
+  const SearchIcon = Search
+  const BarChart3Icon = BarChart3
+  const ArrowLeftRightIcon = ArrowLeftRight
+  const UsersIcon = Users
+  const CalendarIcon = Calendar
+  const TrendingUpIcon = TrendingUp
+  const StarIcon = Star
+  const ZapIcon = Zap
+
   const mainNavItems = [
-    { label: 'Dashboard', href: '/dashboard', icon: Home },
-    { label: 'Browse Cards', href: '/cards', icon: Search },
-    { label: 'My Collection', href: '/collection', icon: BarChart3 },
-    { label: 'Trading', href: '/trades', icon: ArrowLeftRight },
-    { label: 'Friends', href: '/friends', icon: Users },
+    { label: 'Dashboard', href: '/dashboard', icon: HomeIcon },
+    { label: 'Browse Cards', href: '/cards', icon: SearchIcon },
+    { label: 'My Collection', href: '/collection', icon: BarChart3Icon },
+    { label: 'Trading', href: '/trades', icon: ArrowLeftRightIcon },
+    { label: 'Friends', href: '/friends', icon: UsersIcon },
   ]
 
   const browseItems = [
-    { label: 'All Cards', href: '/cards', icon: Search },
-    { label: 'New Releases', href: '/cards?sort=release_date&order=desc', icon: Calendar },
-    { label: 'Popular Cards', href: '/cards?sort=popularity', icon: TrendingUp },
-    { label: 'High Value Cards', href: '/cards?sort=price&order=desc', icon: Star },
-    { label: 'Promo Cards', href: '/cards?rarity=Promo', icon: Zap },
+    { label: 'All Cards', href: '/cards', icon: SearchIcon },
+    { label: 'New Releases', href: '/cards?sort=release_date&order=desc', icon: CalendarIcon },
+    { label: 'Popular Cards', href: '/cards?sort=popularity', icon: TrendingUpIcon },
+    { label: 'High Value Cards', href: '/cards?sort=price&order=desc', icon: StarIcon },
+    { label: 'Promo Cards', href: '/cards?rarity=Promo', icon: ZapIcon },
   ]
 
   const seriesItems = [
@@ -98,13 +109,13 @@ export default function MobileDrawer({ className = '' }: MobileDrawerProps) {
   ]
 
   const collectionItems = [
-    { label: 'My Cards', href: '/collection', icon: BarChart3 },
+    { label: 'My Cards', href: '/collection', icon: BarChart3Icon },
   ]
 
   const socialItems = [
-    { label: 'Friends', href: '/friends', icon: Users },
-    { label: 'Trading', href: '/trades', icon: ArrowLeftRight },
-    { label: 'Matches', href: '/matches', icon: TrendingUp },
+    { label: 'Friends', href: '/friends', icon: UsersIcon },
+    { label: 'Trading', href: '/trades', icon: ArrowLeftRightIcon },
+    { label: 'Matches', href: '/matches', icon: TrendingUpIcon },
   ]
 
   if (!state.mobileDrawerOpen) return null

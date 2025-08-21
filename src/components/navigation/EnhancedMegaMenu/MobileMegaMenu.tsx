@@ -37,13 +37,20 @@ export default function MobileMegaMenu({
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<any[]>([])
 
+  // Pre-define icon components to avoid temporal dead zone issues
+  const SparklesIcon = Sparkles
+  const CalendarIcon = Calendar
+  const TrendingUpIcon = TrendingUp
+  const StarIcon = Star
+  const ZapIcon = Zap
+
   // Quick access items for mobile
   const quickAccessItems = [
-    { id: 'all-cards', label: 'All Cards', href: '/cards', icon: Sparkles },
-    { id: 'new-releases', label: 'New Releases', href: '/cards?sort=release_date&order=desc', icon: Calendar },
-    { id: 'popular', label: 'Popular Cards', href: '/cards?sort=popularity', icon: TrendingUp },
-    { id: 'high-value', label: 'High Value Cards', href: '/cards?sort=price&order=desc', icon: Star },
-    { id: 'promos', label: 'Promo Cards', href: '/cards?rarity=Promo', icon: Zap }
+    { id: 'all-cards', label: 'All Cards', href: '/cards', icon: SparklesIcon },
+    { id: 'new-releases', label: 'New Releases', href: '/cards?sort=release_date&order=desc', icon: CalendarIcon },
+    { id: 'popular', label: 'Popular Cards', href: '/cards?sort=popularity', icon: TrendingUpIcon },
+    { id: 'high-value', label: 'High Value Cards', href: '/cards?sort=price&order=desc', icon: StarIcon },
+    { id: 'promos', label: 'Promo Cards', href: '/cards?rarity=Promo', icon: ZapIcon }
   ]
 
 
