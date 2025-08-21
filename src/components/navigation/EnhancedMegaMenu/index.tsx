@@ -185,14 +185,15 @@ export default function EnhancedMegaMenu({ className = '' }: EnhancedMegaMenuPro
 
   // Refresh data when tab becomes visible again, but don't show loading state
   useEffect(() => {
-    if (isTabVisible && hasInitialData && state.megaMenuOpen) {
-      // Add debouncing to prevent race conditions
-      const refreshTimer = setTimeout(() => {
-        fetchMegaMenuData(false)
-      }, 500)
-      
-      return () => clearTimeout(refreshTimer)
-    }
+    // DISABLED: Tab visibility refresh causing performance issues and blinking
+    // Menu data doesn't need frequent refreshing
+    // if (isTabVisible && hasInitialData && state.megaMenuOpen) {
+    //   const refreshTimer = setTimeout(() => {
+    //     fetchMegaMenuData(false)
+    //   }, 10000) // Very long delay if enabled
+    //
+    //   return () => clearTimeout(refreshTimer)
+    // }
   }, [isTabVisible, hasInitialData, state.megaMenuOpen])
 
   // Handle click outside to close mega menu - improved version

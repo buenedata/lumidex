@@ -195,14 +195,15 @@ function TradingContent() {
 
   // Handle tab visibility changes - refresh data when returning to tab
   useEffect(() => {
-    if (user && hasInitialData && isTabVisible) {
-      // Add debouncing to prevent race conditions
-      const refreshTimer = setTimeout(() => {
-        loadAllData(true) // Force refresh but don't show loading state
-      }, 500)
-      
-      return () => clearTimeout(refreshTimer)
-    }
+    // DISABLED: Tab visibility refresh causing blinking loop
+    // Only refresh if tab has been hidden for a significant time
+    // if (user && hasInitialData && isTabVisible) {
+    //   const refreshTimer = setTimeout(() => {
+    //     loadAllData(true)
+    //   }, 2000) // Much longer delay
+    //
+    //   return () => clearTimeout(refreshTimer)
+    // }
   }, [isTabVisible, user, hasInitialData])
 
   const loadCurrentUserProfile = async () => {

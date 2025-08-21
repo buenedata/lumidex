@@ -245,14 +245,15 @@ function DashboardContent() {
 
   // Refresh data when tab becomes visible again, but don't show loading state
   useEffect(() => {
-    if (isTabVisible && hasInitialData && user) {
-      // Add debouncing to prevent race conditions and avoid excessive refreshes
-      const refreshTimer = setTimeout(() => {
-        fetchStats(false)
-      }, 1000) // Longer delay for dashboard to prevent data corruption
-      
-      return () => clearTimeout(refreshTimer)
-    }
+    // DISABLED: Tab visibility refresh causing blinking and performance issues
+    // Only refresh manually when really needed
+    // if (isTabVisible && hasInitialData && user) {
+    //   const refreshTimer = setTimeout(() => {
+    //     fetchStats(false)
+    //   }, 10000) // Very long delay if enabled
+    //
+    //   return () => clearTimeout(refreshTimer)
+    // }
   }, [isTabVisible, hasInitialData, user, fetchStats])
 
   const quickActions = useMemo(() => [

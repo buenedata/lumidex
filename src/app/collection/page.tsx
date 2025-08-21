@@ -98,15 +98,16 @@ function CollectionContent() {
 
   // Refresh data when tab becomes visible again, but don't show loading state
   useEffect(() => {
-    if (isVisible && hasInitialData && user) {
-      // Add debouncing to prevent race conditions
-      const refreshTimer = setTimeout(() => {
-        loadCollection(false)
-        loadStats()
-      }, 500)
-      
-      return () => clearTimeout(refreshTimer)
-    }
+    // DISABLED: Tab visibility refresh causing performance issues
+    // Only refresh if really needed
+    // if (isVisible && hasInitialData && user) {
+    //   const refreshTimer = setTimeout(() => {
+    //     loadCollection(false)
+    //     loadStats()
+    //   }, 5000) // Much longer delay if enabled
+    //
+    //   return () => clearTimeout(refreshTimer)
+    // }
   }, [isVisible, hasInitialData, user])
 
   useEffect(() => {
