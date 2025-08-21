@@ -201,25 +201,53 @@ function TradingContent() {
   // Transform new hook data to legacy format
   useEffect(() => {
     if (activeTradesData && Array.isArray(activeTradesData)) {
-      setActiveTrades(activeTradesData.map(trade => ({
-        ...trade,
+      setActiveTrades(activeTradesData.map((trade: any) => ({
+        id: trade.id,
+        initiator_id: trade.initiator_id,
+        recipient_id: trade.recipient_id,
+        status: trade.status,
+        created_at: trade.created_at,
+        updated_at: trade.updated_at,
+        // Add missing properties with sensible defaults
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        trade_items: [],
         initiator_money_offer: null,
         recipient_money_offer: null,
+        trade_method: null,
         initiator_shipping_included: null,
-        recipient_shipping_included: null
-      })))
+        recipient_shipping_included: null,
+        initiator_message: null,
+        recipient_message: null,
+        // Handle the profile arrays properly
+        initiator: Array.isArray(trade.initiator) ? trade.initiator[0] : trade.initiator,
+        recipient: Array.isArray(trade.recipient) ? trade.recipient[0] : trade.recipient
+      } as Trade)))
     }
   }, [activeTradesData])
 
   useEffect(() => {
     if (tradeHistoryData && Array.isArray(tradeHistoryData)) {
-      setTradeHistory(tradeHistoryData.map(trade => ({
-        ...trade,
+      setTradeHistory(tradeHistoryData.map((trade: any) => ({
+        id: trade.id,
+        initiator_id: trade.initiator_id,
+        recipient_id: trade.recipient_id,
+        status: trade.status,
+        created_at: trade.created_at,
+        updated_at: trade.updated_at,
+        // Add missing properties with sensible defaults
+        expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+        trade_items: [],
         initiator_money_offer: null,
         recipient_money_offer: null,
+        trade_method: null,
         initiator_shipping_included: null,
-        recipient_shipping_included: null
-      })))
+        recipient_shipping_included: null,
+        initiator_message: null,
+        recipient_message: null,
+        // Handle the profile arrays properly
+        initiator: Array.isArray(trade.initiator) ? trade.initiator[0] : trade.initiator,
+        recipient: Array.isArray(trade.recipient) ? trade.recipient[0] : trade.recipient
+      } as Trade)))
     }
   }, [tradeHistoryData])
 
