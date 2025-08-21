@@ -1,7 +1,6 @@
 'use client'
 
 import { useMemo } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
@@ -11,15 +10,11 @@ import { WantedBoard } from '@/components/dashboard/WantedBoard'
 import { EnhancedLeaderboards } from '@/components/dashboard/EnhancedLeaderboards'
 import { DashboardSearch } from '@/components/dashboard/DashboardSearch'
 import { PriceDisplay } from '@/components/PriceDisplay'
-import { usePreferredPriceSource } from '@/contexts/UserPreferencesContext'
 import { useDashboardEssentials } from '@/hooks/useSimpleData'
-import { EnhancedErrorBoundary } from '@/components/ui/EnhancedErrorBoundary'
 import {
   StatCardSkeleton,
   CommunityOverviewSkeleton,
-  ActivityListSkeleton,
-  TrendingCardsSkeleton,
-  TopCollectorsSkeleton
+  ActivityListSkeleton
 } from '@/components/ui/SkeletonLoader'
 import {
   Search,
@@ -36,24 +31,18 @@ import {
   Gift,
   Globe,
   Activity,
-  Crown,
-  Flame,
-  Eye,
-  Heart,
   Award
 } from 'lucide-react'
 
 function DashboardContent() {
   const { user } = useAuth()
-  const router = useRouter()
-  const preferredPriceSource = usePreferredPriceSource()
 
   // Use new simplified data hooks
-  const {
-    data: dashboardData,
-    loading: statsLoading,
+  const { 
+    data: dashboardData, 
+    loading: statsLoading, 
     error: statsError,
-    fromCache
+    fromCache 
   } = useDashboardEssentials(user?.id || null)
 
   // Helper function to format numbers with K suffix
@@ -80,70 +69,8 @@ function DashboardContent() {
       totalCardsInCommunity: dashboardData.totalUsers * 50, // Estimate
       totalCommunityValue: dashboardData.totalUsers * 125, // Estimate
       averageCollectionSize: 50,
-      mostPopularSets: [
-        {
-          setId: 'sv1',
-          setName: 'Scarlet & Violet Base Set',
-          setSymbolUrl: '/images/sets/sv1.png',
-          collectorsCount: Math.floor(dashboardData.totalUsers * 0.7),
-          totalCardsOwned: Math.floor(dashboardData.totalUsers * 120),
-          averageCompletion: 45.8,
-          releaseDate: '2023-03-31'
-        },
-        {
-          setId: 'sv2',
-          setName: 'Paldea Evolved',
-          setSymbolUrl: '/images/sets/sv2.png',
-          collectorsCount: Math.floor(dashboardData.totalUsers * 0.6),
-          totalCardsOwned: Math.floor(dashboardData.totalUsers * 95),
-          averageCompletion: 38.2,
-          releaseDate: '2023-06-09'
-        },
-        {
-          setId: 'sv3',
-          setName: 'Obsidian Flames',
-          setSymbolUrl: '/images/sets/sv3.png',
-          collectorsCount: Math.floor(dashboardData.totalUsers * 0.5),
-          totalCardsOwned: Math.floor(dashboardData.totalUsers * 85),
-          averageCompletion: 42.1,
-          releaseDate: '2023-08-11'
-        }
-      ],
-      trendingCards: [
-        {
-          cardId: 'sv1-1',
-          cardName: 'Charizard ex',
-          setName: 'Scarlet & Violet',
-          rarity: 'Double Rare',
-          imageSmall: '/images/cards/charizard-ex-sm.jpg',
-          recentAdds: Math.floor(dashboardData.totalUsers * 0.2),
-          averageValue: 45.99,
-          ownersCount: Math.floor(dashboardData.totalUsers * 0.3),
-          totalQuantity: Math.floor(dashboardData.totalUsers * 0.4)
-        },
-        {
-          cardId: 'sv2-1',
-          cardName: 'Miraidon ex',
-          setName: 'Paldea Evolved',
-          rarity: 'Double Rare',
-          imageSmall: '/images/cards/miraidon-ex-sm.jpg',
-          recentAdds: Math.floor(dashboardData.totalUsers * 0.15),
-          averageValue: 32.50,
-          ownersCount: Math.floor(dashboardData.totalUsers * 0.25),
-          totalQuantity: Math.floor(dashboardData.totalUsers * 0.35)
-        },
-        {
-          cardId: 'sv3-1',
-          cardName: 'Koraidon ex',
-          setName: 'Obsidian Flames',
-          rarity: 'Double Rare',
-          imageSmall: '/images/cards/koraidon-ex-sm.jpg',
-          recentAdds: Math.floor(dashboardData.totalUsers * 0.12),
-          averageValue: 28.75,
-          ownersCount: Math.floor(dashboardData.totalUsers * 0.22),
-          totalQuantity: Math.floor(dashboardData.totalUsers * 0.32)
-        }
-      ],
+      mostPopularSets: [],
+      trendingCards: [],
       recentCommunityActivity: [],
       topCollectors: [],
       globalAchievements: [
@@ -178,17 +105,7 @@ function DashboardContent() {
     
     return {
       totalCards: dashboardData.totalCards,
-      uniqueCards: dashboardData.totalCards,
-      totalValueEur: dashboardData.estimatedValue,
-      averageCardValue: dashboardData.totalCards > 0 ? dashboardData.estimatedValue / dashboardData.totalCards : 0,
-      setsWithCards: Math.ceil(dashboardData.totalCards / 20),
-      totalSets: 100,
-      completionPercentage: (dashboardData.totalCards / 2000) * 100,
-      rarityBreakdown: {},
-      setProgress: [],
-      recentAdditions: [],
-      topValueCards: [],
-      collectionGrowth: []
+      totalValueEur: dashboardData.estimatedValue
     }
   }, [dashboardData])
 
@@ -241,7 +158,7 @@ function DashboardContent() {
         <DashboardSearch className="max-w-md mx-auto" />
       </div>
 
-      {/* Data Loading Indicators */}
+      {/* Data Loading Indicator */}
       {fromCache && (
         <div className="mb-4 text-center">
           <div className="inline-flex items-center px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-sm">
@@ -251,6 +168,7 @@ function DashboardContent() {
         </div>
       )}
 
+      {/* Error State */}
       {statsError && (
         <div className="mb-6 bg-red-900/50 border border-red-700 rounded-xl p-4">
           <div className="flex items-center">
@@ -341,6 +259,7 @@ function DashboardContent() {
               </>
             )}
           </div>
+
           {/* Community Overview */}
           {statsLoading ? (
             <CommunityOverviewSkeleton />
@@ -378,21 +297,7 @@ function DashboardContent() {
                   </div>
                   <div className="text-sm text-gray-400">Community Value</div>
                   <div className="text-xs text-gray-500 mt-1">
-                    {(communityStats?.averageCollectionSize && communityStats.averageCollectionSize > 0) ? (
-                      <span className="inline-flex items-center">
-                        <PriceDisplay
-                          cardData={{
-                            cardmarket_avg_sell_price: Math.floor((communityStats?.averageCollectionSize || 0) * 0.5),
-                            tcgplayer_price: Math.floor((communityStats?.averageCollectionSize || 0) * 0.5 * 1.1)
-                          }}
-                          className="text-xs text-gray-500"
-                          showOriginal={false}
-                        />
-                        <span className="ml-1">avg per collector</span>
-                      </span>
-                    ) : (
-                      <span className="text-xs text-gray-500">Building collections</span>
-                    )}
+                    Building collections
                   </div>
                 </div>
                 <div className="bg-pkmn-surface/50 rounded-lg p-4">
@@ -401,10 +306,7 @@ function DashboardContent() {
                   </div>
                   <div className="text-sm text-gray-400">Cards Collected</div>
                   <div className="text-xs text-gray-500 mt-1">
-                    {(communityStats?.averageCollectionSize && communityStats.averageCollectionSize > 0)
-                      ? `${Math.floor(communityStats?.averageCollectionSize || 0)} avg per collector`
-                      : "Building collections"
-                    }
+                    {communityStats?.averageCollectionSize || 0} avg per collector
                   </div>
                 </div>
               </div>
@@ -441,18 +343,10 @@ function DashboardContent() {
                       <div className="mb-2">
                         <div className="flex justify-between text-xs text-gray-300 mb-1">
                           <span className="text-xs">
-                            {achievement.type === 'community_value' ? (
-                              `${Math.round(achievement.currentProgress * 11.5).toLocaleString()} kr`
-                            ) : (
-                              achievement.currentProgress.toLocaleString()
-                            )}
+                            {achievement.currentProgress.toLocaleString()}
                           </span>
                           <span className="text-xs">
-                            {achievement.type === 'community_value' ? (
-                              `${Math.round(achievement.targetGoal * 11.5).toLocaleString()} kr`
-                            ) : (
-                              achievement.targetGoal.toLocaleString()
-                            )}
+                            {achievement.targetGoal.toLocaleString()}
                           </span>
                         </div>
                         <div className="w-full bg-gray-700 rounded-full h-2">
@@ -488,107 +382,15 @@ function DashboardContent() {
 
         {/* Wanted Board Tab */}
         <TabsContent value="wanted" className="space-y-6">
-          {/* Wanted Board Widget */}
           <WantedBoard />
         </TabsContent>
 
         {/* Trending Tab */}
         <TabsContent value="trending" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Trending Cards */}
-            <div className="bg-pkmn-card rounded-xl p-6 border border-gray-700/50">
-              <h3 className="text-xl font-semibold text-white mb-4 flex items-center">
-                <Flame className="w-5 h-5 mr-2 text-pokemon-gold" />
-                Trending Cards
-              </h3>
-              {communityStats?.trendingCards && communityStats.trendingCards.length > 0 ? (
-                <div className="space-y-3">
-                  {communityStats.trendingCards.slice(0, 5).map((card, index) => (
-                    <div key={card.cardId} className="flex items-center space-x-3 p-3 rounded-lg bg-pkmn-surface/30">
-                      <img
-                        src={card.imageSmall}
-                        alt={card.cardName}
-                        className="w-12 h-16 object-contain rounded"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-white truncate">
-                          {card.cardName}
-                        </div>
-                        <div className="text-xs text-gray-400 truncate">
-                          {card.setName} • {card.rarity}
-                        </div>
-                        <div className="text-xs text-pokemon-gold">
-                          +{card.recentAdds} this week
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm font-bold text-green-400">
-                          <PriceDisplay
-                            cardData={{
-                              cardmarket_avg_sell_price: card.averageValue,
-                              tcgplayer_price: card.averageValue * 1.1
-                            }}
-                            className="text-sm font-bold text-green-400"
-                            showOriginal={false}
-                          />
-                        </div>
-                        <div className="text-xs text-gray-400">
-                          {card.ownersCount} owners
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <div className="text-4xl mb-4 opacity-50">🔥</div>
-                  <h4 className="text-lg font-medium text-gray-400 mb-2">No trending data yet</h4>
-                  <p className="text-gray-500">Start collecting to see what's hot!</p>
-                </div>
-              )}
-            </div>
-
-            {/* Popular Sets */}
-            <div className="bg-pkmn-card rounded-xl p-6 border border-gray-700/50">
-              <h3 className="text-xl font-semibold text-white mb-4 flex items-center">
-                <Star className="w-5 h-5 mr-2 text-pokemon-gold" />
-                Popular Sets
-              </h3>
-              {communityStats?.mostPopularSets && communityStats.mostPopularSets.length > 0 ? (
-                <div className="space-y-3">
-                  {communityStats.mostPopularSets.slice(0, 5).map((set, index) => (
-                    <div key={set.setId} className="flex items-center space-x-3 p-3 rounded-lg bg-pkmn-surface/30">
-                      {set.setSymbolUrl && (
-                        <img
-                          src={set.setSymbolUrl}
-                          alt={set.setName}
-                          className="w-8 h-8 object-contain"
-                        />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-white truncate">
-                          {set.setName}
-                        </div>
-                        <div className="text-xs text-gray-400">
-                          {set.collectorsCount} collectors • {set.averageCompletion.toFixed(1)}% avg completion
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm font-bold text-purple-400">
-                          #{index + 1}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <div className="text-4xl mb-4 opacity-50">⭐</div>
-                  <h4 className="text-lg font-medium text-gray-400 mb-2">No set data yet</h4>
-                  <p className="text-gray-500">Collections are being built!</p>
-                </div>
-              )}
-            </div>
+          <div className="text-center py-12">
+            <div className="text-6xl mb-4 opacity-50">🔥</div>
+            <h3 className="text-xl font-medium text-gray-300 mb-2">Trending data coming soon</h3>
+            <p className="text-gray-500">Enhanced trending features will be available soon!</p>
           </div>
         </TabsContent>
 

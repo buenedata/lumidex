@@ -2,7 +2,6 @@
 
 import { useState, useEffect, Fragment } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
-import { useTabVisibility } from '@/hooks/useTabVisibility'
 import ProtectedRoute from '@/components/auth/ProtectedRoute'
 import Navigation from '@/components/navigation/Navigation'
 import { Tab } from '@headlessui/react'
@@ -18,7 +17,7 @@ import { CardDetailsModal } from '@/components/pokemon/CardDetailsModal'
 import { usePreferredCurrency } from '@/contexts/UserPreferencesContext'
 import { currencyService } from '@/lib/currency-service'
 import { useI18n } from '@/contexts/I18nContext'
-import { loadingStateManager } from '@/lib/loading-state-manager'
+import { useCollectionChunk } from '@/hooks/useSimpleData'
 
 // Extended interface for collection items with variant data
 interface ExtendedCollectionItem extends UserCollectionWithCard {
@@ -54,9 +53,21 @@ function classNames(...classes: string[]) {
 
 function CollectionContent() {
   const { user } = useAuth()
-  const { isVisible } = useTabVisibility()
   const preferredCurrency = usePreferredCurrency()
   const { locale } = useI18n()
+
+  // Use new data fetching hook for main collection data
+  const {
+    data: collectionData,
+    loading: collectionLoading,
+    error: collectionError,
+    fromCache: collectionFromCache
+  } = useCollectionChunk(user?.id || null, {
+    offset: 0,
+    limit: 1000 // Load all for now since existing UI expects all data
+  })
+
+  // Legacy state for backwards compatibility
   const [collection, setCollection] = useState<ExtendedCollectionItem[]>([])
   const [stats, setStats] = useState<CollectionStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -87,166 +98,83 @@ function CollectionContent() {
 
   const pageSize = 24
 
+  // Update legacy state when new data arrives
+  useEffect(() => {
+    if (collectionData && Array.isArray(collectionData)) {
+      const transformedCards = collectionData.map((item: any) => ({
+        id: item.id || `${item.card_id}-${item.variant}`,
+        user_id: item.user_id,
+        card_id: item.card_id,
+        quantity: item.quantity || 0,
+        condition: item.condition,
+        is_foil: item.is_foil,
+        acquired_date: item.created_at,
+        notes: item.notes,
+        created_at: item.created_at,
+        updated_at: item.updated_at,
+        cards: item.cards,
+        // Variant quantities - simplified for now
+        normal: item.variant === 'normal' ? item.quantity : 0,
+        holo: item.variant === 'holo' ? item.quantity : 0,
+        reverse_holo: item.variant === 'reverse_holo' ? item.quantity : 0,
+        pokeball_pattern: item.variant === 'pokeball_pattern' ? item.quantity : 0,
+        masterball_pattern: item.variant === 'masterball_pattern' ? item.quantity : 0,
+        '1st_edition': item.variant === '1st_edition' ? item.quantity : 0
+      }))
+      
+      // Group by card_id and aggregate variants
+      const collectionMap: Record<string, ExtendedCollectionItem> = {}
+      
+      transformedCards.forEach((item: any) => {
+        const cardId = item.card_id
+        
+        if (!collectionMap[cardId]) {
+          collectionMap[cardId] = {
+            ...item,
+            normal: 0,
+            holo: 0,
+            reverse_holo: 0,
+            pokeball_pattern: 0,
+            masterball_pattern: 0,
+            '1st_edition': 0,
+            quantity: 0
+          }
+        }
+        
+        // Add quantities to variants and total
+        collectionMap[cardId].normal += item.normal || 0
+        collectionMap[cardId].holo += item.holo || 0
+        collectionMap[cardId].reverse_holo += item.reverse_holo || 0
+        collectionMap[cardId].pokeball_pattern += item.pokeball_pattern || 0
+        collectionMap[cardId].masterball_pattern += item.masterball_pattern || 0
+        collectionMap[cardId]['1st_edition'] += item['1st_edition'] || 0
+        collectionMap[cardId].quantity += item.quantity || 0
+      })
+      
+      setCollection(Object.values(collectionMap))
+      setHasInitialData(true)
+    }
+  }, [collectionData])
+
+  // Update loading state
+  useEffect(() => {
+    setLoading(collectionLoading)
+  }, [collectionLoading])
+
+  // Load additional data when user is available
   useEffect(() => {
     if (user) {
-      loadCollection()
       loadStats()
       loadAvailableSets()
       loadAvailableTypes()
     }
   }, [user])
 
-  // Refresh data when tab becomes visible again, but don't show loading state
-  useEffect(() => {
-    // DISABLED: Tab visibility refresh causing performance issues
-    // Only refresh if really needed
-    // if (isVisible && hasInitialData && user) {
-    //   const refreshTimer = setTimeout(() => {
-    //     loadCollection(false)
-    //     loadStats()
-    //   }, 5000) // Much longer delay if enabled
-    //
-    //   return () => clearTimeout(refreshTimer)
-    // }
-  }, [isVisible, hasInitialData, user])
-
-  useEffect(() => {
-    if (user) {
-      loadCollection()
-    }
-  }, [user, currentPage, selectedSet, selectedRarity, selectedCondition, selectedType, minValue, maxValue, dateFrom, dateTo, sortBy, sortOrder])
-
+  // Legacy function for backwards compatibility - now simplified
   const loadCollection = async (forceRefresh = true) => {
-    if (!user) return
-
-    const loadingKey = `collection-${user.id}`
-    
-    // Only show loading if we don't have initial data yet or force refresh
-    if (!hasInitialData || forceRefresh) {
-      setLoading(true)
-    }
-    
-    const result = await loadingStateManager.executeWithTimeout(
-      loadingKey,
-      async () => {
-        // FAST PATH: Try simple query first for immediate loading
-        console.log('Attempting fast collection load...')
-        
-        const { data, error } = await supabase
-          .from('user_collections')
-          .select(`
-            id,
-            user_id,
-            card_id,
-            quantity,
-            condition,
-            variant,
-            created_at,
-            cards!inner(
-              id,
-              name,
-              set_id,
-              number,
-              rarity,
-              image_small,
-              cardmarket_avg_sell_price,
-              sets!inner(name)
-            )
-          `)
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(100) // Limit for faster loading
-
-        if (error) {
-          console.warn('Fast collection query failed, using minimal fallback:', error)
-          // FALLBACK: Return minimal data to prevent infinite loading
-          return []
-        }
-
-        return data || []
-      },
-      {
-        timeout: 3000, // Shorter timeout for faster UX
-        maxRetries: 1
-      }
-    )
-
-    try {
-      if (result.success && result.data) {
-        const data = result.data
-        
-        // Group by card_id and aggregate variants
-        const collectionMap: Record<string, ExtendedCollectionItem> = {}
-        
-        data.forEach((item: any) => {
-          const cardId = item.card_id
-          
-          if (!collectionMap[cardId]) {
-            collectionMap[cardId] = {
-              id: item.id,
-              user_id: item.user_id,
-              card_id: cardId,
-              quantity: 0,
-              condition: item.condition,
-              is_foil: item.is_foil,
-              acquired_date: item.created_at,
-              notes: item.notes,
-              created_at: item.created_at,
-              updated_at: item.updated_at,
-              cards: item.cards,
-              // Variant quantities
-              normal: 0,
-              holo: 0,
-              reverse_holo: 0,
-              pokeball_pattern: 0,
-              masterball_pattern: 0,
-              '1st_edition': 0
-            }
-          }
-
-          // Add quantity to the appropriate variant and total
-          const variant = item.variant || 'normal'
-          switch (variant) {
-            case 'normal':
-              collectionMap[cardId].normal = (collectionMap[cardId].normal || 0) + item.quantity
-              break
-            case 'holo':
-              collectionMap[cardId].holo = (collectionMap[cardId].holo || 0) + item.quantity
-              break
-            case 'reverse_holo':
-              collectionMap[cardId].reverse_holo = (collectionMap[cardId].reverse_holo || 0) + item.quantity
-              break
-            case 'pokeball_pattern':
-              collectionMap[cardId].pokeball_pattern = (collectionMap[cardId].pokeball_pattern || 0) + item.quantity
-              break
-            case 'masterball_pattern':
-              collectionMap[cardId].masterball_pattern = (collectionMap[cardId].masterball_pattern || 0) + item.quantity
-              break
-            case '1st_edition':
-              collectionMap[cardId]['1st_edition'] = (collectionMap[cardId]['1st_edition'] || 0) + item.quantity
-              break
-          }
-          
-          collectionMap[cardId].quantity += item.quantity
-        })
-        
-        setCollection(Object.values(collectionMap))
-        setUserCollectionData(collectionMap)
-        setTotalPages(1) // For now, disable pagination since we're loading all
-        
-        // Mark that we have initial data
-        setHasInitialData(true)
-      } else {
-        console.error('Collection loading failed:', result.error)
-        // Show error state but don't prevent UI from working
-        setHasInitialData(true)
-      }
-    } catch (error) {
-      console.error('Error processing collection data:', error)
-      setHasInitialData(true)
-    } finally {
-      setLoading(false)
-    }
+    // The actual loading is now handled by the useCollectionChunk hook
+    // This function is kept for any remaining direct calls
+    console.log('loadCollection called - now handled by useCollectionChunk hook')
   }
 
   const loadStats = async () => {
@@ -363,65 +291,59 @@ function CollectionContent() {
     return
   }
 
-  const handleAddVariant = async (cardId: string, variant: CardVariant) => {
-    if (!user) return
+const handleAddVariant = async (cardId: string, variant: CardVariant) => {
+if (!user) return
 
-    console.log(`➕ Adding variant: ${variant} to card: ${cardId}`)
-    setLoadingStates(prev => ({ ...prev, [cardId]: true }))
-    
-    try {
-      // Use collection service to ensure achievement checking happens
-      const result = await collectionService.addToCollection(user.id, cardId, {
-        quantity: 1,
-        condition: 'near_mint'
-      })
+console.log(`➕ Adding variant: ${variant} to card: ${cardId}`)
+setLoadingStates(prev => ({ ...prev, [cardId]: true }))
 
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to add card')
-      }
+try {
+  // Use collection service to ensure achievement checking happens
+  const result = await collectionService.addToCollection(user.id, cardId, {
+    quantity: 1,
+    condition: 'near_mint'
+  })
 
-      // Reload collection and stats to get updated data
-      await loadCollection()
-      await loadStats()
-      
-    } catch (error) {
-      console.error('Error adding variant:', error)
-      // On error, reload to restore correct state
-      await loadCollection()
-    } finally {
-      setLoadingStates(prev => ({ ...prev, [cardId]: false }))
-    }
+  if (!result.success) {
+    throw new Error(result.error || 'Failed to add card')
   }
 
-  const handleRemoveVariant = async (cardId: string, variant: CardVariant) => {
-    if (!user) return
+  // Reload stats - collection data will be updated by the hook
+  await loadStats()
+  
+} catch (error) {
+  console.error('Error adding variant:', error)
+} finally {
+  setLoadingStates(prev => ({ ...prev, [cardId]: false }))
+}
+}
 
-    console.log(`🗑️ Removing variant: ${variant} from card: ${cardId}`)
-    setLoadingStates(prev => ({ ...prev, [cardId]: true }))
-    
-    try {
-      // Use collection service to ensure achievement checking happens
-      const result = await collectionService.removeFromCollection(user.id, cardId, {
-        quantity: 1,
-        condition: 'near_mint'
-      })
+const handleRemoveVariant = async (cardId: string, variant: CardVariant) => {
+if (!user) return
 
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to remove card')
-      }
+console.log(`🗑️ Removing variant: ${variant} from card: ${cardId}`)
+setLoadingStates(prev => ({ ...prev, [cardId]: true }))
 
-      // Reload collection and stats to get updated data
-      await loadCollection()
-      await loadStats()
-      
-    } catch (error) {
-      console.error('Error removing variant:', error)
-      // On error, reload to restore correct state
-      await loadCollection()
-    } finally {
-      setLoadingStates(prev => ({ ...prev, [cardId]: false }))
-    }
+try {
+  // Use collection service to ensure achievement checking happens
+  const result = await collectionService.removeFromCollection(user.id, cardId, {
+    quantity: 1,
+    condition: 'near_mint'
+  })
+
+  if (!result.success) {
+    throw new Error(result.error || 'Failed to remove card')
   }
+
+  // Reload stats - collection data will be updated by the hook
+  await loadStats()
+  
+} catch (error) {
+  console.error('Error removing variant:', error)
+} finally {
+  setLoadingStates(prev => ({ ...prev, [cardId]: false }))
+}
+}
 
   const handleViewDetails = (cardId: string) => {
     setSelectedCardId(cardId)
@@ -937,6 +859,29 @@ function CollectionContent() {
                       >
                         Clear All Filters
                       </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Data Loading Indicators */}
+              {collectionFromCache && (
+                <div className="mb-4 text-center">
+                  <div className="inline-flex items-center px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-sm">
+                    <span className="w-2 h-2 bg-blue-400 rounded-full mr-2 animate-pulse"></span>
+                    Collection data loaded from cache - refreshing in background
+                  </div>
+                </div>
+              )}
+
+              {collectionError && (
+                <div className="mb-6 bg-red-900/50 border border-red-700 rounded-xl p-4">
+                  <div className="flex items-center">
+                    <div className="text-red-400 mr-3">⚠️</div>
+                    <div>
+                      <h3 className="text-sm font-medium text-red-300">Loading Error</h3>
+                      <div className="mt-1 text-sm text-red-400">{collectionError}</div>
+                      <div className="mt-2 text-xs text-red-300">Showing fallback data</div>
                     </div>
                   </div>
                 </div>

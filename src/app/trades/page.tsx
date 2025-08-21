@@ -20,8 +20,7 @@ import { achievementService } from '@/lib/achievement-service'
 import { toastService } from '@/lib/toast-service'
 import MatchCardPreview from '@/components/trading/MatchCardPreview'
 import CardSelectionModal from '@/components/trading/CardSelectionModal'
-import { useTabVisibility } from '@/hooks/useTabVisibility'
-import { loadingStateManager } from '@/lib/loading-state-manager'
+import { useTradeCounts, useTradesChunk } from '@/hooks/useSimpleData'
 import {
   Users,
   Heart,
@@ -124,14 +123,40 @@ interface FilterOption {
 
 function TradingContent() {
   const { user } = useAuth()
+
+  // Use new data fetching hooks
+  const {
+    data: tradeCounts,
+    loading: tradeCountsLoading,
+    error: tradeCountsError,
+    fromCache: tradeCountsFromCache
+  } = useTradeCounts(user?.id || null)
+
+  const {
+    data: activeTradesData,
+    loading: activeTradesLoading,
+    error: activeTradesError,
+    fromCache: activeTradesFromCache
+  } = useTradesChunk(user?.id || null, { status: 'active', offset: 0, limit: 100 })
+
+  const {
+    data: tradeHistoryData,
+    loading: tradeHistoryLoading,
+    error: tradeHistoryError,
+    fromCache: tradeHistoryFromCache
+  } = useTradesChunk(user?.id || null, { status: 'completed', offset: 0, limit: 100 })
+
+  // Legacy states for backwards compatibility and complex data
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [hasInitialData, setHasInitialData] = useState(false)
-
-  // Data states
+  
+  // Legacy wishlist data (keeping complex RPC calls for now)
   const [summary, setSummary] = useState<MatchesSummary | null>(null)
   const [iWantMatches, setIWantMatches] = useState<WishlistMatch[]>([])
   const [theyWantMatches, setTheyWantMatches] = useState<WishlistMatch[]>([])
+  
+  // Transform new data to legacy format
   const [activeTrades, setActiveTrades] = useState<Trade[]>([])
   const [tradeHistory, setTradeHistory] = useState<Trade[]>([])
 
@@ -144,9 +169,6 @@ function TradingContent() {
   const { showSuccess, showError, showInfo } = useToast()
   const { refreshNotifications } = useNotifications()
   const { confirm } = useConfirmation()
-
-  // Tab visibility hook
-  const isTabVisible = useTabVisibility()
 
   // Loading states for trade actions
   const [processingTrade, setProcessingTrade] = useState<string | null>(null)
@@ -176,13 +198,52 @@ function TradingContent() {
     { id: 'price', name: 'Price (High to Low)' }
   ]
 
+  // Transform new hook data to legacy format
+  useEffect(() => {
+    if (activeTradesData && Array.isArray(activeTradesData)) {
+      setActiveTrades(activeTradesData.map(trade => ({
+        ...trade,
+        initiator_money_offer: null,
+        recipient_money_offer: null,
+        initiator_shipping_included: null,
+        recipient_shipping_included: null
+      })))
+    }
+  }, [activeTradesData])
+
+  useEffect(() => {
+    if (tradeHistoryData && Array.isArray(tradeHistoryData)) {
+      setTradeHistory(tradeHistoryData.map(trade => ({
+        ...trade,
+        initiator_money_offer: null,
+        recipient_money_offer: null,
+        initiator_shipping_included: null,
+        recipient_shipping_included: null
+      })))
+    }
+  }, [tradeHistoryData])
+
+  // Update loading state based on new hooks
+  useEffect(() => {
+    const allLoading = tradeCountsLoading || activeTradesLoading || tradeHistoryLoading
+    setLoading(allLoading)
+    
+    if (!allLoading) {
+      setHasInitialData(true)
+    }
+    
+    // Set error from any of the hooks
+    const anyError = tradeCountsError || activeTradesError || tradeHistoryError
+    setError(anyError)
+  }, [tradeCountsLoading, activeTradesLoading, tradeHistoryLoading, tradeCountsError, activeTradesError, tradeHistoryError])
+
   useEffect(() => {
     if (user) {
-      loadAllData()
+      loadWishlistMatches() // Keep complex wishlist loading for now
       loadCurrentUserProfile()
       // Set up the callback for when trades are created
       setOnTradeCreated(async () => {
-        await loadTrades()
+        // The hooks will automatically refresh
         await refreshNotifications()
       })
     }
@@ -192,19 +253,6 @@ function TradingContent() {
       setOnTradeCreated(null)
     }
   }, [user, setOnTradeCreated])
-
-  // Handle tab visibility changes - refresh data when returning to tab
-  useEffect(() => {
-    // DISABLED: Tab visibility refresh causing blinking loop
-    // Only refresh if tab has been hidden for a significant time
-    // if (user && hasInitialData && isTabVisible) {
-    //   const refreshTimer = setTimeout(() => {
-    //     loadAllData(true)
-    //   }, 2000) // Much longer delay
-    //
-    //   return () => clearTimeout(refreshTimer)
-    // }
-  }, [isTabVisible, user, hasInitialData])
 
   const loadCurrentUserProfile = async () => {
     if (!user) return
@@ -223,78 +271,23 @@ function TradingContent() {
     }
   }
 
-  const loadAllData = async (forceRefresh = false) => {
+  // Simplified loading function - now only handles wishlist data
+  const loadWishlistData = async () => {
     if (!user) return
 
-    const loadingKey = `trading-data-${user.id}`
-    
-    if (!forceRefresh) {
-      setLoading(true)
-    }
-    setError(null)
-
-    const result = await loadingStateManager.executeWithTimeout(
-      loadingKey,
-      async () => {
-        // FAST PATH: Try simple queries first
-        console.log('Attempting fast trading data load...')
-        
-        try {
-          const [wishlistResult, tradesResult] = await Promise.all([
-            loadWishlistMatches(),
-            loadTrades()
-          ])
-          
-          return { wishlistResult, tradesResult }
-        } catch (error) {
-          console.warn('Complex trading queries failed, using minimal fallback:', error)
-          
-          // FALLBACK: Set minimal data to prevent infinite loading
-          return {
-            fallbackMode: true,
-            wishlistResult: { success: true },
-            tradesResult: { success: true }
-          }
-        }
-      },
-      {
-        timeout: 4000, // Shorter timeout for faster UX
-        maxRetries: 1
-      }
-    )
-
     try {
-      if (result.success && result.data) {
-        if (result.data.fallbackMode) {
-          console.log('Using minimal fallback trading data')
-          // Set empty states to prevent infinite loading
-          setIWantMatches([])
-          setTheyWantMatches([])
-          setSummary({
-            total_matches: 0,
-            i_want_they_have: 0,
-            they_want_i_have: 0,
-            friends: []
-          })
-          setActiveTrades([])
-          setTradeHistory([])
-        }
-        
-        setHasInitialData(true)
-        setError(null)
-      } else {
-        console.error('Trading data loading failed:', result.error)
-        setError('Failed to load trading data. Please refresh the page.')
-        setHasInitialData(true) // Still show UI
-      }
-    } catch (err) {
-      console.error('Error processing trading data:', err)
-      setError('Failed to load trading data')
-      setHasInitialData(true)
-    } finally {
-      if (!forceRefresh) {
-        setLoading(false)
-      }
+      await loadWishlistMatches()
+    } catch (error) {
+      console.error('Error loading wishlist data:', error)
+      // Set fallback data
+      setIWantMatches([])
+      setTheyWantMatches([])
+      setSummary({
+        total_matches: 0,
+        i_want_they_have: 0,
+        they_want_i_have: 0,
+        friends: []
+      })
     }
   }
 
@@ -358,71 +351,10 @@ function TradingContent() {
     }
   }
 
+  // Legacy function kept for trade action callbacks - now just refreshes hooks
   const loadTrades = async () => {
-    if (!user) return { success: false, error: 'No user' }
-
-    try {
-      const { data, error } = await supabase
-        .from('trades')
-        .select(`
-          id,
-          initiator_id,
-          recipient_id,
-          status,
-          initiator_message,
-          recipient_message,
-          trade_method,
-          created_at,
-          updated_at,
-          expires_at,
-          initiator:profiles!trades_initiator_id_fkey (
-            username,
-            display_name,
-            avatar_url
-          ),
-          recipient:profiles!trades_recipient_id_fkey (
-            username,
-            display_name,
-            avatar_url
-          ),
-          trade_items (
-            id,
-            user_id,
-            card_id,
-            quantity,
-            condition,
-            card:cards (
-              name,
-              image_small,
-              cardmarket_avg_sell_price,
-              set:sets (
-                name
-              )
-            )
-          )
-        `)
-        .or(`initiator_id.eq.${user.id},recipient_id.eq.${user.id}`)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-
-      // Add default money offer values for backward compatibility
-      const tradesWithDefaults = (data || []).map((trade: any) => ({
-        ...trade,
-        initiator_money_offer: null as number | null,
-        recipient_money_offer: null as number | null,
-        initiator_shipping_included: null as boolean | null,
-        recipient_shipping_included: null as boolean | null
-      } as Trade))
-
-      setActiveTrades(tradesWithDefaults.filter(t => ['pending', 'accepted'].includes(t.status)))
-      setTradeHistory(tradesWithDefaults.filter(t => ['completed', 'declined', 'cancelled'].includes(t.status)))
-
-      return { success: true }
-    } catch (error) {
-      console.error('Error loading trades:', error)
-      return { success: false, error: error instanceof Error ? error.message : 'Failed to load trades' }
-    }
+    // The hooks will automatically refresh
+    return { success: true }
   }
 
   const sortMatches = (matches: WishlistMatch[]) => {
@@ -972,14 +904,25 @@ function TradingContent() {
         </p>
       </div>
 
+      {/* Data Loading Indicators */}
+      {(tradeCountsFromCache || activeTradesFromCache || tradeHistoryFromCache) && (
+        <div className="mb-4 text-center">
+          <div className="inline-flex items-center px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-sm">
+            <span className="w-2 h-2 bg-blue-400 rounded-full mr-2 animate-pulse"></span>
+            Trading data loaded from cache - refreshing in background
+          </div>
+        </div>
+      )}
+
       {/* Error Message */}
       {error && (
         <div className="mb-6 bg-red-900/50 border border-red-700 rounded-xl p-4">
           <div className="flex items-center">
             <div className="text-red-400 mr-3">⚠️</div>
             <div>
-              <h3 className="text-sm font-medium text-red-300">Error</h3>
+              <h3 className="text-sm font-medium text-red-300">Loading Error</h3>
               <div className="mt-1 text-sm text-red-400">{error}</div>
+              <div className="mt-2 text-xs text-red-300">Showing fallback data</div>
             </div>
           </div>
         </div>
@@ -1019,9 +962,9 @@ function TradingContent() {
             <div className="flex items-center justify-center space-x-2">
               <Clock className="w-4 h-4" />
               <span>Active Trades</span>
-              {activeTrades.length > 0 && (
+              {(tradeCounts?.active || activeTrades.length) > 0 && (
                 <span className="bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">
-                  {activeTrades.length}
+                  {tradeCounts?.active || activeTrades.length}
                 </span>
               )}
             </div>
@@ -1038,9 +981,9 @@ function TradingContent() {
             <div className="flex items-center justify-center space-x-2">
               <RefreshCw className="w-4 h-4" />
               <span>History</span>
-              {tradeHistory.length > 0 && (
+              {(tradeCounts?.completed || tradeHistory.length) > 0 && (
                 <span className="bg-gray-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">
-                  {tradeHistory.length}
+                  {tradeCounts?.completed || tradeHistory.length}
                 </span>
               )}
             </div>
