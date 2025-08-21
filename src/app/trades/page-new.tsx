@@ -298,3 +298,132 @@ function TradingContent() {
                               {trade.status.charAt(0).toUpperCase() + trade.status.slice(1)}
                             </span>
                           </div>
+                          <div className="text-sm text-gray-400">
+                            {new Date(trade.created_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div className="text-sm text-gray-400">
+                          Trade #{trade.id.slice(0, 8)}
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-300 mb-2">
+                            Initiator: {trade.initiator?.display_name || trade.initiator?.username || 'Unknown'}
+                          </h4>
+                          <div className="bg-pkmn-surface/30 rounded-lg p-3">
+                            <div className="text-sm text-gray-400">Trade details...</div>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-300 mb-2">
+                            Recipient: {trade.recipient?.display_name || trade.recipient?.username || 'Unknown'}
+                          </h4>
+                          <div className="bg-pkmn-surface/30 rounded-lg p-3">
+                            <div className="text-sm text-gray-400">Trade details...</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="text-6xl mb-4 opacity-50">⏳</div>
+                  <h3 className="text-xl font-medium text-gray-300 mb-2">No active trades</h3>
+                  <p className="text-gray-500">You don't have any pending or accepted trades.</p>
+                </div>
+              )}
+            </div>
+          </Tab.Panel>
+
+          {/* History Panel */}
+          <Tab.Panel>
+            <div className="space-y-6">
+              {historyLoading ? (
+                <div className="space-y-4">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="bg-pkmn-card rounded-xl p-6 border border-gray-700/50 animate-pulse opacity-75">
+                      <div className="h-6 bg-gray-700 rounded mb-4"></div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <div className="h-4 bg-gray-700 rounded"></div>
+                          <div className="h-16 bg-gray-700 rounded"></div>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="h-4 bg-gray-700 rounded"></div>
+                          <div className="h-16 bg-gray-700 rounded"></div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : tradeHistory && tradeHistory.length > 0 ? (
+                <div className="space-y-4">
+                  {tradeHistory.map((trade: any) => (
+                    <div key={trade.id} className="bg-pkmn-card rounded-xl p-6 border border-gray-700/50 opacity-75">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center space-x-4">
+                          <div className="flex items-center space-x-2">
+                            {getStatusIcon(trade.status)}
+                            <span className={`text-sm font-medium ${getStatusColor(trade.status)}`}>
+                              {trade.status.charAt(0).toUpperCase() + trade.status.slice(1)}
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-400">
+                            {new Date(trade.updated_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div className="text-sm text-gray-400">
+                          Trade #{trade.id.slice(0, 8)}
+                        </div>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-300 mb-2">
+                            {trade.initiator_id === user?.id ? 'You offered' : `${trade.initiator?.display_name || trade.initiator?.username} offered`}
+                          </h4>
+                          <div className="bg-pkmn-surface/20 rounded-lg p-3">
+                            <div className="text-sm text-gray-400">Trade history details...</div>
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <h4 className="text-sm font-medium text-gray-300 mb-2">
+                            {trade.recipient_id === user?.id ? 'You traded away' : `${trade.recipient?.display_name || trade.recipient?.username} traded away`}
+                          </h4>
+                          <div className="bg-pkmn-surface/20 rounded-lg p-3">
+                            <div className="text-sm text-gray-400">Trade history details...</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <div className="text-6xl mb-4 opacity-50">📜</div>
+                  <h3 className="text-xl font-medium text-gray-300 mb-2">No trade history</h3>
+                  <p className="text-gray-500">You haven't completed any trades yet.</p>
+                </div>
+              )}
+            </div>
+          </Tab.Panel>
+        </Tab.Panels>
+      </Tab.Group>
+    </div>
+  )
+}
+
+export default function TradingPage() {
+  return (
+    <ProtectedRoute>
+      <Navigation>
+        <TradingContent />
+      </Navigation>
+    </ProtectedRoute>
+  )
+}
