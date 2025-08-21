@@ -1,6 +1,6 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import { Card, PriceDisplay } from '@/types'
+import { PokemonCard, CardPriceDisplay } from '@/types'
 
 /**
  * Utility function to merge Tailwind CSS classes
@@ -83,9 +83,9 @@ export function formatRelativeTime(date: string | Date): string {
  * Get the best available price for a card with fallbacks
  */
 export function getCardPrice(
-  card: Card,
+  card: PokemonCard,
   priceType: 'market' | 'low' | 'trend' = 'market'
-): PriceDisplay {
+): CardPriceDisplay {
   const pricing = {
     market: card.cardmarket_avg_sell_price,
     low: card.cardmarket_low_price,
@@ -105,7 +105,7 @@ export function getCardPrice(
   // Fallback: TCGPlayer pricing (converted to EUR)
   if (card.tcgplayer_price && card.tcgplayer_price > 0) {
     return {
-      price: card.tcgplayer_price * 0.85, // Approximate USD to EUR conversion
+      price: card.tcgplayer_price! * 0.85, // Approximate USD to EUR conversion
       currency: 'EUR',
       source: 'TCGPlayer',
       updated: card.updated_at,

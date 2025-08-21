@@ -8,7 +8,7 @@ import { useConfirmation } from '@/contexts/ConfirmationContext'
 import { useToast } from '@/components/ui/ToastContainer'
 import { profileService, ProfileData } from '@/lib/profile-service'
 import { userPreferencesService, PriceSource } from '@/lib/user-preferences-service'
-import { collectionService } from '@/lib/collection-service'
+import { useCollectionOperations } from '@/hooks/useServices'
 import { Locale } from '@/lib/i18n'
 import { SupportedCurrency } from '@/lib/currency-service'
 import {
@@ -41,6 +41,7 @@ export function AccountSettings({ profileData, isOpen, onClose, onProfileUpdate 
   const { preferences, loading: preferencesLoading, updateLanguage, updateCurrency, updatePriceSource } = useUserPreferences()
   const { confirm } = useConfirmation()
   const { showSuccess, showError } = useToast()
+  const { clearCollection } = useCollectionOperations()
   const [isEditing, setIsEditing] = useState(false)
   const [loading, setLoading] = useState(false)
   const [clearingCollection, setClearingCollection] = useState(false)
@@ -140,12 +141,12 @@ export function AccountSettings({ profileData, isOpen, onClose, onProfileUpdate 
     setError(null)
 
     try {
-      const result = await collectionService.clearCollection(user.id)
+      const result = await clearCollection(user.id)
 
       if (result.success) {
         showSuccess(
           'Collection Cleared Successfully!',
-          `Deleted ${result.deletedCount || 0} collection entries. You can now start fresh with only the correct available variants.`
+          `Deleted ${result.data || 0} collection entries. You can now start fresh with only the correct available variants.`
         )
         onProfileUpdate() // Reload profile data
       } else {

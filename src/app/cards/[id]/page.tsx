@@ -17,6 +17,7 @@ import { wishlistService } from '@/lib/wishlist-service'
 import { achievementService } from '@/lib/achievement-service'
 import { toastService } from '@/lib/toast-service'
 import { FallbackImage } from '@/components/ui/FallbackImage'
+import { getCorrectCardMarketUrl } from '@/lib/card-url-corrections'
 import {
   ArrowLeft,
   ExternalLink,
@@ -587,7 +588,23 @@ function CardDetailsContent() {
               
               <div className="space-y-2">
                 <a
-                  href={`https://www.cardmarket.com/en/Pokemon/Cards/${card.name.replace(/\s+/g, '-')}`}
+                  href={(() => {
+                    // Check for corrected URL first
+                    const correctedUrl = getCorrectCardMarketUrl(
+                      card.id,
+                      card.set_id,
+                      card.number,
+                      card.name
+                    )
+                    
+                    if (correctedUrl) {
+                      console.log(`🔧 Using corrected CardMarket URL for ${card.name}: ${correctedUrl}`)
+                      return correctedUrl
+                    }
+                    
+                    // Fallback to default URL generation
+                    return `https://www.cardmarket.com/en/Pokemon/Cards/${card.name.replace(/\s+/g, '-')}`
+                  })()}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center justify-between p-3 bg-pkmn-surface rounded-lg hover:bg-gray-600 transition-colors"

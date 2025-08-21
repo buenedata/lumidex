@@ -73,43 +73,69 @@ class CurrencyService {
 
   // Get exchange rate between two currencies
   async getExchangeRate(from: SupportedCurrency, to: SupportedCurrency): Promise<number> {
+    console.log(`🔄 CurrencyService: Getting exchange rate from ${from} to ${to}`)
     if (from === to) return 1
 
     const pair = `${from}_${to}`
     const reversePair = `${to}_${from}`
 
+    console.log(`🔍 CurrencyService: Looking for pair ${pair}, reverse: ${reversePair}`)
+    console.log(`🔍 CurrencyService: Available rates:`, Array.from(this.rates.keys()))
+
     // Check if we have the direct rate
     if (this.rates.has(pair)) {
       const rate = this.rates.get(pair)!
+      console.log(`✅ CurrencyService: Found direct rate ${pair}:`, rate)
       if (this.isRateValid(rate)) {
+        console.log(`✅ CurrencyService: Rate is valid, returning ${rate.rate}`)
         return rate.rate
+      } else {
+        console.log(`❌ CurrencyService: Rate is expired`)
       }
     }
 
     // Check if we have the reverse rate
     if (this.rates.has(reversePair)) {
       const rate = this.rates.get(reversePair)!
+      console.log(`✅ CurrencyService: Found reverse rate ${reversePair}:`, rate)
       if (this.isRateValid(rate)) {
-        return 1 / rate.rate
+        const reverseRate = 1 / rate.rate
+        console.log(`✅ CurrencyService: Reverse rate is valid, returning ${reverseRate}`)
+        return reverseRate
+      } else {
+        console.log(`❌ CurrencyService: Reverse rate is expired`)
       }
     }
 
     // If no direct rate, try to convert through EUR
     if (from !== 'EUR' && to !== 'EUR') {
+      console.log(`🔄 CurrencyService: Converting ${from} to ${to} through EUR`)
       const fromToEur = await this.getExchangeRate(from, 'EUR')
       const eurToTo = await this.getExchangeRate('EUR', to)
       return fromToEur * eurToTo
     }
 
     // Fallback to 1 if no rate found
-    console.warn(`No exchange rate found for ${from} to ${to}`)
+    console.warn(`❌ CurrencyService: No exchange rate found for ${from} to ${to}`)
     return 1
   }
 
   private isRateValid(rate: CurrencyRate): boolean {
-    if (!this.lastFetch) return false
+    if (!this.lastFetch) {
+      console.log(`❌ CurrencyService: No lastFetch time available`)
+      return false
+    }
     const now = new Date()
-    return (now.getTime() - rate.lastUpdated.getTime()) < this.CACHE_DURATION
+    const age = now.getTime() - rate.lastUpdated.getTime()
+    const isValid = age < this.CACHE_DURATION
+    console.log(`🕒 CurrencyService: Rate validity check:`, {
+      rateAge: age,
+      cacheLimit: this.CACHE_DURATION,
+      isValid,
+      rateTime: rate.lastUpdated,
+      currentTime: now
+    })
+    return isValid
   }
 
   // Convert price from one currency to another

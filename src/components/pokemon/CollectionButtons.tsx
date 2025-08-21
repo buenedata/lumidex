@@ -12,6 +12,15 @@ export const CollectionButtons: React.FC<CollectionButtonProps> = memo(({
   onRemoveVariant,
   loading = false,
 }) => {
+  console.log('🟠 CollectionButtons: Rendering for card', {
+    cardId: card.id,
+    cardName: card.name,
+    collectionData,
+    loading,
+    hasOnAddVariant: !!onAddVariant,
+    hasOnRemoveVariant: !!onRemoveVariant
+  });
+
   const inCollection = collectionData && collectionData.totalQuantity > 0;
 
   // Pre-define icon components to avoid temporal dead zone issues
@@ -20,35 +29,74 @@ export const CollectionButtons: React.FC<CollectionButtonProps> = memo(({
 
   const handleVariantClick = (e: React.MouseEvent, variant: CardVariant) => {
     e.stopPropagation();
-    if (loading) return;
+    console.log('🔴 CollectionButtons: handleVariantClick called', {
+      cardId: card.id,
+      cardName: card.name,
+      variant,
+      loading,
+      currentQuantity: getVariantQuantity(variant)
+    });
+    if (loading) {
+      console.log('🔴 CollectionButtons: Click ignored - loading state active');
+      return;
+    }
+    console.log('🔴 CollectionButtons: Calling onAddVariant');
     onAddVariant(card.id, variant);
   };
 
   const handleVariantRightClick = (e: React.MouseEvent, variant: CardVariant) => {
     e.preventDefault();
     e.stopPropagation();
-    if (loading) return;
+    console.log('🟡 CollectionButtons: handleVariantRightClick called', {
+      cardId: card.id,
+      cardName: card.name,
+      variant,
+      loading,
+      currentQuantity: getVariantQuantity(variant)
+    });
+    if (loading) {
+      console.log('🟡 CollectionButtons: Right click ignored - loading state active');
+      return;
+    }
     
     const currentQuantity = getVariantQuantity(variant);
     if (currentQuantity > 0) {
+      console.log('🟡 CollectionButtons: Calling onRemoveVariant');
       onRemoveVariant(card.id, variant);
+    } else {
+      console.log('🟡 CollectionButtons: Right click ignored - quantity is 0');
     }
   };
 
   // Remove the toggle click handler - yellow button is now just a visual indicator
 
   const getVariantQuantity = (variant: CardVariant): number => {
-    if (!collectionData) return 0;
-    
-    switch (variant) {
-      case 'normal': return collectionData.normal || 0;
-      case 'holo': return collectionData.holo || 0;
-      case 'reverse_holo': return collectionData.reverseHolo || 0;
-      case 'pokeball_pattern': return collectionData.pokeballPattern || 0;
-      case 'masterball_pattern': return collectionData.masterballPattern || 0;
-      case '1st_edition': return collectionData.firstEdition || 0;
-      default: return 0;
+    if (!collectionData) {
+      console.log('🟠 CollectionButtons: No collection data for card', card.id);
+      return 0;
     }
+    
+    const quantity = (() => {
+      switch (variant) {
+        case 'normal': return collectionData.normal || 0;
+        case 'holo': return collectionData.holo || 0;
+        case 'reverse_holo': return collectionData.reverseHolo || 0;
+        case 'pokeball_pattern': return collectionData.pokeballPattern || 0;
+        case 'masterball_pattern': return collectionData.masterballPattern || 0;
+        case '1st_edition': return collectionData.firstEdition || 0;
+        default: return 0;
+      }
+    })();
+
+    console.log('🟠 CollectionButtons: getVariantQuantity', {
+      cardId: card.id,
+      cardName: card.name,
+      variant,
+      quantity,
+      collectionData: collectionData
+    });
+
+    return quantity;
   };
 
   const getVariantTitle = (variant: CardVariant): string => {
@@ -130,7 +178,6 @@ export const getAvailableVariants = (card: any): CardVariant[] => {
   const cardNumber = card.number ? parseInt(card.number.split('/')[0]) : 0;
   
   
-  
   // Determine card type
   const isTrainer = card.types?.length === 0;
   const isEnergy = card.types?.includes('Energy');
@@ -152,12 +199,13 @@ export const getAvailableVariants = (card: any): CardVariant[] => {
   const isAceSpec = rarity.includes('ACE SPEC');
   const isFullArt = rarity.includes('Full Art');
   const isSpecialEnergy = isEnergy && (isFullArt || rarity.includes('Special'));
+
   
   // Identify specific sets that have special pattern variants
   const isPrismaticEvolutions = setName.includes('prismatic evolutions') || setId === 'sv8pt5';
   const isBlackBolt = setName.includes('black bolt') || setId === 'zsv10pt5';
   const isWhiteFlare = setName.includes('white flare') || setId === 'rsv10pt5';
-  const isCelebrations = setName.includes('celebrations') || setId === 'swsh12pt5';
+  const isCelebrations = setName.includes('celebrations') || setId === 'cel25';
   const isSpecialSet = isPrismaticEvolutions || isBlackBolt || isWhiteFlare || isCelebrations;
   
   // 1st Edition sets - WotC era and E-Card era (using actual database IDs)
@@ -327,7 +375,6 @@ export const getAvailableVariants = (card: any): CardVariant[] => {
       variants.push('normal');
     }
   }
-  
   
   return variants;
 };

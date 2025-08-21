@@ -1,5 +1,6 @@
-import { Card, Set, CardMarketPricing, PokemonTCGApiResponse } from '@/types'
+import { PokemonCard, PokemonSet, CardMarketPricing, PokemonTCGApiResponse } from '@/types'
 import { validateAndCorrectCardPricing } from './price-validation'
+import { getCorrectCardMarketUrl, needsCardMarketUrlCorrection } from './card-url-corrections'
 
 // Pokemon TCG API configuration
 const POKEMON_TCG_API_BASE_URL = 'https://api.pokemontcg.io/v2'
@@ -136,21 +137,21 @@ class PokemonTCGClient {
     page?: number
     pageSize?: number
     orderBy?: string
-  }): Promise<PokemonTCGApiResponse<Set[]>> {
+  }): Promise<PokemonTCGApiResponse<PokemonSet[]>> {
     const queryParams: Record<string, string> = {}
 
     if (params?.page) queryParams.page = params.page.toString()
     if (params?.pageSize) queryParams.pageSize = params.pageSize.toString()
     if (params?.orderBy) queryParams.orderBy = params.orderBy
 
-    return this.makeRequest<PokemonTCGApiResponse<Set[]>>('/sets', queryParams)
+    return this.makeRequest<PokemonTCGApiResponse<PokemonSet[]>>('/sets', queryParams)
   }
 
   /**
    * Get a specific set by ID
    */
-  async getSet(setId: string): Promise<PokemonTCGApiResponse<Set>> {
-    return this.makeRequest<PokemonTCGApiResponse<Set>>(`/sets/${setId}`)
+  async getSet(setId: string): Promise<PokemonTCGApiResponse<PokemonSet>> {
+    return this.makeRequest<PokemonTCGApiResponse<PokemonSet>>(`/sets/${setId}`)
   }
 
   /**
@@ -162,7 +163,7 @@ class PokemonTCGClient {
     q?: string // Query string for filtering
     orderBy?: string
     select?: string // Fields to select
-  }): Promise<PokemonTCGApiResponse<Card[]>> {
+  }): Promise<PokemonTCGApiResponse<PokemonCard[]>> {
     const queryParams: Record<string, string> = {}
 
     if (params?.page) queryParams.page = params.page.toString()
@@ -171,7 +172,7 @@ class PokemonTCGClient {
     if (params?.orderBy) queryParams.orderBy = params.orderBy
     if (params?.select) queryParams.select = params.select
 
-    return this.makeRequest<PokemonTCGApiResponse<Card[]>>('/cards', queryParams)
+    return this.makeRequest<PokemonTCGApiResponse<PokemonCard[]>>('/cards', queryParams)
   }
 
   /**
@@ -181,7 +182,7 @@ class PokemonTCGClient {
     page?: number
     pageSize?: number
     orderBy?: string
-  }): Promise<PokemonTCGApiResponse<Card[]>> {
+  }): Promise<PokemonTCGApiResponse<PokemonCard[]>> {
     const query = `set.id:${setId}`
     return this.getCards({
       ...params,
@@ -192,8 +193,8 @@ class PokemonTCGClient {
   /**
    * Get a specific card by ID
    */
-  async getCard(cardId: string): Promise<PokemonTCGApiResponse<Card>> {
-    return this.makeRequest<PokemonTCGApiResponse<Card>>(`/cards/${cardId}`)
+  async getCard(cardId: string): Promise<PokemonTCGApiResponse<PokemonCard>> {
+    return this.makeRequest<PokemonTCGApiResponse<PokemonCard>>(`/cards/${cardId}`)
   }
 
   /**
@@ -202,7 +203,7 @@ class PokemonTCGClient {
   async searchCardsByName(name: string, params?: {
     page?: number
     pageSize?: number
-  }): Promise<PokemonTCGApiResponse<Card[]>> {
+  }): Promise<PokemonTCGApiResponse<PokemonCard[]>> {
     const query = `name:"${name}*"`
     return this.getCards({
       ...params,
@@ -217,7 +218,7 @@ class PokemonTCGClient {
     page?: number
     pageSize?: number
     setId?: string
-  }): Promise<PokemonTCGApiResponse<Card[]>> {
+  }): Promise<PokemonTCGApiResponse<PokemonCard[]>> {
     let query = `rarity:"${rarity}"`
     if (params?.setId) {
       query += ` set.id:${params.setId}`
@@ -237,7 +238,7 @@ class PokemonTCGClient {
     page?: number
     pageSize?: number
     setId?: string
-  }): Promise<PokemonTCGApiResponse<Card[]>> {
+  }): Promise<PokemonTCGApiResponse<PokemonCard[]>> {
     let query = `types:"${type}"`
     if (params?.setId) {
       query += ` set.id:${params.setId}`
@@ -273,8 +274,8 @@ export const pokemonTCGClient = new PokemonTCGClient()
 /**
  * Transform Pokemon TCG API card data to our database format
  */
-export function transformCardData(apiCard: any): Card {
-  const cardData: Card = {
+export function transformCardData(apiCard: any): PokemonCard {
+  const cardData: PokemonCard = {
     id: apiCard.id,
     name: apiCard.name,
     set_id: apiCard.set.id,
@@ -284,6 +285,11 @@ export function transformCardData(apiCard: any): Card {
     hp: apiCard.hp ? parseInt(apiCard.hp) : undefined,
     image_small: apiCard.images.small,
     image_large: apiCard.images.large,
+    
+    // Structured pricing data
+    cardmarket: {},
+    tcgplayer: {},
+    
     cardmarket_url: undefined,
     cardmarket_updated_at: undefined,
     cardmarket_avg_sell_price: undefined,
@@ -335,6 +341,20 @@ export function transformCardData(apiCard: any): Card {
 
     cardData.cardmarket_last_sync = new Date().toISOString()
     cardData.cardmarket_sync_status = 'success'
+  }
+
+  // Apply CardMarket URL corrections if needed
+  const correctedUrl = getCorrectCardMarketUrl(
+    cardData.id,
+    cardData.set_id,
+    cardData.number,
+    cardData.name,
+    cardData.cardmarket_url || undefined
+  )
+  
+  if (correctedUrl) {
+    console.log(`🔧 Correcting CardMarket URL for ${cardData.name} (${cardData.id}): ${cardData.cardmarket_url} → ${correctedUrl}`)
+    cardData.cardmarket_url = correctedUrl
   }
 
   // Extract TCGPlayer variant availability (for determining which variants exist)
@@ -401,7 +421,7 @@ export function transformCardData(apiCard: any): Card {
 /**
  * Transform Pokemon TCG API set data to our database format
  */
-export function transformSetData(apiSet: any): Set {
+export function transformSetData(apiSet: any): PokemonSet {
   return {
     id: apiSet.id,
     name: apiSet.name,

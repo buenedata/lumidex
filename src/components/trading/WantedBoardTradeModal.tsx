@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/components/ui/ToastContainer'
 import { wantedBoardTradeService } from '@/lib/wanted-board-trade-service'
 import { WantedBoardPost } from '@/lib/wanted-board-service'
+import { PriceDisplay } from '@/components/PriceDisplay'
 import Image from 'next/image'
 import {
   X,
@@ -256,9 +257,7 @@ export default function WantedBoardTradeModal({
 
   const calculateOfferValue = (offer: typeof myOffer) => {
     const cardValue = offer.cards.reduce((sum, card) => {
-      // Convert EUR to NOK (11.5x rate) if price is in EUR
-      const priceInNOK = (card.price || 0) * 11.5
-      return sum + priceInNOK * card.quantity
+      return sum + (card.price || 0) * card.quantity
     }, 0)
     return cardValue + offer.money
   }
@@ -338,8 +337,8 @@ export default function WantedBoardTradeModal({
         case 'name':
           return a.card.name.localeCompare(b.card.name)
         case 'price':
-          const priceA = (a.card.cardmarket_avg_sell_price || 0) * 11.5
-          const priceB = (b.card.cardmarket_avg_sell_price || 0) * 11.5
+          const priceA = a.card.cardmarket_avg_sell_price || 0
+          const priceB = b.card.cardmarket_avg_sell_price || 0
           return priceB - priceA // Highest price first
         case 'set':
           return a.card.set.name.localeCompare(b.card.set.name)
@@ -494,9 +493,14 @@ export default function WantedBoardTradeModal({
                                     <div className="flex justify-between items-center mt-1">
                                       <span className="text-xs text-white">Qty: {card.quantity}</span>
                                       {card.price && card.price > 0 && (
-                                        <span className="text-xs font-bold text-white">
-                                          {((card.price || 0) * 11.5 * card.quantity).toFixed(0)} NOK
-                                        </span>
+                                        <PriceDisplay
+                                          amount={card.price * card.quantity}
+                                          currency="EUR"
+                                          showConversion={true}
+                                          showOriginal={false}
+                                          size="sm"
+                                          className="text-xs font-bold text-white"
+                                        />
                                       )}
                                     </div>
                                   </div>
@@ -589,7 +593,18 @@ export default function WantedBoardTradeModal({
                     <div className="text-center">
                       <div className="text-sm text-gray-400">Total Value</div>
                       <div className="text-lg font-bold text-pokemon-gold">
-                        {myOfferValue.toFixed(2)} NOK
+                        {myOfferValue > 0 ? (
+                          <PriceDisplay
+                            amount={myOfferValue}
+                            currency="EUR"
+                            showConversion={true}
+                            showOriginal={false}
+                            size="lg"
+                            className="text-pokemon-gold font-bold"
+                          />
+                        ) : (
+                          '0.00'
+                        )}
                       </div>
                       <div className="text-xs text-gray-500 mt-1">
                         {myOffer.shippingIncluded ? 'Shipping included' : 'Shipping separate'}
@@ -648,9 +663,14 @@ export default function WantedBoardTradeModal({
                                     <div className="flex justify-between items-center mt-1">
                                       <span className="text-xs text-white">Qty: {card.quantity}</span>
                                       {card.price && card.price > 0 && (
-                                        <span className="text-xs font-bold text-white">
-                                          {((card.price || 0) * 11.5 * card.quantity).toFixed(0)} NOK
-                                        </span>
+                                        <PriceDisplay
+                                          amount={card.price * card.quantity}
+                                          currency="EUR"
+                                          showConversion={true}
+                                          showOriginal={false}
+                                          size="sm"
+                                          className="text-xs font-bold text-white"
+                                        />
                                       )}
                                     </div>
                                   </div>
@@ -719,7 +739,18 @@ export default function WantedBoardTradeModal({
                     <div className="text-center">
                       <div className="text-sm text-gray-400">Total Value</div>
                       <div className="text-lg font-bold text-blue-400">
-                        {theirOfferValue.toFixed(2)} NOK
+                        {theirOfferValue > 0 ? (
+                          <PriceDisplay
+                            amount={theirOfferValue}
+                            currency="EUR"
+                            showConversion={true}
+                            showOriginal={false}
+                            size="lg"
+                            className="text-blue-400 font-bold"
+                          />
+                        ) : (
+                          '0.00'
+                        )}
                       </div>
                     </div>
                   </div>
@@ -887,7 +918,7 @@ export default function WantedBoardTradeModal({
                         {filteredRecipientCards.length > 0 ? (
                           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 pb-4">
                             {filteredRecipientCards.map((userCard) => {
-                              const cardPrice = (userCard.card.cardmarket_avg_sell_price || 0) * 11.5
+                              const cardPrice = userCard.card.cardmarket_avg_sell_price || 0
                               return (
                                 <div
                                   key={userCard.id}
@@ -912,9 +943,14 @@ export default function WantedBoardTradeModal({
                                     <div className="text-xs text-gray-400 truncate">{userCard.card.set.name}</div>
                                     {cardPrice > 0 && (
                                       <div className="text-center">
-                                        <span className="text-xs font-bold text-white">
-                                          {cardPrice.toFixed(0)} NOK
-                                        </span>
+                                        <PriceDisplay
+                                          amount={cardPrice}
+                                          currency="EUR"
+                                          showConversion={true}
+                                          showOriginal={false}
+                                          size="sm"
+                                          className="text-xs font-bold text-white"
+                                        />
                                       </div>
                                     )}
                                   </div>

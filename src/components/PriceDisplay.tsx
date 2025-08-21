@@ -67,6 +67,10 @@ export const PriceDisplay: React.FC<PriceDisplayProps> = ({
   useEffect(() => {
     if (actualPrice && showConversion && actualPrice.currency !== targetCurrency) {
       convertPrice()
+    } else if (actualPrice && (!showConversion || actualPrice.currency === targetCurrency)) {
+      // Clear any previous conversion if no conversion needed
+      setConvertedPrice(null)
+      setError(null)
     }
   }, [actualPrice, targetCurrency, showConversion, preferredCurrency])
 
@@ -77,6 +81,12 @@ export const PriceDisplay: React.FC<PriceDisplayProps> = ({
     setError(null)
 
     try {
+      console.log('🔄 PriceDisplay: Converting price:', {
+        from: actualPrice.currency,
+        to: targetCurrency,
+        amount: actualPrice.amount
+      })
+
       const priceData: PriceData = {
         amount: actualPrice.amount,
         currency: actualPrice.currency,
@@ -84,10 +94,17 @@ export const PriceDisplay: React.FC<PriceDisplayProps> = ({
       }
 
       const converted = await currencyService.convertPrice(priceData, targetCurrency)
+      console.log('✅ PriceDisplay: Conversion successful:', {
+        original: converted.original,
+        converted: converted.converted,
+        rate: converted.rate
+      })
       setConvertedPrice(converted)
     } catch (err) {
+      console.error('❌ PriceDisplay: Currency conversion error:', err)
       setError('Conversion failed')
-      console.error('Currency conversion error:', err)
+      // Clear any previous conversion data on error
+      setConvertedPrice(null)
     } finally {
       setLoading(false)
     }
@@ -137,6 +154,12 @@ export const PriceDisplay: React.FC<PriceDisplayProps> = ({
   }
 
   if (error) {
+    console.log('⚠️ PriceDisplay: Showing error fallback:', {
+      error,
+      actualPrice,
+      targetCurrency,
+      willShowOriginal: !!actualPrice
+    })
     return (
       <span className={cn('text-white', getSizeClasses(), getVariantClasses(), className)}>
         {actualPrice ? formatPrice(actualPrice.amount, actualPrice.currency) : 'Error'}
@@ -153,6 +176,13 @@ export const PriceDisplay: React.FC<PriceDisplayProps> = ({
   
   // If no conversion needed or conversion disabled
   if (!showConversion || actualPrice.currency === targetCurrency || !convertedPrice) {
+    console.log('💡 PriceDisplay: Showing original price:', {
+      showConversion,
+      actualCurrency: actualPrice.currency,
+      targetCurrency,
+      hasConvertedPrice: !!convertedPrice,
+      amount: actualPrice.amount
+    })
     return (
       <span className={cn(
         getSizeClasses(),
@@ -166,6 +196,13 @@ export const PriceDisplay: React.FC<PriceDisplayProps> = ({
   }
 
   // Show converted price with optional original
+  console.log('🎯 PriceDisplay: Showing converted price:', {
+    convertedAmount: convertedPrice.converted.amount,
+    convertedCurrency: targetCurrency,
+    originalAmount: actualPrice.amount,
+    originalCurrency: actualPrice.currency,
+    rate: convertedPrice.rate
+  })
   return (
     <div className={cn('flex flex-col', getVariantClasses())}>
       <span className={cn(

@@ -1,334 +1,210 @@
-// Database Types
-export interface Profile {
-  id: string
-  username: string
-  display_name?: string
-  avatar_url?: string
-  banner_url?: string
-  bio?: string
-  location?: string
-  favorite_set_id?: string
-  privacy_level: 'public' | 'friends' | 'private'
-  show_collection_value: boolean
-  preferred_currency: string
-  preferred_language: string
-  preferred_price_source?: string
-  setup_completed?: boolean
-  setup_completed_at?: string
-  created_at: string
-  updated_at: string
-  last_active?: string
-}
+// Main type exports - organized and re-exported for clean imports
 
-export interface Set {
-  id: string
-  name: string
-  series: string
-  total_cards: number
-  release_date: string
-  symbol_url?: string
-  logo_url?: string
-  created_at: string
-  updated_at: string
-}
+// Core types
+export * from './core/common'
 
-export interface Card {
-  id: string
-  name: string
-  set_id: string
-  number: string
-  rarity: string
-  types: string[]
-  hp?: number
-  image_small: string
-  image_large: string
-  
-  // CardMarket pricing (EUR)
-  cardmarket_url?: string
-  cardmarket_updated_at?: string
-  cardmarket_avg_sell_price?: number
-  cardmarket_low_price?: number
-  cardmarket_trend_price?: number
-  cardmarket_suggested_price?: number
-  cardmarket_german_pro_low?: number
-  cardmarket_low_price_ex_plus?: number
-  cardmarket_reverse_holo_sell?: number
-  cardmarket_reverse_holo_low?: number
-  cardmarket_reverse_holo_trend?: number
-  cardmarket_avg_1_day?: number
-  cardmarket_avg_7_days?: number
-  cardmarket_avg_30_days?: number
-  cardmarket_last_sync?: string
-  cardmarket_sync_status?: 'success' | 'failed' | 'partial'
-  
-  // Legacy TCGPlayer data (optional)
-  tcgplayer_price?: number
-  tcgplayer_url?: string
-  
-  // TCGPlayer variant availability (for determining which variants exist)
-  tcgplayer_normal_available?: boolean
-  tcgplayer_holofoil_available?: boolean
-  tcgplayer_reverse_holo_available?: boolean
-  tcgplayer_1st_edition_available?: boolean
-  tcgplayer_last_sync?: string
-  tcgplayer_sync_status?: 'success' | 'failed' | 'partial'
-  
-  // TCGPlayer 1st Edition pricing (USD)
-  tcgplayer_1st_edition_normal_market?: number
-  tcgplayer_1st_edition_normal_low?: number
-  tcgplayer_1st_edition_normal_mid?: number
-  tcgplayer_1st_edition_normal_high?: number
-  tcgplayer_1st_edition_holofoil_market?: number
-  tcgplayer_1st_edition_holofoil_low?: number
-  tcgplayer_1st_edition_holofoil_mid?: number
-  tcgplayer_1st_edition_holofoil_high?: number
-  
-  created_at: string
-  updated_at: string
-  
-  // Relations
-  set?: Set
-}
+// Domain types
+export * from './domains/user'
+export * from './domains/card'
+export * from './domains/social'
+export * from './domains/wishlist'
 
-export interface UserCollection {
-  id: string
-  user_id: string
-  card_id: string
-  quantity: number
-  condition: 'mint' | 'near_mint' | 'lightly_played' | 'moderately_played' | 'heavily_played' | 'damaged'
-  is_foil: boolean
-  acquired_date: string | null
-  notes: string | null
-  created_at: string
-  updated_at: string
-  
-  // Relations
-  card?: Card
-}
+// Collection domain
+export * from './domains/collection'
 
-export interface Friendship {
-  id: string
-  requester_id: string
-  addressee_id: string
-  status: 'pending' | 'accepted' | 'blocked'
-  created_at: string
-  updated_at: string
-  
-  // Relations
-  requester?: Profile
-  addressee?: Profile
-}
+// API contracts
+export * from './api/contracts'
 
-export interface Trade {
-  id: string
-  initiator_id: string
-  recipient_id: string
-  status: 'pending' | 'accepted' | 'declined' | 'completed' | 'cancelled'
-  initiator_message?: string
-  recipient_message?: string
-  created_at: string
-  updated_at: string
-  expires_at: string
-  
-  // Relations
-  initiator?: Profile
-  recipient?: Profile
-  trade_items?: TradeItem[]
-}
-
-export interface TradeItem {
-  id: string
-  trade_id: string
-  user_id: string
-  card_id: string
-  quantity: number
-  condition: string
-  is_foil: boolean
-  notes?: string
-  created_at: string
-  
-  // Relations
-  card?: Card
-  user?: Profile
-}
-
-export interface Wishlist {
-  id: string
-  user_id: string
-  card_id: string
-  priority: 1 | 2 | 3 | 4 | 5
-  max_price_eur?: number
-  condition_preference: 'any' | 'mint' | 'near_mint' | 'lightly_played' | 'moderately_played'
-  notes?: string
-  created_at: string
-  updated_at: string
-  
-  // Relations
-  card?: Card
-}
-
-export interface UserAchievement {
-  id: string
-  user_id: string
-  achievement_type: string
-  achievement_data: Record<string, any>
-  unlocked_at: string
-  created_at: string
-}
-
-export interface CollectionStats {
-  id: string
-  user_id: string
-  set_id?: string
-  total_cards_in_set?: number
-  owned_cards: number
-  completion_percentage?: number
-  total_value_eur: number
-  total_value_usd?: number
-  updated_at: string
-}
-
-// API Response Types
-export interface PokemonTCGApiResponse<T> {
-  data: T
-  page?: number
-  pageSize?: number
-  count?: number
-  totalCount?: number
-}
-
-export interface CardMarketPricing {
-  url: string
-  updatedAt: string
-  prices: {
-    averageSellPrice?: number
-    lowPrice?: number
-    trendPrice?: number
-    germanProLow?: number
-    suggestedPrice?: number
-    reverseHoloSell?: number
-    reverseHoloLow?: number
-    reverseHoloTrend?: number
-    lowPriceExPlus?: number
-    avg1?: number
-    avg7?: number
-    avg30?: number
-  }
-}
-
-// UI Component Types
-export interface Achievement {
-  type: string
-  icon: string
-  title: string
-  description: string
-  unlocked?: boolean
-  unlockedAt?: string
-}
-
-export interface CollectionMatch {
-  id: string
-  user_id: string
-  friend_id: string
-  card_id: string
-  match_type: 'friend_has_wanted' | 'user_has_friend_wants'
-  created_at: string
-  
-  // Relations
-  card?: Card
-  friend?: Profile
-}
-
-export interface PriceDisplay {
-  price: number | null
-  currency: string
-  source: 'CardMarket' | 'TCGPlayer' | 'unavailable'
-  updated?: string
-}
-
-// Form Types
-export interface LoginForm {
-  email: string
-  password: string
-}
-
-export interface RegisterForm {
-  email: string
-  password: string
-  username: string
-  display_name?: string
-}
-
-export interface ProfileForm {
-  username: string
-  display_name?: string
-  bio?: string
-  location?: string
-  favorite_set_id?: string
-  privacy_level: 'public' | 'friends' | 'private'
-  show_collection_value: boolean
-  preferred_currency: string
-  preferred_language: string
-}
-
-export interface TradeForm {
-  recipient_id: string
-  message?: string
-  offered_cards: {
-    card_id: string
-    quantity: number
-    condition: string
-    is_foil: boolean
-    notes?: string
-  }[]
-  requested_cards: {
-    card_id: string
-    quantity: number
-    condition: string
-    is_foil: boolean
-    notes?: string
-  }[]
-}
-
-// Filter and Search Types
-export interface CardFilters {
-  search?: string
-  set_id?: string
-  rarity?: string[]
-  types?: string[]
-  price_min?: number
-  price_max?: number
-  owned?: boolean
-  wanted?: boolean
-}
-
-export interface SortOption {
-  field: string
-  direction: 'asc' | 'desc'
-  label: string
-}
-
-// Error Types
-export interface ApiError {
-  message: string
-  code?: string
-  details?: Record<string, any>
-}
-
-// Utility Types
-export type LoadingState = 'idle' | 'loading' | 'success' | 'error'
-
-export interface PaginationParams {
+// Additional legacy type exports for compatibility
+export type PokemonTCGApiResponse<T = any> = {
+  data: T[]
   page: number
   pageSize: number
+  count: number
+  totalCount: number
 }
 
-export interface PaginatedResponse<T> {
-  data: T[]
-  pagination: {
-    page: number
-    pageSize: number
-    totalCount: number
-    totalPages: number
-  }
+export type PriceDisplay = CardPriceDisplay
+
+// UI state types
+export * from './ui/state'
+
+// Legacy compatibility - maintain backwards compatibility during migration
+// These re-export existing types under their old names for gradual migration
+
+import type {
+  User,
+  UserPreferences,
+  UserStats,
+  UserActivityItem
+} from './domains/user'
+import type {
+  PokemonCard,
+  PokemonSet,
+  CardVariant,
+  CardCondition,
+  CardFilters,
+  CardListItem,
+  CardDetails,
+  CardPriceDisplay
+} from './domains/card'
+import type {
+  UserCollectionEntry,
+  CollectionStats,
+  CollectionQuery
+} from './domains/collection'
+import type {
+  Friend,
+  FriendRequest,
+  Trade,
+  TradeItem,
+  TradeOffer,
+  SocialStats
+} from './domains/social'
+import type {
+  WishlistItem,
+  WishlistList,
+  WishlistStats,
+  WishlistQuery
+} from './domains/wishlist'
+import type {
+  ApiResponse,
+  PaginatedResponse,
+  LoadingState,
+  Currency,
+  Language,
+  PaginationParams
+} from './core/common'
+import type {
+  FormState,
+  ModalState,
+  ListViewState,
+  ToastState
+} from './ui/state'
+
+// Legacy type aliases for backwards compatibility
+/** @deprecated Use User from domains/user instead */
+export type Profile = User
+
+/** @deprecated Use PokemonCard from domains/card instead */
+export type Card = PokemonCard
+
+/** @deprecated Use PokemonSet from domains/card instead */
+export type Set = PokemonSet
+
+/** @deprecated Use UserCollectionEntry from domains/collection instead */
+export type UserCollection = UserCollectionEntry
+
+/** @deprecated Use Friend from domains/social instead */
+export type Friendship = Friend
+
+// Utility types for type safety
+export type ExtractArrayType<T> = T extends (infer U)[] ? U : never
+export type RequireAtLeastOne<T, Keys extends keyof T = keyof T> = 
+  Pick<T, Exclude<keyof T, Keys>> & {
+    [K in Keys]-?: Required<Pick<T, K>> & Partial<Pick<T, Exclude<Keys, K>>>
+  }[Keys]
+
+export type PartialBy<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>
+export type RequiredBy<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>
+
+// Type guards for runtime type checking
+export const isUser = (obj: any): obj is User => {
+  return obj && typeof obj.id === 'string' && typeof obj.username === 'string'
+}
+
+export const isPokemonCard = (obj: any): obj is PokemonCard => {
+  return obj && typeof obj.id === 'string' && typeof obj.name === 'string' && obj.set_id
+}
+
+export const isApiResponse = <T>(obj: any): obj is ApiResponse<T> => {
+  return obj && typeof obj.success === 'boolean'
+}
+
+export const isLoadingState = (value: any): value is LoadingState => {
+  return ['idle', 'loading', 'success', 'error'].includes(value)
+}
+
+// Error type helpers
+export const createApiError = (message: string, code?: string, details?: Record<string, any>): ApiResponse<never> => ({
+  success: false,
+  error: message,
+  ...(code && { code }),
+  ...(details && { details })
+})
+
+export const createSuccessResponse = <T>(data: T, message?: string): ApiResponse<T> => ({
+  success: true,
+  data,
+  ...(message && { message })
+})
+
+// Constants for commonly used values
+export const CARD_CONDITIONS: readonly CardCondition[] = [
+  'mint',
+  'near_mint', 
+  'lightly_played',
+  'moderately_played',
+  'heavily_played',
+  'damaged'
+] as const
+
+export const CARD_VARIANTS: readonly CardVariant[] = [
+  'normal',
+  'holo',
+  'reverse_holo',
+  'pokeball_pattern',
+  'masterball_pattern',
+  '1st_edition'
+] as const
+
+export const CURRENCIES: readonly Currency[] = [
+  'EUR',
+  'USD',
+  'GBP',
+  'JPY'
+] as const
+
+export const LANGUAGES: readonly Language[] = [
+  'en',
+  'de', 
+  'fr',
+  'es',
+  'it',
+  'nl'
+] as const
+
+export const LOADING_STATES: readonly LoadingState[] = [
+  'idle',
+  'loading',
+  'success',
+  'error'
+] as const
+
+// Default values for common types
+export const DEFAULT_PAGINATION: PaginationParams = {
+  page: 1,
+  pageSize: 24
+}
+
+export const DEFAULT_USER_PREFERENCES: UserPreferences = {
+  preferred_currency: 'EUR',
+  preferred_language: 'en',
+  privacy_level: 'public',
+  show_collection_value: true
+}
+
+export const DEFAULT_COLLECTION_QUERY: CollectionQuery = {
+  ...DEFAULT_PAGINATION,
+  sortBy: 'acquired_date',
+  sortDirection: 'desc',
+  includeDetails: false
+}
+
+export const DEFAULT_WISHLIST_QUERY: WishlistQuery = {
+  ...DEFAULT_PAGINATION,
+  sortBy: 'priority',
+  sortDirection: 'asc',
+  includeAvailability: true,
+  includePricing: true
 }

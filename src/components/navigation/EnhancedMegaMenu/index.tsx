@@ -115,6 +115,18 @@ export default function EnhancedMegaMenu({ className = '' }: EnhancedMegaMenuPro
     fromCache
   } = useMenuSets()
 
+  // Pokemon type filters - moved before useMemo to avoid initialization error
+  const typeFilters: TypeFilter[] = [
+    { name: 'Electric', emoji: '⚡', color: 'text-yellow-400', href: '/cards?types=Lightning' },
+    { name: 'Fire', emoji: '🔥', color: 'text-red-400', href: '/cards?types=Fire' },
+    { name: 'Water', emoji: '💧', color: 'text-blue-400', href: '/cards?types=Water' },
+    { name: 'Grass', emoji: '🌿', color: 'text-green-400', href: '/cards?types=Grass' },
+    { name: 'Psychic', emoji: '🔮', color: 'text-purple-400', href: '/cards?types=Psychic' },
+    { name: 'Fighting', emoji: '👊', color: 'text-orange-400', href: '/cards?types=Fighting' },
+    { name: 'Darkness', emoji: '🌙', color: 'text-gray-400', href: '/cards?types=Darkness' },
+    { name: 'Metal', emoji: '⚙️', color: 'text-gray-300', href: '/cards?types=Metal' }
+  ]
+
   // Check if mobile on mount and resize
   useEffect(() => {
     const checkMobile = () => {
@@ -252,18 +264,6 @@ export default function EnhancedMegaMenu({ className = '' }: EnhancedMegaMenuPro
       }
     }
   }, [setsData])
-
-  // Pokemon type filters
-  const typeFilters: TypeFilter[] = [
-    { name: 'Electric', emoji: '⚡', color: 'text-yellow-400', href: '/cards?types=Lightning' },
-    { name: 'Fire', emoji: '🔥', color: 'text-red-400', href: '/cards?types=Fire' },
-    { name: 'Water', emoji: '💧', color: 'text-blue-400', href: '/cards?types=Water' },
-    { name: 'Grass', emoji: '🌿', color: 'text-green-400', href: '/cards?types=Grass' },
-    { name: 'Psychic', emoji: '🔮', color: 'text-purple-400', href: '/cards?types=Psychic' },
-    { name: 'Fighting', emoji: '👊', color: 'text-orange-400', href: '/cards?types=Fighting' },
-    { name: 'Darkness', emoji: '🌙', color: 'text-gray-400', href: '/cards?types=Darkness' },
-    { name: 'Metal', emoji: '⚙️', color: 'text-gray-300', href: '/cards?types=Metal' }
-  ]
 
   // Handle click outside to close mega menu - improved version
   useEffect(() => {

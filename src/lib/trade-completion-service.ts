@@ -1,6 +1,6 @@
 import { supabase } from './supabase'
 import { wishlistService } from './wishlist-service'
-import { collectionService } from './collection-service'
+import { CollectionService } from './services/collection-service'
 import { achievementService } from './achievement-service'
 
 // Helper function to determine the correct variant for a card
@@ -107,6 +107,9 @@ class TradeCompletionService {
       const removedFromCollection: string[] = []
       const addedToCollection: string[] = []
 
+      // Get collection service instance once
+      const collectionService = new CollectionService(supabase as any)
+
       // Process card transfers for both users
       const initiatorItems = trade.trade_items.filter(item => item.user_id === trade.initiator_id)
       const recipientItems = trade.trade_items.filter(item => item.user_id === trade.recipient_id)
@@ -122,7 +125,7 @@ class TradeCompletionService {
         const variant = determineCardVariant(card, item.is_foil)
         
         // Remove from initiator's collection (they're giving this card away)
-        const removeResult = await collectionService.removeFromCollection(
+        const removeResult = await collectionService.removeFromCollectionLegacy(
           trade.initiator_id,
           item.card_id,
           {
@@ -139,7 +142,7 @@ class TradeCompletionService {
         }
 
         // Add to recipient's collection (they're receiving this card)
-        const addResult = await collectionService.addToCollection(
+        const addResult = await collectionService.addToCollectionLegacy(
           trade.recipient_id,
           item.card_id,
           {
@@ -171,7 +174,7 @@ class TradeCompletionService {
         const variant = determineCardVariant(card, item.is_foil)
         
         // Remove from recipient's collection (they're giving this card away)
-        const removeResult = await collectionService.removeFromCollection(
+        const removeResult = await collectionService.removeFromCollectionLegacy(
           trade.recipient_id,
           item.card_id,
           {
@@ -188,7 +191,7 @@ class TradeCompletionService {
         }
 
         // Add to initiator's collection (they're receiving this card)
-        const addResult = await collectionService.addToCollection(
+        const addResult = await collectionService.addToCollectionLegacy(
           trade.initiator_id,
           item.card_id,
           {

@@ -23,6 +23,7 @@ import { wishlistService } from '@/lib/wishlist-service'
 import { PriceDisplay } from '@/components/PriceDisplay'
 import { FallbackImage } from '@/components/ui/FallbackImage'
 import { ConfirmationModal } from '@/components/ui/ConfirmationModal'
+import { getCorrectCardMarketUrl } from '@/lib/card-url-corrections'
 import {
   X,
   ExternalLink,
@@ -946,10 +947,26 @@ export function CardDetailsModal({ cardId, isOpen, onClose, onCollectionChange, 
   }
 
   const getCardMarketUrl = (card: CardData): string => {
+    // First check if we have a corrected URL for this card
+    const correctedUrl = getCorrectCardMarketUrl(
+      card.id,
+      card.set_id,
+      card.number,
+      card.name,
+      card.cardmarket_url || undefined
+    )
+    
+    if (correctedUrl) {
+      console.log(`🔧 Using corrected CardMarket URL for ${card.name}: ${correctedUrl}`)
+      return correctedUrl
+    }
+    
+    // Use the original URL if available and no correction needed
     if (card.cardmarket_url) {
       return card.cardmarket_url
     }
     
+    // Fallback to search
     if (card.name) {
       return `https://www.cardmarket.com/en/Pokemon/Products/Search?searchString=${encodeURIComponent(card.name)}`
     }
@@ -1262,7 +1279,7 @@ export function CardDetailsModal({ cardId, isOpen, onClose, onCollectionChange, 
                             if (card.cardmarket_avg_sell_price || card.cardmarket_low_price || card.cardmarket_trend_price) {
                               variantPricing.push({
                                 name: 'Normal',
-                                color: 'bg-yellow-500',
+                                color: 'bg-green-500',
                                 gradient: false,
                                 average: card.cardmarket_avg_sell_price,
                                 low: card.cardmarket_low_price,
@@ -1450,7 +1467,7 @@ export function CardDetailsModal({ cardId, isOpen, onClose, onCollectionChange, 
                                     <div className="flex items-center">
                                       <span className={`w-3 h-3 rounded-full mr-3 ${variant.color} ${variant.gradient ? '' : 'bg-current'}`}></span>
                                       <div>
-                                        <div className={`text-sm font-medium ${variant.name === 'Normal' ? 'text-yellow-400' : variant.name === 'Reverse Holo' ? 'text-blue-400' : variant.name.includes('1st Edition') ? 'text-green-400' : 'text-purple-400'}`}>
+                                        <div className={`text-sm font-medium ${variant.name === 'Normal' ? 'text-green-400' : variant.name === 'Holo' ? 'text-purple-400' : variant.name === 'Reverse Holo' ? 'text-blue-400' : variant.name.includes('1st Edition') ? 'text-green-400' : 'text-purple-400'}`}>
                                           {variant.name}
                                         </div>
                                         {variant.note && (
@@ -1464,7 +1481,7 @@ export function CardDetailsModal({ cardId, isOpen, onClose, onCollectionChange, 
                                   
                                   {/* Average Price */}
                                   <td className="py-3 px-2 text-center">
-                                    <div className={`text-sm font-semibold ${variant.name === 'Normal' ? 'text-yellow-400' : variant.name === 'Reverse Holo' ? 'text-blue-400' : variant.name.includes('1st Edition') ? 'text-green-400' : 'text-purple-400'}`}>
+                                    <div className={`text-sm font-semibold ${variant.name === 'Normal' ? 'text-green-400' : variant.name === 'Holo' ? 'text-purple-400' : variant.name === 'Reverse Holo' ? 'text-blue-400' : variant.name.includes('1st Edition') ? 'text-green-400' : 'text-purple-400'}`}>
                                       {variant.average ? (
                                         <PriceDisplay
                                           amount={variant.average}
