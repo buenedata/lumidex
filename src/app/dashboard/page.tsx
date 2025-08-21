@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
@@ -12,8 +12,9 @@ import { EnhancedLeaderboards } from '@/components/dashboard/EnhancedLeaderboard
 import { DashboardSearch } from '@/components/dashboard/DashboardSearch'
 import { PriceDisplay } from '@/components/PriceDisplay'
 import { usePreferredPriceSource } from '@/contexts/UserPreferencesContext'
-import { useDashboardEssentials } from '@/hooks/useSimpleData'
+import { useDashboardEssentials, useCacheInvalidation } from '@/hooks/useSimpleData'
 import { EnhancedErrorBoundary } from '@/components/ui/EnhancedErrorBoundary'
+import { optimizedCommunityStatsService, CommunityStats } from '@/lib/community-stats-service-optimized'
 import {
   StatCardSkeleton,
   CommunityOverviewSkeleton,
@@ -47,14 +48,52 @@ function DashboardContent() {
   const { user } = useAuth()
   const router = useRouter()
   const preferredPriceSource = usePreferredPriceSource()
+  const { invalidateUserCache } = useCacheInvalidation()
 
-  // Use new simplified data hooks
+  // State for community stats with real leaderboard data
+  const [communityStatsData, setCommunityStatsData] = useState<CommunityStats | null>(null)
+  const [communityStatsLoading, setCommunityStatsLoading] = useState(true)
+  const [communityStatsError, setCommunityStatsError] = useState<string | null>(null)
+
+  // Use new simplified data hooks for basic dashboard data
   const {
     data: dashboardData,
     loading: statsLoading,
     error: statsError,
-    fromCache
+    fromCache,
+    refetch
   } = useDashboardEssentials(user?.id || null)
+
+  // Fetch real community stats including leaderboards
+  useEffect(() => {
+    const fetchCommunityStats = async () => {
+      setCommunityStatsLoading(true)
+      setCommunityStatsError(null)
+      
+      try {
+        const result = await optimizedCommunityStatsService.getCommunityStats()
+        if (result.success && result.data) {
+          setCommunityStatsData(result.data)
+        } else {
+          setCommunityStatsError(result.error || 'Failed to load community stats')
+        }
+      } catch (error) {
+        setCommunityStatsError(error instanceof Error ? error.message : 'Unknown error')
+      } finally {
+        setCommunityStatsLoading(false)
+      }
+    }
+
+    fetchCommunityStats()
+  }, [])
+
+  // Clear cache and refetch when user changes to ensure fresh data
+  useEffect(() => {
+    if (user?.id) {
+      invalidateUserCache(user.id)
+      refetch()
+    }
+  }, [user?.id, invalidateUserCache, refetch])
 
   // Helper function to format numbers with K suffix
   const formatNumber = (num: number): string => {
@@ -70,16 +109,26 @@ function DashboardContent() {
     }
   }
 
-  // Create community stats from dashboard data
+  // Create community stats from real community stats data or fallback to dashboard data
   const communityStats = useMemo(() => {
+    // If we have real community stats data, use it
+    if (communityStatsData) {
+      return communityStatsData
+    }
+    
+    // Otherwise use fallback data from dashboard
     if (!dashboardData) return null
+    
+    // Calculate actual community values based on your collection
+    const estimatedCommunityValue = dashboardData.estimatedValue * dashboardData.totalUsers
+    const averageCollectionSize = dashboardData.totalCards > 0 ? dashboardData.totalCards : 50
     
     return {
       totalUsers: dashboardData.totalUsers,
       totalCollections: dashboardData.totalUsers,
-      totalCardsInCommunity: dashboardData.totalUsers * 50, // Estimate
-      totalCommunityValue: dashboardData.totalUsers * 125, // Estimate
-      averageCollectionSize: 50,
+      totalCardsInCommunity: dashboardData.totalUsers * averageCollectionSize,
+      totalCommunityValue: estimatedCommunityValue, // Using actual data-based estimate
+      averageCollectionSize,
       mostPopularSets: [
         {
           setId: 'sv1',
@@ -170,7 +219,7 @@ function DashboardContent() {
         recentlyActive: []
       }
     }
-  }, [dashboardData])
+  }, [communityStatsData, dashboardData])
 
   // Create user stats from dashboard data
   const userBasicStats = useMemo(() => {
@@ -259,13 +308,16 @@ function DashboardContent() {
         </div>
       )}
 
-      {statsError && (
+      {(statsError || communityStatsError) && (
         <div className="mb-6 bg-red-900/50 border border-red-700 rounded-xl p-4">
           <div className="flex items-center">
             <div className="text-red-400 mr-3">⚠️</div>
             <div>
               <h3 className="text-sm font-medium text-red-300">Loading Error</h3>
-              <div className="mt-1 text-sm text-red-400">{statsError}</div>
+              <div className="mt-1 text-sm text-red-400">
+                {statsError && <div>Dashboard: {statsError}</div>}
+                {communityStatsError && <div>Leaderboards: {communityStatsError}</div>}
+              </div>
               <div className="mt-2 text-xs text-red-300">Showing fallback data</div>
             </div>
           </div>
@@ -602,7 +654,7 @@ function DashboardContent() {
 
         {/* Leaderboards Tab */}
         <TabsContent value="leaderboards" className="space-y-6">
-          <EnhancedLeaderboards communityStats={communityStats} loading={statsLoading} />
+          <EnhancedLeaderboards communityStats={communityStats} loading={statsLoading || communityStatsLoading} />
         </TabsContent>
 
         {/* Quick Start Tab */}

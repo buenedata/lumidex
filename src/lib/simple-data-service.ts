@@ -288,7 +288,7 @@ class SimpleDataService {
       `dashboard_essentials_${userId}`,
       async () => {
         // Run simple queries in parallel
-        const [userProfile, collectionCount, totalUsers] = await Promise.allSettled([
+        const [userProfile, collectionData, totalUsers] = await Promise.allSettled([
           // User profile
           supabase
             .from('profiles')
@@ -296,12 +296,22 @@ class SimpleDataService {
             .eq('id', userId)
             .single(),
           
-          // Collection count
+          // Collection with actual pricing data
           supabase
             .from('user_collections')
-            .select('quantity', { count: 'exact' })
-            .eq('user_id', userId)
-            .limit(1),
+            .select(`
+              quantity,
+              variant,
+              cards!inner(
+                cardmarket_avg_sell_price,
+                cardmarket_low_price,
+                cardmarket_trend_price,
+                cardmarket_reverse_holo_sell,
+                cardmarket_reverse_holo_low,
+                cardmarket_reverse_holo_trend
+              )
+            `)
+            .eq('user_id', userId),
           
           // Total community users
           supabase
@@ -311,18 +321,43 @@ class SimpleDataService {
 
         // Process results safely
         const profile = userProfile.status === 'fulfilled' ? userProfile.value.data : null
-        const collectionData = collectionCount.status === 'fulfilled' ? collectionCount.value : null
-        const communityData = totalUsers.status === 'fulfilled' ? totalUsers.value : null
+        const collectionResult = collectionData.status === 'fulfilled' ? collectionData.value : null
+        const communityResult = totalUsers.status === 'fulfilled' ? totalUsers.value : null
+
+        // Calculate actual collection value using variant pricing
+        let actualValue = 0
+        let totalCards = 0
+        
+        if (collectionResult?.data && Array.isArray(collectionResult.data)) {
+          collectionResult.data.forEach((item: any) => {
+            const card = Array.isArray(item.cards) ? item.cards[0] : item.cards
+            const variant = item.variant || 'normal'
+            const quantity = item.quantity || 1
+            
+            // Use appropriate price based on variant
+            let cardPrice = 0
+            if (variant === 'reverse_holo' && card?.cardmarket_reverse_holo_sell) {
+              cardPrice = card.cardmarket_reverse_holo_sell
+            } else if (card?.cardmarket_avg_sell_price) {
+              cardPrice = card.cardmarket_avg_sell_price
+            } else if (card?.cardmarket_low_price) {
+              cardPrice = card.cardmarket_low_price
+            }
+            
+            actualValue += cardPrice * quantity
+            totalCards += quantity
+          })
+        }
 
         return {
           profile: profile || { username: 'User', display_name: null, avatar_url: null },
-          totalCards: collectionData?.count || 0,
-          totalUsers: communityData?.count || 1,
-          estimatedValue: (collectionData?.count || 0) * 2.5 // Rough estimate
+          totalCards,
+          totalUsers: communityResult?.count || 1,
+          estimatedValue: actualValue // Now using actual calculated value
         }
       },
       {
-        timeout: this.SIMPLE_TIMEOUT,
+        timeout: this.DEFAULT_TIMEOUT, // Use longer timeout for pricing query
         fallback: {
           profile: { username: 'User', display_name: null, avatar_url: null },
           totalCards: 0,

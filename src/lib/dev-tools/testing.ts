@@ -357,26 +357,31 @@ export const TestUtils = {
  * Mock Supabase client for testing
  */
 export const createMockSupabaseClient = () => {
-  const mockClient = {
-    from: (table: string) => ({
-      select: jest.fn ? jest.fn().mockReturnThis() : function() { return this },
-      insert: jest.fn ? jest.fn().mockReturnThis() : function() { return this },
-      update: jest.fn ? jest.fn().mockReturnThis() : function() { return this },
-      delete: jest.fn ? jest.fn().mockReturnThis() : function() { return this },
-      eq: jest.fn ? jest.fn().mockReturnThis() : function() { return this },
-      neq: jest.fn ? jest.fn().mockReturnThis() : function() { return this },
-      gt: jest.fn ? jest.fn().mockReturnThis() : function() { return this },
-      lt: jest.fn ? jest.fn().mockReturnThis() : function() { return this },
-      gte: jest.fn ? jest.fn().mockReturnThis() : function() { return this },
-      lte: jest.fn ? jest.fn().mockReturnThis() : function() { return this },
-      like: jest.fn ? jest.fn().mockReturnThis() : function() { return this },
-      ilike: jest.fn ? jest.fn().mockReturnThis() : function() { return this },
-      in: jest.fn ? jest.fn().mockReturnThis() : function() { return this },
-      order: jest.fn ? jest.fn().mockReturnThis() : function() { return this },
-      limit: jest.fn ? jest.fn().mockReturnThis() : function() { return this },
+  const createQueryBuilder = () => {
+    const queryBuilder = {
+      select: jest.fn ? jest.fn().mockReturnThis() : function(this: any) { return this },
+      insert: jest.fn ? jest.fn().mockReturnThis() : function(this: any) { return this },
+      update: jest.fn ? jest.fn().mockReturnThis() : function(this: any) { return this },
+      delete: jest.fn ? jest.fn().mockReturnThis() : function(this: any) { return this },
+      eq: jest.fn ? jest.fn().mockReturnThis() : function(this: any) { return this },
+      neq: jest.fn ? jest.fn().mockReturnThis() : function(this: any) { return this },
+      gt: jest.fn ? jest.fn().mockReturnThis() : function(this: any) { return this },
+      lt: jest.fn ? jest.fn().mockReturnThis() : function(this: any) { return this },
+      gte: jest.fn ? jest.fn().mockReturnThis() : function(this: any) { return this },
+      lte: jest.fn ? jest.fn().mockReturnThis() : function(this: any) { return this },
+      like: jest.fn ? jest.fn().mockReturnThis() : function(this: any) { return this },
+      ilike: jest.fn ? jest.fn().mockReturnThis() : function(this: any) { return this },
+      in: jest.fn ? jest.fn().mockReturnThis() : function(this: any) { return this },
+      order: jest.fn ? jest.fn().mockReturnThis() : function(this: any) { return this },
+      limit: jest.fn ? jest.fn().mockReturnThis() : function(this: any) { return this },
       single: jest.fn ? jest.fn().mockResolvedValue({ data: null, error: null }) : () => Promise.resolve({ data: null, error: null }),
       then: jest.fn ? jest.fn().mockResolvedValue({ data: [], error: null }) : () => Promise.resolve({ data: [], error: null })
-    }),
+    }
+    return queryBuilder
+  }
+
+  const mockClient = {
+    from: (table: string) => createQueryBuilder(),
     
     auth: {
       getUser: jest.fn ? jest.fn().mockResolvedValue({ data: { user: null }, error: null }) : () => Promise.resolve({ data: { user: null }, error: null }),
