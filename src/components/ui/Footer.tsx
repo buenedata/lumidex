@@ -11,8 +11,12 @@ export default function Footer() {
         <div className="flex flex-col items-center space-y-8">
           {/* Logo Section */}
           <div className="flex items-center space-x-3">
-            <div className="w-12 h-12 bg-pokemon-gold rounded-xl flex items-center justify-center shadow-lg">
-              <span className="text-black font-bold text-xl">⚡</span>
+            <div className="w-12 h-12 bg-pokemon-gold rounded-xl flex items-center justify-center shadow-lg p-2">
+              <img
+                src="/images/logos/ChatGPT Image Aug 22, 2025, 01_37_48 AM.png"
+                alt="Lumidex Logo"
+                className="w-full h-full object-contain"
+              />
             </div>
             <div className="text-3xl font-bold">
               <span className="text-white">lumidex.</span>

@@ -26,6 +26,15 @@ export const metadata: Metadata = {
   description: 'Track your Pokemon card collection with European market pricing from CardMarket. Connect with friends, trade cards, and build your dream collection.',
   keywords: 'pokemon, tcg, cards, collection, cardmarket, europe, trading, friends',
   authors: [{ name: 'Lumidex Team' }],
+  icons: {
+    icon: [
+      { url: '/favicon/favicon.png', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/favicon/favicon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
+  manifest: '/favicon/site.webmanifest',
   openGraph: {
     title: 'Lumidex - European Card Tracker',
     description: 'Track your Pokemon card collection with European market pricing from CardMarket.',

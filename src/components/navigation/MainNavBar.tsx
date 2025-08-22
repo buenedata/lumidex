@@ -120,7 +120,11 @@ export default function MainNavBar({ className = '' }: MainNavBarProps) {
           {/* Logo and Brand */}
           <div className="flex items-center space-x-3">
             <Link href="/dashboard" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
-              <div className="text-2xl">🃏</div>
+              <img
+                src="/images/logos/ChatGPT Image Aug 22, 2025, 01_37_48 AM.png"
+                alt="Lumidex Logo"
+                className="w-8 h-8 object-contain"
+              />
               <h1 className="text-xl font-bold text-pokemon-gold">
                 Lumidex.app
               </h1>
