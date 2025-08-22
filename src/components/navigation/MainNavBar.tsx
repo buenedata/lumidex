@@ -121,7 +121,7 @@ export default function MainNavBar({ className = '' }: MainNavBarProps) {
           <div className="flex items-center space-x-3">
             <Link href="/dashboard" className="flex items-center space-x-3 hover:opacity-80 transition-opacity">
               <img
-                src="/images/logos/ChatGPT Image Aug 22, 2025, 01_37_48 AM.png"
+                src="/images/logos/lumidex_logo_card_allcaps_transparent.png"
                 alt="Lumidex Logo"
                 className="w-8 h-8 object-contain"
               />
