@@ -65,6 +65,8 @@ export default function AdminPricesPage() {
   const [selectedSetName, setSelectedSetName] = useState<string | null>(null)
   const [apiSetIdInput,   setApiSetIdInput]   = useState('')   // RapidAPI set ID override
   const [apiSuggestions,  setApiSuggestions]  = useState<{ id: string; name: string; series?: string }[]>([])
+  const [allApiSets,      setAllApiSets]      = useState<{ id: string; name: string; series?: string }[]>([])
+  const [allSetsSearch,   setAllSetsSearch]   = useState('')
   const [discoverLoading, setDiscoverLoading] = useState(false)
   const [discoverErr,     setDiscoverErr]     = useState<string | null>(null)
   const [stats,           setStats]           = useState<SetStats | null>(null)
@@ -129,6 +131,29 @@ export default function AdminPricesPage() {
       }
     } catch (e) {
       setDiscoverErr(e instanceof Error ? e.message : 'Discovery failed')
+    } finally {
+      setDiscoverLoading(false)
+    }
+  }, [])
+
+  // Fetch ALL sets from the API (for browsing when name search fails)
+  const browseAllSets = useCallback(async () => {
+    setDiscoverLoading(true)
+    setDiscoverErr(null)
+    setAllApiSets([])
+    setAllSetsSearch('')
+    try {
+      const res = await fetch('/api/prices/discover')
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const json = await res.json()
+      const sets = json.sets ?? []
+      if (sets.length === 0) {
+        setDiscoverErr('API returned no sets at all. Check your RAPIDAPI_KEY and the API endpoint.')
+      } else {
+        setAllApiSets(sets)
+      }
+    } catch (e) {
+      setDiscoverErr(e instanceof Error ? e.message : 'Browse failed')
     } finally {
       setDiscoverLoading(false)
     }
@@ -319,9 +344,56 @@ export default function AdminPricesPage() {
                 )}
               </div>
 
-              {/* Discovery error */}
+              {/* Discovery error + browse-all fallback */}
               {discoverErr && (
-                <p className="text-xs text-red-400">{discoverErr}</p>
+                <div className="space-y-2">
+                  <p className="text-xs text-red-400">{discoverErr}</p>
+                  <button
+                    onClick={browseAllSets}
+                    disabled={discoverLoading}
+                    className="text-xs px-3 py-1.5 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-300 rounded transition-colors"
+                  >
+                    {discoverLoading ? 'Loading…' : '📋 Browse all API sets'}
+                  </button>
+                </div>
+              )}
+
+              {/* Full API set browser */}
+              {allApiSets.length > 0 && (
+                <div className="border border-gray-700 rounded-lg overflow-hidden">
+                  <div className="px-3 py-2 bg-gray-800 border-b border-gray-700 flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Filter sets…"
+                      value={allSetsSearch}
+                      onChange={e => setAllSetsSearch(e.target.value)}
+                      className="flex-1 h-7 bg-gray-700 border border-gray-600 rounded px-2 text-xs text-white placeholder:text-gray-500 focus:outline-none focus:border-indigo-500"
+                    />
+                    <span className="text-xs text-gray-500 shrink-0">{allApiSets.length} sets</span>
+                  </div>
+                  <div className="max-h-56 overflow-y-auto divide-y divide-gray-800">
+                    {allApiSets
+                      .filter(s => {
+                        if (!allSetsSearch.trim()) return true
+                        const q = allSetsSearch.toLowerCase()
+                        return s.name?.toLowerCase().includes(q) || s.id?.toLowerCase().includes(q)
+                      })
+                      .map(s => (
+                        <button
+                          key={s.id}
+                          onClick={() => { setApiSetIdInput(s.id); setAllApiSets([]); setApiSuggestions([]) }}
+                          className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-700 transition-colors text-left"
+                        >
+                          <div>
+                            <span className="text-sm text-white">{s.name}</span>
+                            {s.series && <span className="text-xs text-gray-500 ml-2">{s.series}</span>}
+                          </div>
+                          <code className="text-xs font-mono text-indigo-400 ml-4 shrink-0">{s.id}</code>
+                        </button>
+                      ))
+                    }
+                  </div>
+                </div>
               )}
 
               {/* Suggestions from API */}
