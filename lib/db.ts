@@ -44,6 +44,8 @@ export interface DbCard {
   image: string | null
   /** FK → variants.id — the default variant for double-click quick-add */
   default_variant_id: string | null
+  /** pokemontcg.io / RapidAPI card ID e.g. "sv1-1". Used for price matching. */
+  api_id: string | null
   created_at: string
 }
 

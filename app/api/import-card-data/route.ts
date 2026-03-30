@@ -456,7 +456,7 @@ export async function POST(request: NextRequest) {
         // ── Fetch DB cards for this set ──────────────────────────────────────
         const { data: dbCards, error: dbError } = await supabaseAdmin
           .from('cards')
-          .select('id, name, number, artist, supertype, type, image')
+          .select('id, name, number, artist, supertype, type, image, api_id')
           .eq('set_id', setId)
 
         if (dbError || !dbCards) {
@@ -549,6 +549,9 @@ export async function POST(request: NextRequest) {
               supertype: pkmnCard.supertype ?? null,  // card category
               rarity: pkmnCard.rarity ?? null,
               type: resolvedType ?? null,             // element type
+              // pokemontcg.io card ID — used by price sync to match API data without
+              // relying on card number alone (numbers repeat across different sets)
+              api_id: pkmnCard.dbId ?? null,
             }
 
             // Optionally download and store the card image before inserting.
@@ -668,6 +671,10 @@ export async function POST(request: NextRequest) {
           const updatePayload: Record<string, unknown> = {}
           if (pkmnCard.artist !== null) updatePayload.artist = pkmnCard.artist
           if (pkmnCard.supertype !== null) updatePayload.supertype = pkmnCard.supertype
+          // Backfill api_id if it was missing (added in price-data migration)
+          if (pkmnCard.dbId && !(dbCard as unknown as { api_id: string | null }).api_id) {
+            updatePayload.api_id = pkmnCard.dbId
+          }
           // Fix previously-bare number ("100" → "100/88") when numberDisplay provides it
           if (numberNeedsUpdate) updatePayload.number = pkmnCard.number
           // Populate name from pkmn.gg when the DB entry is blank or overwrite is on

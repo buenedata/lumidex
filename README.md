@@ -65,6 +65,22 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 \`\`\`
 
+3. (Optional) Add your RapidAPI key for live price data sync:
+```env
+# Required for the Price Sync admin feature (/admin/prices).
+# Obtain at: https://rapidapi.com/ → search "Pokémon TCG API"
+# Host: pokemon-tcg-api.p.rapidapi.com
+RAPIDAPI_KEY=your_rapidapi_key_here
+```
+
+> **Without `RAPIDAPI_KEY`:** The app works normally but the Price Sync feature
+> won't be available. Card prices fall back to deterministic mock values based on rarity.
+>
+> **First sync tip:** On the first price sync for any set, the route logs all observed
+> TCGPlayer price keys to the server console. Check those logs to confirm which keys
+> the API uses for graded variants (e.g. `gradedPsa10`, `PSA 10`, etc.) before
+> relying on the graded price columns in `card_prices`.
+
 ### 5. Set up authentication providers
 
 In your Supabase dashboard:

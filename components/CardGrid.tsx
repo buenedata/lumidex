@@ -6,7 +6,30 @@ import { PokemonCard, UserCard, VariantWithQuantity, QuickAddVariant, VARIANT_CO
 import { useCollectionStore, useAuthStore } from '@/lib/store'
 import Modal from '@/components/ui/Modal'
 import VariantSuggestionModal from '@/components/VariantSuggestionModal'
-import { formatPrice } from '@/lib/mockPricing'
+import { formatPrice } from '@/lib/pricing'
+
+// ── Price row shape returned by /api/prices/card/[cardId] ─────────────────────
+interface CardPriceRow {
+  tcgp_normal:       number | null
+  tcgp_reverse_holo: number | null
+  tcgp_holo:         number | null
+  tcgp_1st_edition:  number | null
+  tcgp_market:       number | null
+  tcgp_psa10:        number | null
+  tcgp_psa9:         number | null
+  tcgp_bgs95:        number | null
+  tcgp_bgs9:         number | null
+  tcgp_cgc10:        number | null
+  cm_avg_sell:       number | null
+  cm_low:            number | null
+  cm_trend:          number | null
+  cm_avg_30d:        number | null
+  tcgp_updated_at:   string | null
+  cm_updated_at:     string | null
+  fetched_at:        string
+}
+
+type ModalTab = 'card' | 'price'
 
 type SortBy    = 'number' | 'name' | 'price'
 type FilterTab = 'all' | 'owned' | 'missing' | 'duplicates'
@@ -178,6 +201,10 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const [relatedCards, setRelatedCards] = useState<RelatedCard[]>([])
   const [relatedCardsTotal, setRelatedCardsTotal] = useState(0)
   const [isFetchingRelated, setIsFetchingRelated] = useState(false)
+  // Modal tab state (Card / Price)
+  const [modalTab, setModalTab]             = useState<ModalTab>('card')
+  const [cardPriceCache, setCardPriceCache] = useState<Map<string, CardPriceRow | null>>(new Map())
+  const [isLoadingPrice, setIsLoadingPrice] = useState(false)
   // Ensures we only auto-open the initialCardId modal once
   const autoOpenedRef = useRef(false)
   // Used to distinguish single-click (open modal) from double-click (add default variant)
@@ -504,9 +531,27 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     }
   }
 
+  // Fetch full price row for a card (cached — one fetch per card per session)
+  const fetchCardPrice = useCallback(async (cardId: string) => {
+    if (cardPriceCache.has(cardId)) return // already fetched
+    setIsLoadingPrice(true)
+    try {
+      const res = await fetch(`/api/prices/card/${cardId}`)
+      if (res.ok) {
+        const json = await res.json()
+        setCardPriceCache(prev => new Map(prev).set(cardId, json.price ?? null))
+      }
+    } catch {
+      setCardPriceCache(prev => new Map(prev).set(cardId, null))
+    } finally {
+      setIsLoadingPrice(false)
+    }
+  }, [cardPriceCache])
+
   // Open card modal when clicked (used by auto-open and right-click)
   const handleCardClick = (card: PokemonCard) => {
     setSelectedCard(card)
+    setModalTab('card')      // always open on Card tab
     fetchRelatedCards(card)
     if (!cardVariants.has(card.id)) {
       setTimeout(() => loadCardVariants(card.id, false), 100)
@@ -787,17 +832,144 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                 </button>
               </div>
 
-              {/* Tabs - simplified */}
+              {/* Tabs */}
               <div className="border-b border-subtle mb-4">
                 <div className="flex gap-6">
-                  <button className="tab-active pb-2 text-sm font-medium">Card</button>
-                  <button className="tab-inactive pb-2 text-sm">Price</button>
-                  <button className="tab-inactive pb-2 text-sm">TCG</button>
+                  <button
+                    className={modalTab === 'card' ? 'tab-active pb-2 text-sm font-medium' : 'tab-inactive pb-2 text-sm'}
+                    onClick={() => setModalTab('card')}
+                  >
+                    Card
+                  </button>
+                  <button
+                    className={modalTab === 'price' ? 'tab-active pb-2 text-sm font-medium' : 'tab-inactive pb-2 text-sm'}
+                    onClick={() => {
+                      setModalTab('price')
+                      fetchCardPrice(selectedCard.id)
+                    }}
+                  >
+                    Price
+                  </button>
                 </div>
               </div>
 
-              {/* Variants Table */}
-              <div className="flex-1">
+              {/* ── Price Tab ─── */}
+              {modalTab === 'price' && (
+                <div className="flex-1 overflow-y-auto">
+                  {isLoadingPrice && !cardPriceCache.has(selectedCard.id) ? (
+                    <div className="text-muted text-center py-12 animate-pulse">Loading prices…</div>
+                  ) : (() => {
+                    const row = cardPriceCache.get(selectedCard.id)
+                    if (!row) {
+                      return (
+                        <div className="text-center py-12">
+                          <div className="text-4xl mb-3">📊</div>
+                          <p className="text-muted text-sm">No price data synced for this card yet.</p>
+                          <p className="text-muted/60 text-xs mt-1">An admin can sync prices from /admin/prices.</p>
+                        </div>
+                      )
+                    }
+
+                    // Build graded price rows — only show grades with actual data
+                    const gradeRows: { label: string; price: number | null; badge?: string }[] = [
+                      { label: 'BGS 9.5',  price: row.tcgp_bgs95,  badge: '🏅' },
+                      { label: 'PSA 10',   price: row.tcgp_psa10,  badge: '🥇' },
+                      { label: 'CGC 10',   price: row.tcgp_cgc10,  badge: '🥇' },
+                      { label: 'PSA 9',    price: row.tcgp_psa9,   badge: '🥈' },
+                      { label: 'BGS 9',    price: row.tcgp_bgs9,   badge: '🥈' },
+                    ]
+                    const maxGraded = Math.max(...gradeRows.map(g => g.price ?? 0))
+
+                    return (
+                      <div className="space-y-5">
+                        {/* Raw variant prices */}
+                        <div>
+                          <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2.5">TCGPlayer Prices</h3>
+                          <div className="space-y-1.5">
+                            {[
+                              { label: 'Normal',       price: row.tcgp_normal },
+                              { label: 'Reverse Holo', price: row.tcgp_reverse_holo },
+                              { label: 'Holofoil',     price: row.tcgp_holo },
+                              { label: '1st Edition',  price: row.tcgp_1st_edition },
+                            ].filter(r => r.price != null).map(r => (
+                              <div key={r.label} className="flex items-center justify-between text-sm">
+                                <span className="text-secondary">{r.label}</span>
+                                <span className="text-success font-semibold tabular-nums">
+                                  {formatPrice(r.price!, currency)}
+                                </span>
+                              </div>
+                            ))}
+                            {[row.tcgp_normal, row.tcgp_reverse_holo, row.tcgp_holo, row.tcgp_1st_edition].every(v => v == null) && (
+                              <p className="text-muted text-xs">No variant prices available.</p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* CardMarket prices */}
+                        {(row.cm_avg_sell != null || row.cm_trend != null) && (
+                          <div>
+                            <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2.5">CardMarket Prices</h3>
+                            <div className="space-y-1.5">
+                              {row.cm_avg_sell != null && (
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-secondary">Avg Sell</span>
+                                  <span className="text-success font-semibold tabular-nums">€{row.cm_avg_sell.toFixed(2)}</span>
+                                </div>
+                              )}
+                              {row.cm_trend != null && (
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-secondary">Trend</span>
+                                  <span className="text-success font-semibold tabular-nums">€{row.cm_trend.toFixed(2)}</span>
+                                </div>
+                              )}
+                              {row.cm_avg_30d != null && (
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-secondary">30-day Avg</span>
+                                  <span className="text-success font-semibold tabular-nums">€{row.cm_avg_30d.toFixed(2)}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Graded prices */}
+                        {maxGraded > 0 && (
+                          <div>
+                            <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2.5">🏅 Graded Prices (TCGPlayer)</h3>
+                            <div className="space-y-2">
+                              {gradeRows.filter(g => g.price != null).map(g => {
+                                const pct = maxGraded > 0 ? Math.round(((g.price ?? 0) / maxGraded) * 100) : 0
+                                return (
+                                  <div key={g.label} className="flex items-center gap-2">
+                                    <span className="text-xs text-secondary w-16 shrink-0">{g.label}</span>
+                                    <div className="flex-1 h-1.5 bg-elevated rounded-full overflow-hidden">
+                                      <div
+                                        className="h-full bg-accent rounded-full transition-all"
+                                        style={{ width: `${pct}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-xs font-semibold text-success tabular-nums w-16 text-right shrink-0">
+                                      {formatPrice(g.price!, currency)}
+                                    </span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Fetched timestamp */}
+                        <p className="text-muted/50 text-xs border-t border-subtle pt-3">
+                          Prices synced {new Date(row.fetched_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+
+              {/* ── Card Tab (variants) ─── */}
+              {modalTab === 'card' && <div className="flex-1">
                 <div className="mb-4">
                   <div className="flex items-center text-xs font-medium text-muted mb-3 px-1 gap-2">
                     <div className="flex-1 min-w-0">Variant</div>
@@ -963,7 +1135,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                     )}
                   </div>
                 )}
-              </div>
+              </div>}
             </div>
           </div>
         )}

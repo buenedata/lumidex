@@ -62,6 +62,16 @@ const ADMIN_TOOLS: AdminTool[] = [
       'Bulk-import rarity data for cards from external sources. Maps TCG rarity strings to the database.',
     badge: 'Import',
   },
+  {
+    href: '/admin/prices',
+    icon: '💰',
+    title: 'Price Data Sync',
+    description:
+      'Sync TCGPlayer and CardMarket prices from the Pokémon TCG API via RapidAPI. ' +
+      'Also fetches sealed product prices (booster boxes, ETBs) and graded card prices ' +
+      '(PSA 10, BGS 9.5, etc.) where available.',
+    badge: 'Prices',
+  },
 ]
 
 export default function AdminHubPage() {

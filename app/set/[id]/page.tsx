@@ -1,8 +1,9 @@
 import { getSetById, getCardsBySet, hasPromoCards } from '@/lib/db'
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import { supabaseAdmin } from '@/lib/supabase'
-import { PokemonCard, PokemonSet, CollectionGoal } from '@/types'
-import { getMockPriceUSD, formatPrice } from '@/lib/mockPricing'
+import { PokemonCard, PokemonSet, CollectionGoal, PriceSource } from '@/types'
+import { getMockPriceUSD } from '@/lib/mockPricing'
+import { getCardPricesForSet, getSealedProductsForSet, buildCardPriceMap, formatPrice, type SetProductPrice } from '@/lib/pricing'
 import Link from 'next/link'
 import Image from 'next/image'
 import { notFound } from 'next/navigation'
@@ -28,9 +29,12 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
   let currentGoal: CollectionGoal = 'normal'
   let userId: string | undefined
   let currency = 'USD'
+  let priceSource: PriceSource = 'tcgplayer'
   let cardPricesUSD: Record<string, number> = {}
   let setTotalValue = 0
   let mostExpensive: PokemonCard | null = null
+  let sealedProducts: SetProductPrice[] = []
+  let pricesAreLive = false
 
   try {
     // Fetch set and cards in parallel
@@ -53,16 +57,10 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
       rarity: card.rarity || '',
     })) as PokemonCard[]
 
-    // ── Mock pricing (deterministic, rarity-based) ────────────────────────
+    // Pricing is deferred until after auth so we know price_source.
+    // Temporarily seed with mock prices — overwritten below once we know
+    // the user's price_source preference.
     cards.forEach(c => { cardPricesUSD[c.id] = getMockPriceUSD(c) })
-    setTotalValue = Object.values(cardPricesUSD).reduce((s, p) => s + p, 0)
-    mostExpensive = cards.reduce<PokemonCard | null>(
-      (best, c) =>
-        best === null || (cardPricesUSD[c.id] ?? 0) > (cardPricesUSD[best.id] ?? 0)
-          ? c
-          : best,
-      null
-    )
 
   } catch (err) {
     console.error('Error fetching set data:', err)
@@ -77,15 +75,18 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
     if (user) {
       userId = user.id
 
-      // Fetch preferred currency from user profile
+      // Fetch preferred currency + price source from user profile
       const { data: profileRow } = await supabaseAdmin
         .from('users')
-        .select('preferred_currency')
+        .select('preferred_currency, price_source')
         .eq('id', user.id)
         .maybeSingle()
 
       if (profileRow?.preferred_currency) {
         currency = profileRow.preferred_currency
+      }
+      if (profileRow?.price_source) {
+        priceSource = profileRow.price_source as PriceSource
       }
 
       const { data: userSetRow } = await supabaseAdmin
@@ -103,6 +104,36 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
     // Auth errors are non-fatal — guest view still works
     console.warn('Could not fetch user session:', err)
   }
+
+  // ── Real price lookup (replaces mock seed above) ──────────────────────────
+  // Runs after auth so we have price_source. Falls back to existing mock values
+  // for any card that has no price row yet.
+  try {
+    const [realPrices, products] = await Promise.all([
+      getCardPricesForSet(id, priceSource),
+      getSealedProductsForSet(id),
+    ])
+
+    sealedProducts = products
+
+    if (Object.keys(realPrices).length > 0) {
+      pricesAreLive = true
+      cardPricesUSD = buildCardPriceMap(cards, realPrices, getMockPriceUSD)
+    }
+    // else: keep the mock seed that was set above
+  } catch (err) {
+    console.warn('[set page] Price lookup failed, using mock prices:', err)
+  }
+
+  // (Re-)compute set stats now that final prices are settled
+  setTotalValue = Object.values(cardPricesUSD).reduce((s, p) => s + p, 0)
+  mostExpensive = cards.reduce<PokemonCard | null>(
+    (best, c) =>
+      best === null || (cardPricesUSD[c.id] ?? 0) > (cardPricesUSD[best.id] ?? 0)
+        ? c
+        : best,
+    null
+  )
 
   // Handle not found set
   if (!set && !error) {
@@ -241,6 +272,9 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
         initialGoal={currentGoal}
         cardPricesUSD={cardPricesUSD}
         currency={currency}
+        pricesAreLive={pricesAreLive}
+        priceSource={priceSource}
+        sealedProducts={sealedProducts}
         statSeries={set.series ?? '—'}
         statReleased={
           set.release_date

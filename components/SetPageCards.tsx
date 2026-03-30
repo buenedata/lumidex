@@ -7,8 +7,8 @@ import { cn } from '@/lib/utils'
 import CardGrid from '@/components/CardGrid'
 import CollectionGoalSelector from '@/components/CollectionGoalSelector'
 import { useCollectionStore, useAuthStore } from '@/lib/store'
-import { PokemonCard, CollectionGoal, QuickAddVariant } from '@/types'
-import { formatPrice } from '@/lib/mockPricing'
+import { PokemonCard, CollectionGoal, QuickAddVariant, PriceSource } from '@/types'
+import { formatPrice, type SetProductPrice } from '@/lib/pricing'
 
 interface SetPageCardsProps {
   cards: PokemonCard[]
@@ -25,6 +25,12 @@ interface SetPageCardsProps {
   // Pricing (optional — only provided by the set detail page)
   cardPricesUSD?: Record<string, number>
   currency?: string
+  /** Whether prices come from the live DB (true) or mock fallback (false) */
+  pricesAreLive?: boolean
+  /** User's preferred price source — drives the source badge label */
+  priceSource?: PriceSource
+  /** Sealed product prices for this set (booster packs, ETBs, etc.) */
+  sealedProducts?: SetProductPrice[]
   // Static stats (optional — only provided by the set detail page)
   statSeries?: string
   statReleased?: string
@@ -55,6 +61,9 @@ export default function SetPageCards({
   initialGoal = 'normal',
   cardPricesUSD = {},
   currency = 'USD',
+  pricesAreLive = false,
+  priceSource = 'tcgplayer',
+  sealedProducts = [],
   statSeries,
   statReleased,
   statCards,
@@ -173,6 +182,90 @@ export default function SetPageCards({
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Sealed Products section ──────────────────────────────── */}
+      {sealedProducts.length > 0 && (
+        <div className="border-b border-subtle">
+          <div className="max-w-screen-2xl mx-auto px-6 py-4">
+            <details>
+              <summary className="flex items-center gap-2 cursor-pointer select-none list-none group">
+                <span className="text-base">📦</span>
+                <span className="text-sm font-medium text-secondary group-hover:text-primary transition-colors">
+                  Sealed Products
+                </span>
+                <span className="text-xs text-muted ml-1">({sealedProducts.length})</span>
+                <svg
+                  className="w-4 h-4 text-muted ml-auto transition-transform group-open:rotate-180"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </summary>
+
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-muted uppercase tracking-wider border-b border-subtle">
+                      <th className="text-left pb-2 font-medium">Product</th>
+                      <th className="text-left pb-2 font-medium">Type</th>
+                      <th className="text-right pb-2 font-medium">Price</th>
+                      <th className="text-right pb-2 font-medium">Link</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-subtle">
+                    {sealedProducts.map(product => {
+                      // Resolve price in USD based on priceSource
+                      const priceUSD =
+                        priceSource === 'cardmarket'
+                          ? (product.cm_avg_sell != null ? product.cm_avg_sell * 1.09 : null)
+                          : product.tcgp_market
+
+                      const url =
+                        priceSource === 'cardmarket' ? product.cm_url : product.tcgp_url
+
+                      return (
+                        <tr key={product.id} className="hover:bg-elevated/30 transition-colors">
+                          <td className="py-2.5 pr-4 text-primary font-medium">
+                            {product.name}
+                          </td>
+                          <td className="py-2.5 pr-4 text-muted text-xs">
+                            {product.product_type ?? '—'}
+                          </td>
+                          <td className="py-2.5 pr-4 text-right">
+                            {priceUSD != null ? (
+                              <span className="text-success font-semibold">
+                                {formatPrice(priceUSD, currency)}
+                              </span>
+                            ) : (
+                              <span className="text-muted">—</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 text-right">
+                            {url ? (
+                              <a
+                                href={url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-accent hover:text-accent-hover transition-colors"
+                              >
+                                {priceSource === 'cardmarket' ? 'CardMarket ↗' : 'TCGPlayer ↗'}
+                              </a>
+                            ) : (
+                              <span className="text-muted">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </details>
           </div>
         </div>
       )}
