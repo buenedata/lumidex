@@ -60,11 +60,13 @@ async function downloadAndStoreCardImage(
       return null
     }
 
+    // Append a version timestamp so CDN / browser cache is bypassed for
+    // any file that gets upserted (overwritten) in a subsequent import.
     const { data: urlData } = supabaseAdmin.storage
       .from(STORAGE_BUCKET)
       .getPublicUrl(filename)
 
-    return urlData.publicUrl ?? null
+    return urlData.publicUrl ? `${urlData.publicUrl}?v=${Date.now()}` : null
   } catch (err) {
     console.warn('[import-card-data] downloadAndStoreCardImage error:', err)
     return null

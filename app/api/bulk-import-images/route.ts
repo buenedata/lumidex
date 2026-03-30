@@ -331,10 +331,12 @@ export async function POST(request: NextRequest) {
               throw new Error(`Storage upload failed: ${uploadErr.message}`)
             }
 
+            // Append a version timestamp so each upload produces a distinct URL,
+            // bypassing Supabase CDN / browser cache for overwritten files.
             const { data: urlData } = supabaseAdmin.storage
               .from(STORAGE_BUCKET)
               .getPublicUrl(filename)
-            const imageUrl = urlData.publicUrl
+            const imageUrl = `${urlData.publicUrl}?v=${Date.now()}`
 
             const { error: dbUpdateErr } = await supabaseAdmin
               .from('cards')
