@@ -18,8 +18,10 @@ function sseData(payload: unknown): Uint8Array {
 /**
  * Strips leading zeros and the "/total" suffix from a card number.
  * "012/165" → "12",  "TG01" → "TG01",  "001" → "1"
+ * Returns "" for null/undefined inputs (card is skipped in matching).
  */
-function normalizeNumber(num: string): string {
+function normalizeNumber(num: string | null | undefined): string {
+  if (!num) return ''
   const raw = num.split('/')[0]
   // Preserve non-numeric prefixes like "TG", "GG", "SWSH"
   const onlyDigits = /^\d+$/.test(raw)
@@ -299,7 +301,9 @@ export async function POST(request: NextRequest) {
           }
 
           for (const apiCard of apiCards) {
-            const normNum = normalizeNumber(apiCard.number)
+            // Guard: skip cards with no number (shouldn't happen but API can return partial data)
+            if (!apiCard.id) { unmatched++; continue }
+            const normNum = normalizeNumber(apiCard.number ?? '')
             const cardUuid =
               apiIdMap.get(apiCard.id) ??          // exact match via stored api_id
               numberMap.get(normNum)               // fallback: normalized number within set
