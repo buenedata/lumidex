@@ -71,6 +71,7 @@ interface Props {
 
 export function CardDataImport({ setId, onComplete }: Props) {
   const [pkmnGgUrl, setPkmnGgUrl] = useState('')
+  const [language, setLanguage] = useState<'en' | 'ja'>('en')
   const [overwrite, setOverwrite] = useState(false)
   const [importImages, setImportImages] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
@@ -100,7 +101,7 @@ export function CardDataImport({ setId, onComplete }: Props) {
     const res = await fetch('/api/import-card-data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pkmnGgUrl: pkmnGgUrl.trim(), setId, overwrite, importImages }),
+      body: JSON.stringify({ pkmnGgUrl: pkmnGgUrl.trim(), setId, overwrite, importImages, language }),
     })
 
     if (!res.ok || !res.body) {
@@ -217,6 +218,37 @@ export function CardDataImport({ setId, onComplete }: Props) {
             disabled={isRunning}
             className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-yellow-500 disabled:opacity-50"
           />
+        </div>
+
+        {/* Language selector */}
+        <div>
+          <label className="block text-gray-400 mb-2 text-sm">Set Language</label>
+          <div className="flex gap-5">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="radio"
+                name="set-language"
+                value="en"
+                checked={language === 'en'}
+                onChange={() => setLanguage('en')}
+                disabled={isRunning}
+                className="accent-yellow-500 disabled:opacity-50"
+              />
+              <span className="text-gray-300">🇬🇧 English</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="radio"
+                name="set-language"
+                value="ja"
+                checked={language === 'ja'}
+                onChange={() => setLanguage('ja')}
+                disabled={isRunning}
+                className="accent-yellow-500 disabled:opacity-50"
+              />
+              <span className="text-gray-300">🇯🇵 Japanese</span>
+            </label>
+          </div>
         </div>
 
         <label className="flex items-center gap-2 cursor-pointer select-none">

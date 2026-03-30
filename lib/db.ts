@@ -30,6 +30,8 @@ export interface DbSet {
   logo_url: string | null
   symbol_url: string | null
   created_at: string
+  /** ISO 639-1 language code: 'en' = English, 'ja' = Japanese */
+  language: string | null
 }
 
 export interface DbCard {
@@ -78,7 +80,7 @@ export function hasPromoCards(cards: DbCard[]): boolean {
 export async function getSets(): Promise<DbSet[]> {
   const { data, error } = await supabase
     .from('sets')
-    .select('id:set_id, name, series, total:setTotal, setComplete, release_date, logo_url, symbol_url, created_at')
+    .select('id:set_id, name, series, total:setTotal, setComplete, release_date, logo_url, symbol_url, created_at, language')
     .order('release_date', { ascending: false })
   
   if (error) {
@@ -95,7 +97,7 @@ export async function getSets(): Promise<DbSet[]> {
 export async function getSetById(setId: string): Promise<DbSet | null> {
   const { data, error } = await supabase
     .from('sets')
-    .select('id:set_id, name, series, total:setTotal, setComplete, release_date, logo_url, symbol_url, created_at')
+    .select('id:set_id, name, series, total:setTotal, setComplete, release_date, logo_url, symbol_url, created_at, language')
     .eq('set_id', setId)
     .single()
   

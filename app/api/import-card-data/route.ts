@@ -261,7 +261,7 @@ export async function POST(request: NextRequest) {
   }
 
   // 2. Parse body
-  let body: { pkmnGgUrl?: string; setId?: string; overwrite?: boolean; importImages?: boolean }
+  let body: { pkmnGgUrl?: string; setId?: string; overwrite?: boolean; importImages?: boolean; language?: string }
   try {
     body = await request.json()
   } catch {
@@ -277,7 +277,8 @@ export async function POST(request: NextRequest) {
   const setId = body.setId
   const overwrite = body.overwrite === true
   const importImages = body.importImages === true
-  console.log('[import-card-data] importImages flag:', importImages, '| overwrite:', overwrite)
+  const language = body.language === 'ja' ? 'ja' : 'en'
+  console.log('[import-card-data] importImages flag:', importImages, '| overwrite:', overwrite, '| language:', language)
 
   if (!pkmnGgUrl || !setId) {
     return new Response(
@@ -298,6 +299,12 @@ export async function POST(request: NextRequest) {
       }
 
       try {
+        // ── Tag the set with its language ────────────────────────────────────
+        await supabaseAdmin
+          .from('sets')
+          .update({ language })
+          .eq('set_id', setId)
+
         // ── Fetch DB cards for this set ──────────────────────────────────────
         const { data: dbCards, error: dbError } = await supabaseAdmin
           .from('cards')

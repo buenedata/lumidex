@@ -21,6 +21,8 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
   )
   const [searchQuery, setSearchQuery] = useState('')
   const [activeSeries, setActiveSeries] = useState<string>('All')
+  const [showEnglish, setShowEnglish] = useState(true)
+  const [showJapanese, setShowJapanese] = useState(true)
 
   // ── Series order ──────────────────────────────────────────────────────────
   // Build list of unique series names, sorted by the most recent release_date
@@ -100,6 +102,10 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
       filtered = filtered.filter(s => s.name.toLowerCase().includes(q))
     }
 
+    // Language filter
+    if (!showEnglish) filtered = filtered.filter(s => (s.language ?? 'en') !== 'en')
+    if (!showJapanese) filtered = filtered.filter(s => (s.language ?? 'en') !== 'ja')
+
     // Series pill filter
     if (activeSeries !== 'All') {
       filtered = filtered.filter(s => (s.series ?? 'Other') === activeSeries)
@@ -135,7 +141,7 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
     }
 
     return { filteredFavorites, groupedSets: grouped }
-  }, [sets, searchQuery, activeSeries, favoritedIds, userId, seriesOrder])
+  }, [sets, searchQuery, activeSeries, showEnglish, showJapanese, favoritedIds, userId, seriesOrder])
 
   const totalVisible =
     filteredFavorites.length +
@@ -146,8 +152,9 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
     <div>
       {/* ── Search + series filter bar ─────────────────────────────────── */}
       <div className="mb-8 space-y-4">
-        {/* Search input */}
-        <div className="relative max-w-sm">
+        {/* Search input + language checkboxes row */}
+        <div className="flex items-center gap-4 flex-wrap">
+        <div className="relative max-w-sm flex-1">
           <svg
             className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted"
             fill="none"
@@ -168,6 +175,29 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
             onChange={e => setSearchQuery(e.target.value)}
             className="w-full h-10 bg-surface border border-subtle rounded-lg pl-9 pr-3 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
           />
+        </div>
+
+          {/* Language checkboxes */}
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showEnglish}
+                onChange={e => setShowEnglish(e.target.checked)}
+                className="w-4 h-4 accent-[var(--color-accent)] rounded"
+              />
+              <span className="text-sm text-secondary">🇬🇧 English</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={showJapanese}
+                onChange={e => setShowJapanese(e.target.checked)}
+                className="w-4 h-4 accent-[var(--color-accent)] rounded"
+              />
+              <span className="text-sm text-secondary">🇯🇵 Japanese</span>
+            </label>
+          </div>
         </div>
 
         {/* Series pill buttons */}
