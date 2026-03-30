@@ -21,6 +21,8 @@ interface Props {
   selectedSetId: string | null
   /** When true, fetches image-coverage stats and renders ✅ / ⚠️ / ❌ beside each set */
   showImageStatus?: boolean
+  /** When true, fetches card-count stats and renders ✅ / ❌ beside each set to indicate whether cards have been imported */
+  showCardStatus?: boolean
 }
 
 // ── Image-status icon helpers ────────────────────────────────────────────────
@@ -100,9 +102,67 @@ function ImageStatusIcon({ stat }: { stat: SetImageStat | undefined }) {
   )
 }
 
+// ── Card-status icon helper ──────────────────────────────────────────────────
+
+function CardStatusIcon({ stat }: { stat: SetImageStat | undefined }) {
+  if (!stat) {
+    // Stats not yet loaded — show neutral placeholder
+    return (
+      <span title="Card data unknown" className="flex items-center">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          className="w-4 h-4 text-gray-600"
+        >
+          <path
+            fillRule="evenodd"
+            d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"
+            clipRule="evenodd"
+          />
+        </svg>
+      </span>
+    )
+  }
+
+  if (stat.total_cards === 0) {
+    // No cards imported — red X
+    return (
+      <span title="No cards imported yet" className="flex items-center">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          className="w-4 h-4 text-red-500"
+        >
+          <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+        </svg>
+      </span>
+    )
+  }
+
+  // Cards present — green checkmark
+  return (
+    <span title={`${stat.total_cards} card${stat.total_cards !== 1 ? 's' : ''} in database`} className="flex items-center">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 20 20"
+        fill="currentColor"
+        className="w-4 h-4 text-green-400"
+      >
+        <path
+          fillRule="evenodd"
+          d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z"
+          clipRule="evenodd"
+        />
+      </svg>
+    </span>
+  )
+}
+
 // ── Main component ───────────────────────────────────────────────────────────
 
-export function SetSelector({ onSetSelect, selectedSetId, showImageStatus = false }: Props) {
+export function SetSelector({ onSetSelect, selectedSetId, showImageStatus = false, showCardStatus = false }: Props) {
   const [sets, setSets] = useState<PokemonSetOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -113,10 +173,11 @@ export function SetSelector({ onSetSelect, selectedSetId, showImageStatus = fals
   useEffect(() => {
     async function fetchData() {
       try {
-        // Always fetch sets; optionally fetch image stats in parallel
+        // Always fetch sets; fetch image/card stats if either flag is enabled (one shared request)
+        const needsStats = showImageStatus || showCardStatus
         const requests: [Promise<Response>, Promise<Response> | null] = [
           fetch('/api/sets'),
-          showImageStatus ? fetch('/api/sets/image-stats') : null,
+          needsStats ? fetch('/api/sets/image-stats') : null,
         ]
 
         const [setsRes, statsRes] = await Promise.all(requests)
@@ -142,7 +203,7 @@ export function SetSelector({ onSetSelect, selectedSetId, showImageStatus = fals
       }
     }
 
-    if (showImageStatus) setStatsLoading(true)
+    if (showImageStatus || showCardStatus) setStatsLoading(true)
     fetchData()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -201,6 +262,25 @@ export function SetSelector({ onSetSelect, selectedSetId, showImageStatus = fals
         </div>
       )}
 
+      {/* Card-status legend */}
+      {showCardStatus && (
+        <div className="flex items-center gap-4 text-xs text-gray-500 px-1">
+          <span className="flex items-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-green-400">
+              <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
+            </svg>
+            Has cards
+          </span>
+          <span className="flex items-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3.5 h-3.5 text-red-500">
+              <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+            </svg>
+            No cards imported
+          </span>
+          {statsLoading && <span className="text-gray-600 italic">Loading stats…</span>}
+        </div>
+      )}
+
       {/* Set list */}
       <div className="max-h-64 overflow-y-auto rounded-lg border border-gray-700 divide-y divide-gray-800">
         {filtered.length === 0 ? (
@@ -216,8 +296,11 @@ export function SetSelector({ onSetSelect, selectedSetId, showImageStatus = fals
                   : 'bg-gray-900'
               }`}
             >
-              {/* Left: name + series + image status icon */}
+              {/* Left: name + series + image/card status icons */}
               <div className="flex items-center gap-2 min-w-0">
+                {showCardStatus && (
+                  <CardStatusIcon stat={imageStatsBySetId[set.id]} />
+                )}
                 {showImageStatus && (
                   <ImageStatusIcon stat={imageStatsBySetId[set.id]} />
                 )}

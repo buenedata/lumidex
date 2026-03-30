@@ -68,7 +68,7 @@ export default function CardDataImportPage() {
         {/* Set selector */}
         <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 mb-6">
           <h2 className="text-lg font-semibold mb-4">1. Choose a Set</h2>
-          <SetSelector onSetSelect={handleSetSelect} selectedSetId={selectedSetId} />
+          <SetSelector onSetSelect={handleSetSelect} selectedSetId={selectedSetId} showCardStatus />
           {selectedSetName && (
             <p className="mt-3 text-sm text-yellow-400">
               Selected: <span className="font-medium">{selectedSetName}</span>
