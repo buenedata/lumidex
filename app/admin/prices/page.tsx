@@ -26,6 +26,11 @@ interface SyncState {
   products:  number
   elapsed:   number
   priceKeys?: string[]
+  apiShape?: {
+    topKeys:   string[]
+    cardKeys:  string[]
+    rawCounts: Record<string, number | undefined>
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -148,6 +153,16 @@ export default function AdminPricesPage() {
             }
             if (event.type === 'debug') {
               setSyncState(prev => ({ ...prev, priceKeys: event.priceKeys }))
+            }
+            if (event.type === 'api_shape') {
+              setSyncState(prev => ({
+                ...prev,
+                apiShape: {
+                  topKeys:   event.topKeys  ?? [],
+                  cardKeys:  event.cardKeys ?? [],
+                  rawCounts: event.rawCounts ?? {},
+                },
+              }))
             }
             if (event.type === 'complete') {
               setSyncState({
@@ -309,6 +324,25 @@ export default function AdminPricesPage() {
                       style={{ width: `${Math.round((syncState.matched / syncState.total) * 100)}%` }}
                     />
                   </div>
+                )}
+
+                {/* API response shape debug */}
+                {syncState.apiShape && (
+                  <details className="mt-3">
+                    <summary className="text-xs text-indigo-400 cursor-pointer hover:text-indigo-300">
+                      API response shape (debug)
+                    </summary>
+                    <div className="mt-2 font-mono text-xs text-gray-400 space-y-1.5">
+                      <div><span className="text-gray-500">Top-level keys:</span> {syncState.apiShape.topKeys.join(', ') || '—'}</div>
+                      <div><span className="text-gray-500">Card keys:</span> {syncState.apiShape.cardKeys.join(', ') || 'no cards returned'}</div>
+                      <div className="space-y-0.5">
+                        <span className="text-gray-500">Count fields:</span>
+                        {Object.entries(syncState.apiShape.rawCounts).map(([k, v]) => (
+                          <div key={k} className="ml-2">{k}: {v ?? 'undefined'}</div>
+                        ))}
+                      </div>
+                    </div>
+                  </details>
                 )}
 
                 {/* Graded price key debug */}

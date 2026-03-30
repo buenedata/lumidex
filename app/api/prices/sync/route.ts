@@ -76,11 +76,18 @@ interface RapidApiCard {
 }
 
 interface RapidApiResponse {
-  data:       RapidApiCard[]
-  page:       number
-  pageSize:   number
-  count:      number
-  totalCount: number
+  // pokemontcg.io standard field names
+  data?:       RapidApiCard[]
+  page?:       number
+  pageSize?:   number
+  count?:      number
+  totalCount?: number
+  // Alternative field names used by some RapidAPI wrappers
+  cards?:      RapidApiCard[]
+  results?:    RapidApiCard[]
+  total?:      number
+  per_page?:   number
+  total_pages?: number
 }
 
 interface RapidApiProduct {
@@ -279,7 +286,7 @@ export async function POST(request: NextRequest) {
         let hasMore = true
         while (hasMore) {
           const res = await rapidApiFetch(
-            `/cards?q=set.id:${encodeURIComponent(setId)}&pageSize=${PAGE_SIZE}&page=${page}`,
+            `/cards?q=set.id:${encodeURIComponent(setId)}&per_page=${PAGE_SIZE}&page=${page}`,
           )
 
           if (!res.ok) {
@@ -288,9 +295,34 @@ export async function POST(request: NextRequest) {
             return
           }
 
-          const json = await res.json() as RapidApiResponse
-          const apiCards = json.data ?? []
-          totalApiCards = json.totalCount
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const json = await res.json() as RapidApiResponse & Record<string, any>
+
+          // Probe the response shape on the first page and emit for debugging
+          if (page === 1) {
+            const topKeys = Object.keys(json)
+            const firstItem = (json.data ?? json.cards ?? json.results ?? [])[0]
+            const cardKeys = firstItem ? Object.keys(firstItem) : []
+            console.log(`[prices/sync] Response top-level keys:`, topKeys)
+            console.log(`[prices/sync] First card keys:`, cardKeys)
+            emit({
+              type:        'api_shape',
+              topKeys,
+              cardKeys,
+              rawCounts: {
+                data:       json.data?.length,
+                cards:      json.cards?.length,
+                results:    json.results?.length,
+                totalCount: json.totalCount,
+                total:      json.total,
+                count:      json.count,
+              },
+            })
+          }
+
+          // Support multiple response shapes
+          const apiCards: RapidApiCard[] = json.data ?? json.cards ?? json.results ?? []
+          totalApiCards = json.totalCount ?? json.total ?? json.count ?? 0
 
           // Log price keys on first card of first page
           if (!gradedKeysLogged && apiCards.length > 0) {
@@ -368,7 +400,7 @@ export async function POST(request: NextRequest) {
         let productCount = 0
         try {
           const prodRes = await rapidApiFetch(
-            `/products?q=set.id:${encodeURIComponent(setId)}&pageSize=100`,
+            `/products?q=set.id:${encodeURIComponent(setId)}&per_page=100`,
           )
 
           if (prodRes.ok) {
