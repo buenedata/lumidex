@@ -35,7 +35,7 @@ export function CardImageGrid({ setId, onCardSelect, onCardsLoaded, selectedCard
 
     async function fetchCards() {
       try {
-        const res = await fetch(`/api/cards/${encodeURIComponent(setId)}`)
+        const res = await fetch(`/api/cards/${encodeURIComponent(setId)}?_t=${refreshKey}`)
         if (!res.ok) throw new Error(`Failed to fetch cards: ${res.status}`)
         const data: CardGridItem[] = await res.json()
         const sorted = [...data].sort((a, b) => {

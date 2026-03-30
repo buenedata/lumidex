@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { unstable_noStore as noStore } from 'next/cache'
 import { getCardsBySet } from '@/lib/db'
 
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ setId: string }> }
 ) {
+  noStore() // always read live DB data — never serve Next.js Data Cache
   const { setId } = await params
 
   try {
