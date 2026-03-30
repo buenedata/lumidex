@@ -206,6 +206,8 @@ async function extractCardDataFromPkmnGg(pkmnGgUrl: string, setTotal: number | n
   if (cards.length > 0) {
     const sample = cards[0]
     console.log('[import-card-data] SAMPLE CARD RAW FIELDS:', {
+      id: sample.id,
+      dbId: sample.dbId,
       number: sample.number,
       numberDisplay: sample.numberDisplay,
       totalDisplay: sample.totalDisplay,
@@ -303,6 +305,13 @@ async function extractCardDataFromPkmnGg(pkmnGgUrl: string, setTotal: number | n
           ? String(card.images.small)
           : null
 
+      // ── pokemontcg.io card ID ─────────────────────────────────────────────
+      //    pkmn.gg's top-level `id` field IS the pokemontcg.io card ID
+      //    (e.g. "mcd25-3").  `card.dbId` is an internal pkmn.gg numeric key.
+      //    We validate by requiring a hyphen so plain numbers are ignored.
+      const tcgCardId: string | null =
+        card.id && String(card.id).includes('-') ? String(card.id) : null
+
       return {
         number,
         name,
@@ -310,7 +319,7 @@ async function extractCardDataFromPkmnGg(pkmnGgUrl: string, setTotal: number | n
         supertype,
         rarity,
         type,
-        dbId: card.dbId ? String(card.dbId) : null,
+        dbId: tcgCardId,
         largeImageUrl,
         thumbImageUrl,
       }
