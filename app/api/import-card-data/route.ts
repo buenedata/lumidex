@@ -103,48 +103,59 @@ interface PkmnCardData {
   thumbImageUrl: string | null
 }
 
-// ── pokemontcg.io type lookup ─────────────────────────────────────────────────
+// ── pokemontcg.io batch type lookup ──────────────────────────────────────────
 
 /**
- * Fetch the element type(s) for a single card from the pokemontcg.io API.
- * Used as a fallback when pkmn.gg set-page data doesn't include element types.
- * Returns e.g. "Fire" or "Water/Psychic", or null on any error or missing data.
+ * Given a pokemontcg.io set ID (e.g. "mcd25"), fetch ALL cards for that set
+ * in one API call and return a Map<normalizedNumber, elementType>.
+ *
+ * pokemontcg.io card IDs follow the pattern "{setId}-{number}", e.g. "mcd25-3".
+ * We extract the number by taking everything after the last "-".
+ *
+ * Returns an empty Map on any error so the import degrades gracefully.
  */
-async function fetchCardTypeFromTcgApi(cardId: string): Promise<string | null> {
+async function fetchSetTypesFromTcgApi(tcgSetId: string): Promise<Map<string, string>> {
+  const result = new Map<string, string>()
   try {
-    const headers: Record<string, string> = {
-      'User-Agent': 'Lumidex/1.0',
-    }
-    // Use API key if configured — raises rate limit from ~1k to ~20k req/day
+    const headers: Record<string, string> = { 'User-Agent': 'Lumidex/1.0' }
     if (process.env.POKEMON_TCG_API_KEY) {
       headers['X-Api-Key'] = process.env.POKEMON_TCG_API_KEY
     }
 
-    const res = await fetch(`https://api.pokemontcg.io/v2/cards/${encodeURIComponent(cardId)}`, {
-      headers,
-      // 5 s timeout — don't let a slow API stall the whole import
-      signal: AbortSignal.timeout(5000),
-    })
+    // pageSize=250 covers the largest sets; add pagination if needed in future.
+    const url = `https://api.pokemontcg.io/v2/cards?q=set.id:${encodeURIComponent(tcgSetId)}&pageSize=250&select=number,types`
+    console.log('[import-card-data] TCG batch fetch:', url)
 
+    const res = await fetch(url, { headers, signal: AbortSignal.timeout(15000) })
     if (!res.ok) {
-      console.warn(`[import-card-data] TCG API ${res.status} for card ${cardId}`)
-      return null
+      console.warn(`[import-card-data] TCG batch API ${res.status} for set ${tcgSetId}`)
+      return result
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = await res.json() as any
-    const types: unknown = json?.data?.types
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cards: any[] = json?.data ?? []
+    console.log(`[import-card-data] TCG batch returned ${cards.length} cards for set ${tcgSetId}`)
 
-    if (!Array.isArray(types) || types.length === 0) return null
+    for (const card of cards) {
+      const rawNumber = String(card.number ?? '')
+      if (!rawNumber) continue
+      const normNum = normalizeNumber(rawNumber)
+      const types: unknown = card.types
+      if (Array.isArray(types)) {
+        const matched = types.filter(
+          (t): t is string => typeof t === 'string' && POKEMON_ELEMENT_TYPES.has(t),
+        )
+        if (matched.length > 0) result.set(normNum, matched.join('/'))
+      }
+    }
 
-    const matched = types.filter(
-      (t): t is string => typeof t === 'string' && POKEMON_ELEMENT_TYPES.has(t),
-    )
-    return matched.length > 0 ? matched.join('/') : null
+    console.log(`[import-card-data] TCG batch type map: ${result.size} entries`)
   } catch (err) {
-    console.warn(`[import-card-data] TCG API lookup failed for ${cardId}:`, err)
-    return null
+    console.warn(`[import-card-data] TCG batch fetch failed for set ${tcgSetId}:`, err)
   }
+  return result
 }
 
 /**
@@ -466,6 +477,24 @@ export async function POST(request: NextRequest) {
 
         emit({ type: 'start', payload: { total: pkmnCards.length } })
 
+        // ── Batch-fetch element types from pokemontcg.io (one request) ───────
+        // Only runs when lookupTypes is enabled. Extract the TCG set ID from
+        // the first card's dbId (e.g. "mcd25-3" → tcgSetId "mcd25"), then
+        // fetch all cards for that set and build a normalizedNumber→type map.
+        const tcgTypeMap = new Map<string, string>()
+        if (lookupTypes) {
+          const firstId = pkmnCards.find((c) => c.dbId)?.dbId ?? null
+          if (firstId) {
+            // TCG set ID = everything before the last "-"  ("mcd25-3" → "mcd25")
+            const tcgSetId = firstId.split('-').slice(0, -1).join('-')
+            console.log(`[import-card-data] TCG batch lookup for set ${tcgSetId} (from dbId ${firstId})`)
+            const fetched = await fetchSetTypesFromTcgApi(tcgSetId)
+            for (const [k, v] of fetched) tcgTypeMap.set(k, v)
+          } else {
+            console.warn('[import-card-data] lookupTypes enabled but no card has a dbId — skipping batch fetch')
+          }
+        }
+
         // ── Process each card ────────────────────────────────────────────────
         let succeeded = 0
         let skipped = 0
@@ -486,13 +515,10 @@ export async function POST(request: NextRequest) {
             // `id` and `created_at` are auto-generated; `set_id` and `name`
             // are the only NOT NULL columns that must be supplied explicitly.
 
-            // Optionally look up the element type from pokemontcg.io when pkmn.gg
-            // didn't include it and the card has a known dbId.
-            let resolvedType = pkmnCard.type
-            if (!resolvedType && lookupTypes && pkmnCard.dbId) {
-              resolvedType = await fetchCardTypeFromTcgApi(pkmnCard.dbId)
-              if (resolvedType) console.log(`[import-card-data] TCG type lookup → ${pkmnCard.dbId} = ${resolvedType}`)
-            }
+            // Resolve element type: pkmn.gg value, or batch TCG map lookup.
+            const normNumForType = normalizeNumber(pkmnCard.number)
+            let resolvedType = pkmnCard.type ?? tcgTypeMap.get(normNumForType) ?? null
+            if (resolvedType) console.log(`[import-card-data] type for #${pkmnCard.number} = ${resolvedType}`)
 
             const insertPayload: Record<string, unknown> = {
               set_id: setId,
@@ -627,11 +653,10 @@ export async function POST(request: NextRequest) {
           if (nameNeedsUpdate && pkmnCard.name !== null) updatePayload.name = pkmnCard.name
           // Resolve element type: use pkmn.gg value; fall back to TCG API lookup
           // when type is still null and lookupTypes is enabled.
-          let resolvedType = pkmnCard.type
-          if (!resolvedType && lookupTypes && pkmnCard.dbId && (dbCard.type === null || overwrite)) {
-            resolvedType = await fetchCardTypeFromTcgApi(pkmnCard.dbId)
-            if (resolvedType) console.log(`[import-card-data] TCG type lookup → ${pkmnCard.dbId} = ${resolvedType}`)
-          }
+          // Resolve element type: pkmn.gg value, or batch TCG map lookup.
+          const normNumForType = normalizeNumber(pkmnCard.number)
+          const resolvedType = pkmnCard.type ?? tcgTypeMap.get(normNumForType) ?? null
+          if (resolvedType) console.log(`[import-card-data] type for #${pkmnCard.number} = ${resolvedType}`)
 
           // Write element type (Fire, Water, …) when resolved.
           // Use typeCouldUpdate (not typeNeedsUpdate) so TCG-lookup results
