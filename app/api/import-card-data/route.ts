@@ -207,16 +207,20 @@ async function extractCardDataFromPkmnGg(pkmnGgUrl: string, setTotal: number | n
     throw new Error('Failed to parse __NEXT_DATA__ JSON from pkmn.gg page.')
   }
 
-  // pkmn.gg stores its card list at pageProps.cardData
+  // pkmn.gg stores its card list at:
+  //   • pageProps.cardData  — standard set/series pages
+  //   • pageProps.cards     — collection/list pages (e.g. /collections/prize-pack-series-1)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const d = nextData as any
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const cards: any[] | undefined = d?.props?.pageProps?.cardData
+  const cards: any[] | undefined =
+    d?.props?.pageProps?.cardData ?? d?.props?.pageProps?.cards
 
   if (!Array.isArray(cards) || cards.length === 0) {
     throw new Error(
       'No card data found in the pkmn.gg page. ' +
-        'Make sure the URL is a set page (e.g. https://www.pkmn.gg/series/scarlet-violet/151).',
+        'Make sure the URL is a set page (e.g. https://www.pkmn.gg/series/scarlet-violet/151) ' +
+        'or a collection page (e.g. https://www.pkmn.gg/collections/prize-pack-series-1).',
     )
   }
 
@@ -822,10 +826,15 @@ export async function GET(request: NextRequest) {
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const nextData = JSON.parse(match[1]) as any
+    // Support both set pages (pageProps.cardData) and collection pages (pageProps.cards)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cards: any[] | undefined = nextData?.props?.pageProps?.cardData
+    const cards: any[] | undefined =
+      nextData?.props?.pageProps?.cardData ?? nextData?.props?.pageProps?.cards
     if (!Array.isArray(cards) || cards.length === 0) {
-      return NextResponse.json({ error: 'No cardData found in pageProps' }, { status: 502 })
+      return NextResponse.json(
+        { error: 'No cardData found in pageProps (tried cardData and cards keys)' },
+        { status: 502 },
+      )
     }
     // Return the first 3 cards raw so field names are visible
     return NextResponse.json({
