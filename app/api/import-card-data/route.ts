@@ -1,0 +1,643 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { requireAdmin } from '@/lib/admin'
+import { supabaseAdmin } from '@/lib/supabase'
+import { generateImageFilename } from '@/lib/imageUpload'
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const STORAGE_BUCKET = 'card-images'
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Strip leading zeros and everything after the first "/" — "012/165" → "12" */
+function normalizeNumber(num: string): string {
+  const raw = num.split('/')[0].replace(/^0+/, '')
+  return raw || '0'
+}
+
+function sseData(payload: unknown): Uint8Array {
+  return new TextEncoder().encode(`data: ${JSON.stringify(payload)}\n\n`)
+}
+
+/**
+ * Download an image from an external URL and upload it to the `card-images`
+ * storage bucket.  Returns the public URL stored in the `image` column, or
+ * `null` on any error so a single bad image never aborts the whole import.
+ */
+async function downloadAndStoreCardImage(
+  imageUrl: string,
+  cardNumber: string,
+  setId: string,
+): Promise<string | null> {
+  console.log('[import-card-data] downloadAndStoreCardImage called:', imageUrl)
+  try {
+    const imgRes = await fetch(imageUrl, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://www.pkmn.gg/',
+        'Accept': 'image/webp,image/avif,image/png,image/*,*/*;q=0.8',
+      },
+    })
+
+    if (!imgRes.ok) return null
+
+    const contentType = imgRes.headers.get('content-type') ?? 'image/png'
+    if (!contentType.startsWith('image/')) return null
+
+    const imageBuffer = await imgRes.arrayBuffer()
+    if (imageBuffer.byteLength === 0) return null
+
+    // Use the same standardised filename convention as the rest of the codebase
+    const filename = generateImageFilename(setId, cardNumber)
+
+    const { error: uploadErr } = await supabaseAdmin.storage
+      .from(STORAGE_BUCKET)
+      .upload(filename, imageBuffer, { contentType, upsert: true })
+
+    if (uploadErr) {
+      console.error('[import-card-data] upload error:', uploadErr)
+      return null
+    }
+
+    const { data: urlData } = supabaseAdmin.storage
+      .from(STORAGE_BUCKET)
+      .getPublicUrl(filename)
+
+    return urlData.publicUrl ?? null
+  } catch (err) {
+    console.warn('[import-card-data] downloadAndStoreCardImage error:', err)
+    return null
+  }
+}
+
+// ── pkmn.gg scraping ─────────────────────────────────────────────────────────
+
+interface PkmnCardData {
+  /**
+   * Card number exactly as returned by pkmn.gg, e.g. "25" or "TG05".
+   * No slash-total suffix — that data is not reliably present in the pkmn.gg payload.
+   */
+  number: string
+  /** Pokémon / card name as returned by pkmn.gg — "ex" already normalised to "EX" */
+  name: string | null
+  artist: string | null
+  supertype: string | null
+  rarity: string | null
+  /** Element type — always null for pkmn.gg set-page imports (element types not available) */
+  type: string | null
+  /** Full URL to the large card image from pokemontcg.io */
+  largeImageUrl: string | null
+  /** Full URL to the thumbnail card image from pokemontcg.io */
+  thumbImageUrl: string | null
+}
+
+/**
+ * Fetch a pkmn.gg set page and extract card metadata.
+ * pkmn.gg is a Next.js app — its __NEXT_DATA__ blob contains structured card
+ * data sourced from pokemontcg.io, including name, artist, hp, supertype,
+ * subtypes and types.
+ */
+async function extractCardDataFromPkmnGg(pkmnGgUrl: string): Promise<PkmnCardData[]> {
+  const response = await fetch(pkmnGgUrl, {
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch pkmn.gg page (HTTP ${response.status})`)
+  }
+
+  const html = await response.text()
+
+  // Extract Next.js __NEXT_DATA__ blob
+  const match = html.match(
+    /<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/,
+  )
+  if (!match) {
+    throw new Error(
+      'Could not find __NEXT_DATA__ on the pkmn.gg page. The page structure may have changed.',
+    )
+  }
+
+  let nextData: unknown
+  try {
+    nextData = JSON.parse(match[1])
+  } catch {
+    throw new Error('Failed to parse __NEXT_DATA__ JSON from pkmn.gg page.')
+  }
+
+  // pkmn.gg stores its card list at pageProps.cardData
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const d = nextData as any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cards: any[] | undefined = d?.props?.pageProps?.cardData
+
+  if (!Array.isArray(cards) || cards.length === 0) {
+    throw new Error(
+      'No card data found in the pkmn.gg page. ' +
+        'Make sure the URL is a set page (e.g. https://www.pkmn.gg/series/scarlet-violet/151).',
+    )
+  }
+
+  // pkmn.gg set-page cardData exposes name, artist, supertype, rarity, types and image URLs.
+  // hp and subtypes are absent from the set-page payload.
+  // Log first card raw fields to diagnose what's actually available
+  if (cards.length > 0) {
+    const sample = cards[0]
+    console.log('[import-card-data] SAMPLE CARD RAW FIELDS:', {
+      number: sample.number,
+      numberDisplay: sample.numberDisplay,
+      totalDisplay: sample.totalDisplay,
+      set_total: sample.set?.total,
+      set_printedTotal: sample.set?.printedTotal,
+      types: sample.types,
+      type: sample.type,
+      category: sample.category,
+      supertype: sample.supertype,
+    })
+  }
+
+  return cards
+    .map((card) => {
+      // ── Number: construct "1/88" format.
+      //    pkmn.gg provides card.number (bare, e.g. "1") and card.totalDisplay ("088").
+      //    numberDisplay is zero-padded without total (e.g. "001"), not "1/88" format.
+      //    card.set.total/printedTotal are absent on set pages.
+      const bareNumber = parseInt(String(card.number ?? '0'), 10)
+      const setTotalFromDisplay = card.totalDisplay
+        ? parseInt(String(card.totalDisplay), 10)
+        : null
+      const number =
+        !isNaN(bareNumber) && setTotalFromDisplay
+          ? `${bareNumber}/${setTotalFromDisplay}`
+          : String(card.number ?? '')
+
+      // ── Name: normalise "ex" (suffix) → "EX" ─────────────────────────────
+      const rawName = card.name ? String(card.name) : null
+      const name = rawName ? rawName.replace(/\bex\b/g, 'EX') : null
+
+      // ── Element type: pkmn.gg set pages expose card.types as LANGUAGE codes (["EN"]),
+      //    NOT element types like Grass/Fire. Always null for pkmn.gg imports.
+      const type: string | null = null
+
+      // ── Supertype: Pokemon/Trainer/Energy ─────────────────────────────────
+      const supertype: string | null = card.supertype ? String(card.supertype) : null
+
+      // ── Image URLs: pkmn.gg may use flat fields (largeImageUrl / thumbImageUrl)
+      //    or the nested pokemontcg.io format (images.large / images.small).
+      const largeImageUrl =
+        card.largeImageUrl
+          ? String(card.largeImageUrl)
+          : card.images?.large
+          ? String(card.images.large)
+          : null
+      const thumbImageUrl =
+        card.thumbImageUrl
+          ? String(card.thumbImageUrl)
+          : card.images?.small
+          ? String(card.images.small)
+          : null
+
+      return {
+        number,
+        name,
+        artist: card.artist ? String(card.artist) : null,
+        supertype,
+        rarity: card.rarity ? String(card.rarity) : null,
+        type,
+        largeImageUrl,
+        thumbImageUrl,
+      }
+    })
+    .filter((c) => c.number !== '')
+}
+
+// ── DB card type ──────────────────────────────────────────────────────────────
+
+interface DbCard {
+  id: string
+  name: string
+  number: string
+  artist: string | null
+  supertype: string | null
+  type: string | null
+  image: string | null
+}
+
+// ── SSE event types (shared with the frontend component) ─────────────────────
+
+export interface ProgressPayload {
+  cardId: string
+  /** Card number from the DB (used for display) */
+  number: string
+  /** Card name currently stored in the DB */
+  name: string
+  /** Card name sourced from pkmn.gg (may differ from DB name) */
+  pkmnName: string | null
+  artist: string | null
+  supertype: string | null
+  type: string | null
+  status: 'success' | 'skipped' | 'no_match' | 'failed' | 'created'
+  error?: string
+  /** True when an image was successfully downloaded and stored during this import */
+  imageSaved?: boolean
+}
+
+// ── Route handler ─────────────────────────────────────────────────────────────
+
+export async function POST(request: NextRequest) {
+  // 1. Auth guard — must be admin
+  try {
+    await requireAdmin()
+  } catch (err) {
+    return new Response(
+      JSON.stringify({ error: err instanceof Error ? err.message : 'Unauthorized' }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  // 2. Parse body
+  let body: { pkmnGgUrl?: string; setId?: string; overwrite?: boolean; importImages?: boolean }
+  try {
+    body = await request.json()
+  } catch {
+    return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  // Fix A: parse booleans with strict === true so that stringified "true" or
+  // missing fields never accidentally enable/disable these flags.
+  const pkmnGgUrl = body.pkmnGgUrl
+  const setId = body.setId
+  const overwrite = body.overwrite === true
+  const importImages = body.importImages === true
+  console.log('[import-card-data] importImages flag:', importImages, '| overwrite:', overwrite)
+
+  if (!pkmnGgUrl || !setId) {
+    return new Response(
+      JSON.stringify({ error: 'pkmnGgUrl and setId are required' }),
+      { status: 400, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  // 3. Stream SSE
+  const stream = new ReadableStream({
+    async start(controller) {
+      const emit = (payload: unknown) => {
+        try {
+          controller.enqueue(sseData(payload))
+        } catch {
+          // controller may already be closed if client disconnected
+        }
+      }
+
+      try {
+        // ── Fetch DB cards for this set ──────────────────────────────────────
+        const { data: dbCards, error: dbError } = await supabaseAdmin
+          .from('cards')
+          .select('id, name, number, artist, supertype, type, image')
+          .eq('set_id', setId)
+
+        if (dbError || !dbCards) {
+          emit({
+            type: 'error',
+            payload: { message: `DB error: ${dbError?.message ?? 'no cards returned'}` },
+          })
+          controller.close()
+          return
+        }
+
+        // Build a lookup map: normalizedNumber → DbCard
+        const dbByNumber = new Map<string, DbCard>()
+        for (const c of dbCards as DbCard[]) {
+          if (c.number) {
+            dbByNumber.set(normalizeNumber(c.number), c)
+          }
+        }
+
+        // ── Fetch pkmn.gg card data ──────────────────────────────────────────
+        let pkmnCards: PkmnCardData[]
+        try {
+          pkmnCards = await extractCardDataFromPkmnGg(pkmnGgUrl)
+        } catch (err) {
+          emit({
+            type: 'error',
+            payload: { message: err instanceof Error ? err.message : 'Scraping failed' },
+          })
+          controller.close()
+          return
+        }
+
+        emit({ type: 'start', payload: { total: pkmnCards.length } })
+
+        // ── Process each card ────────────────────────────────────────────────
+        let succeeded = 0
+        let skipped = 0
+        let failed = 0
+        let no_match = 0
+        let created = 0
+
+        for (const pkmnCard of pkmnCards) {
+          const normNum = normalizeNumber(pkmnCard.number)
+          const dbCard = dbByNumber.get(normNum)
+
+          // The best available image URL from pkmn.gg for this card
+          const externalImageUrl = pkmnCard.largeImageUrl ?? pkmnCard.thumbImageUrl ?? null
+          console.log('[import-card-data] imageUrl:', pkmnCard.largeImageUrl, pkmnCard.thumbImageUrl)
+
+          if (!dbCard) {
+            // No existing DB card — INSERT a new one from pkmn.gg data.
+            // `id` and `created_at` are auto-generated; `set_id` and `name`
+            // are the only NOT NULL columns that must be supplied explicitly.
+            // pkmnCard.number comes from card.numberDisplay which is already "1/88" format.
+            const insertPayload: Record<string, unknown> = {
+              set_id: setId,
+              number: pkmnCard.number,
+              name: pkmnCard.name ?? '',            // NOT NULL — fall back to ''
+              artist: pkmnCard.artist ?? null,
+              supertype: pkmnCard.supertype ?? null, // card category
+              rarity: pkmnCard.rarity ?? null,
+              type: pkmnCard.type ?? null,           // element type
+            }
+
+            // Optionally download and store the card image before inserting.
+            // Always use the bare pkmnCard.number for the filename (generateImageFilename
+            // splits on '/' anyway, so "100/88" and "100" both produce the same filename).
+            let imageSaved = false
+            if (importImages && externalImageUrl) {
+              console.log('[import-card-data] Attempting image download for new card', pkmnCard.number, externalImageUrl)
+              const storedUrl = await downloadAndStoreCardImage(
+                externalImageUrl,
+                pkmnCard.number,
+                setId,
+              )
+              if (storedUrl) {
+                insertPayload.image = storedUrl
+                imageSaved = true
+              } else {
+                console.error('[import-card-data] Image download/upload returned null for new card', pkmnCard.number)
+              }
+            }
+
+            const { data: inserted, error: insertError } = await supabaseAdmin
+              .from('cards')
+              .insert(insertPayload)
+              .select('id')
+              .single()
+
+            if (insertError || !inserted) {
+              failed++
+              emit({
+                type: 'progress',
+                payload: {
+                  cardId: '',
+                  number: pkmnCard.number,
+                  name: pkmnCard.name ?? '',
+                  pkmnName: pkmnCard.name,
+                  artist: pkmnCard.artist,
+                  supertype: pkmnCard.supertype,
+                  type: pkmnCard.type,
+                  status: 'failed',
+                  error: insertError?.message ?? 'Insert returned no data',
+                } satisfies ProgressPayload,
+              })
+            } else {
+              created++
+              emit({
+                type: 'progress',
+                payload: {
+                  cardId: inserted.id,
+                  number: pkmnCard.number,
+                  name: pkmnCard.name ?? '',
+                  pkmnName: pkmnCard.name,
+                  artist: pkmnCard.artist,
+                  supertype: pkmnCard.supertype,
+                  type: pkmnCard.type,
+                  status: 'created',
+                  imageSaved,
+                } satisfies ProgressPayload,
+              })
+            }
+            continue
+          }
+
+          // Determine which fields actually need updating
+          const dbNameBlank = !dbCard.name.trim()
+          const nameNeedsUpdate = pkmnCard.name !== null && (overwrite || dbNameBlank)
+
+          // Whether the card is missing an image and we should try to fetch one
+          const needsImage = importImages && !dbCard.image && externalImageUrl !== null
+
+          // Fix bare numbers: if the DB number has no "/" (was imported before the fix)
+          // and pkmn.gg provides a formatted number with "/", update it.
+          const numberNeedsUpdate =
+            pkmnCard.number.includes('/') &&
+            (!dbCard.number.includes('/') || overwrite)
+
+          // Skip the card entirely when overwrite is off and all importable
+          // fields (artist, supertype, name, number, image) are already populated.
+          // Note: dbCard.type (element type) is intentionally excluded here —
+          // pkmn.gg set pages do not expose per-card element types, so that
+          // field can never be filled by this import route and must not block
+          // the "already full" short-circuit.
+          const alreadyFull =
+            !overwrite &&
+            dbCard.artist !== null &&
+            dbCard.supertype !== null &&
+            !nameNeedsUpdate &&
+            !numberNeedsUpdate &&
+            !needsImage
+
+          if (alreadyFull) {
+            skipped++
+            emit({
+              type: 'progress',
+              payload: {
+                cardId: dbCard.id,
+                number: pkmnCard.number,
+                name: dbCard.name,
+                pkmnName: pkmnCard.name,
+                artist: dbCard.artist,
+                supertype: dbCard.supertype,
+                type: dbCard.type,
+                status: 'skipped',
+              } satisfies ProgressPayload,
+            })
+            continue
+          }
+
+          // Only write fields that have actual scraped values — never overwrite with null
+          const updatePayload: Record<string, unknown> = {}
+          if (pkmnCard.artist !== null) updatePayload.artist = pkmnCard.artist
+          if (pkmnCard.supertype !== null) updatePayload.supertype = pkmnCard.supertype
+          // Fix previously-bare number ("100" → "100/88") when numberDisplay provides it
+          if (numberNeedsUpdate) updatePayload.number = pkmnCard.number
+          // Populate name from pkmn.gg when the DB entry is blank or overwrite is on
+          if (nameNeedsUpdate && pkmnCard.name !== null) updatePayload.name = pkmnCard.name
+          // Clear corrupted type values from previous bad imports (language codes like "EN")
+          // pkmn.gg set pages never provide element types — any 1-3 uppercase letter value
+          // in the type column is a language/category code that should be nulled out.
+          if (dbCard.type && /^[A-Z]{1,3}$/.test(dbCard.type)) {
+            updatePayload.type = null
+          }
+
+          // Download and store the image if requested and the card doesn't already have one
+          let imageSaved = false
+          if (needsImage && externalImageUrl) {
+            const storedUrl = await downloadAndStoreCardImage(
+              externalImageUrl,
+              pkmnCard.number,
+              setId,
+            )
+            if (storedUrl) {
+              updatePayload.image = storedUrl
+              imageSaved = true
+            }
+          }
+
+          if (Object.keys(updatePayload).length === 0) {
+            skipped++
+            emit({
+              type: 'progress',
+              payload: {
+                cardId: dbCard.id,
+                number: pkmnCard.number,
+                name: dbCard.name,
+                pkmnName: pkmnCard.name,
+                artist: pkmnCard.artist,
+                supertype: pkmnCard.supertype,
+                type: pkmnCard.type,
+                status: 'skipped',
+              } satisfies ProgressPayload,
+            })
+            continue
+          }
+
+          const { error: updateError } = await supabaseAdmin
+            .from('cards')
+            .update(updatePayload)
+            .eq('id', dbCard.id)
+
+          if (updateError) {
+            failed++
+            emit({
+              type: 'progress',
+              payload: {
+                cardId: dbCard.id,
+                number: pkmnCard.number,
+                name: dbCard.name,
+                pkmnName: pkmnCard.name,
+                artist: pkmnCard.artist,
+                supertype: pkmnCard.supertype,
+                type: pkmnCard.type,
+                status: 'failed',
+                error: updateError.message,
+              } satisfies ProgressPayload,
+            })
+          } else {
+            succeeded++
+            emit({
+              type: 'progress',
+              payload: {
+                cardId: dbCard.id,
+                number: pkmnCard.number,
+                // Reflect the newly written name when it was updated
+                name: updatePayload.name ? String(updatePayload.name) : dbCard.name,
+                pkmnName: pkmnCard.name,
+                artist: pkmnCard.artist,
+                supertype: pkmnCard.supertype,
+                type: pkmnCard.type,
+                status: 'success',
+                imageSaved,
+              } satisfies ProgressPayload,
+            })
+          }
+        }
+
+        emit({
+          type: 'complete',
+          payload: { succeeded, skipped, failed, no_match, created },
+        })
+      } catch (err) {
+        emit({
+          type: 'error',
+          payload: { message: err instanceof Error ? err.message : 'Unexpected error' },
+        })
+      } finally {
+        controller.close()
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    },
+  })
+}
+
+// ── GET: inspect raw pkmn.gg card fields ─────────────────────────────────────
+// Usage: GET /api/import-card-data?pkmnGgUrl=https://www.pkmn.gg/series/...
+// Returns the first 3 raw card objects so you can verify available field names.
+
+export async function GET(request: NextRequest) {
+  try {
+    await requireAdmin()
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Unauthorized' },
+      { status: 401 },
+    )
+  }
+
+  const url = request.nextUrl.searchParams.get('pkmnGgUrl')
+  if (!url) {
+    return NextResponse.json({ error: 'pkmnGgUrl query param required' }, { status: 400 })
+  }
+
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      },
+    })
+    if (!response.ok) {
+      return NextResponse.json({ error: `pkmn.gg returned HTTP ${response.status}` }, { status: 502 })
+    }
+    const html = await response.text()
+    const match = html.match(
+      /<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/,
+    )
+    if (!match) {
+      return NextResponse.json({ error: '__NEXT_DATA__ not found in page' }, { status: 502 })
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nextData = JSON.parse(match[1]) as any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cards: any[] | undefined = nextData?.props?.pageProps?.cardData
+    if (!Array.isArray(cards) || cards.length === 0) {
+      return NextResponse.json({ error: 'No cardData found in pageProps' }, { status: 502 })
+    }
+    // Return the first 3 cards raw so field names are visible
+    return NextResponse.json({
+      total: cards.length,
+      sample: cards.slice(0, 3),
+      availableKeys: Object.keys(cards[0] ?? {}),
+    })
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Unknown error' },
+      { status: 500 },
+    )
+  }
+}

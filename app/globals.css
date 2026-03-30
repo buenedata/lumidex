@@ -1,0 +1,251 @@
+@import "tailwindcss";
+
+@theme {
+  /* ── Backgrounds ─────────────────────────────── */
+  --color-bg-base:     #0a0a0f;
+  --color-bg-surface:  #111118;
+  --color-bg-elevated: #1a1a26;
+  --color-bg-card:     #13131e;
+
+  /* ── Borders ─────────────────────────────────── */
+  --color-border:      rgba(255,255,255,0.07);
+  --color-border-glow: rgba(109,95,255,0.5);
+
+  /* ── Text ────────────────────────────────────── */
+  --color-text-primary:   #f0f0ff;
+  --color-text-secondary: #a0a0b8;
+  --color-text-muted:     #5a5a78;
+
+  /* ── Brand accent ────────────────────────────── */
+  --color-accent:          #6d5fff;
+  --color-accent-light:    #8b7fff;
+  --color-accent-dim:      rgba(109,95,255,0.15);
+
+  /* ── Success / Price ─────────────────────────── */
+  --color-price:      #34d399;
+  --color-price-dim:  rgba(52,211,153,0.15);
+
+  /* ── Danger ──────────────────────────────────── */
+  --color-danger:     #f87171;
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  html {
+    font-size: 16px;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-bg-base);
+    color: var(--color-text-primary);
+    font-family: var(--font-inter), system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    min-height: 100dvh;
+  }
+
+  /* ── Custom scrollbar ─────────────────────────── */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--color-bg-surface);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-bg-elevated);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-accent-dim);
+  }
+
+  /* ── Focus ring ───────────────────────────────── */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  /* ── Headings ─────────────────────────────────── */
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-space-grotesk), var(--font-inter), system-ui, sans-serif;
+    font-weight: 700;
+    color: var(--color-text-primary);
+    line-height: 1.2;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  /* ── Form elements — inherit body font ───────── */
+  input, select, textarea, button {
+    font-family: inherit;
+    font-size: inherit;
+  }
+
+  img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+  }
+}
+
+@layer utilities {
+  /* ── Glass panel ──────────────────────────────── */
+  .glass {
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--color-border);
+  }
+
+  .glass-elevated {
+    background: rgba(255, 255, 255, 0.07);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  /* ── Accent glow shadow ───────────────────────── */
+  .glow-accent {
+    box-shadow: 0 0 20px rgba(109, 95, 255, 0.35);
+  }
+  .glow-accent-sm {
+    box-shadow: 0 0 10px rgba(109, 95, 255, 0.25);
+  }
+
+  /* ── Price text ───────────────────────────────── */
+  .text-price {
+    color: var(--color-price);
+  }
+
+  /* ── Gradient text ────────────────────────────── */
+  .gradient-text {
+    background: linear-gradient(135deg, #a78bff 0%, #6d5fff 50%, #4f46e5 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* ── Surface layers ───────────────────────────── */
+  .bg-base    { background-color: var(--color-bg-base); }
+  .bg-surface { background-color: var(--color-bg-surface); }
+  .bg-elevated{ background-color: var(--color-bg-elevated); }
+  .bg-card-item { background-color: var(--color-bg-card); }
+
+  /* ── Accent fill ──────────────────────────────── */
+  .bg-accent     { background-color: var(--color-accent); }
+  .bg-accent-dim { background-color: var(--color-accent-dim); }
+  .text-accent   { color: var(--color-accent); }
+  .text-accent-light { color: var(--color-accent-light); }
+  .border-accent { border-color: var(--color-accent); }
+  .border-accent-glow { border-color: var(--color-border-glow); }
+
+  /* ── Text utilities ───────────────────────────── */
+  .text-primary   { color: var(--color-text-primary); }
+  .text-secondary { color: var(--color-text-secondary); }
+  .text-muted     { color: var(--color-text-muted); }
+
+  /* ── Border ───────────────────────────────────── */
+  .border-subtle { border-color: var(--color-border); }
+
+  /* ── Card shimmer animation ───────────────────── */
+  @keyframes shimmer {
+    0%   { background-position: -400px 0; }
+    100% { background-position: 400px 0; }
+  }
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--color-bg-elevated) 25%,
+      rgba(255,255,255,0.04) 50%,
+      var(--color-bg-elevated) 75%
+    );
+    background-size: 800px 100%;
+    animation: shimmer 1.5s infinite linear;
+  }
+
+  /* ── Progress bar gradient ────────────────────── */
+  .progress-bar {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--color-bg-elevated);
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--color-accent) 0%, var(--color-accent-light) 100%);
+    transition: width 0.5s ease;
+  }
+
+  /* ── Tab underline ────────────────────────────── */
+  .tab-active {
+    color: var(--color-text-primary);
+    border-bottom: 2px solid var(--color-accent);
+  }
+  .tab-inactive {
+    color: var(--color-text-muted);
+    border-bottom: 2px solid transparent;
+  }
+  .tab-inactive:hover {
+    color: var(--color-text-secondary);
+  }
+
+  /* ── Pokemon type hover glows ─────────────────── */
+  /* Applied to card wrappers: hover changes border + box-shadow */
+  .card-type-grass:hover {
+    border-color: rgba(74, 222, 128, 0.90) !important;
+    box-shadow: 0 0 22px 4px rgba(74, 222, 128, 0.70), 0 0 8px 1px rgba(74, 222, 128, 0.50) !important;
+  }
+  .card-type-fire:hover {
+    border-color: rgba(251, 146, 60, 0.90) !important;
+    box-shadow: 0 0 22px 4px rgba(251, 146, 60, 0.70), 0 0 8px 1px rgba(251, 146, 60, 0.50) !important;
+  }
+  .card-type-water:hover {
+    border-color: rgba(96, 165, 250, 0.90) !important;
+    box-shadow: 0 0 22px 4px rgba(96, 165, 250, 0.70), 0 0 8px 1px rgba(96, 165, 250, 0.50) !important;
+  }
+  .card-type-lightning:hover {
+    border-color: rgba(250, 204, 21, 0.90) !important;
+    box-shadow: 0 0 22px 4px rgba(250, 204, 21, 0.70), 0 0 8px 1px rgba(250, 204, 21, 0.50) !important;
+  }
+  .card-type-psychic:hover {
+    border-color: rgba(232, 121, 249, 0.90) !important;
+    box-shadow: 0 0 22px 4px rgba(232, 121, 249, 0.70), 0 0 8px 1px rgba(232, 121, 249, 0.50) !important;
+  }
+  .card-type-fighting:hover {
+    border-color: rgba(192, 104, 46, 0.90) !important;
+    box-shadow: 0 0 22px 4px rgba(192, 104, 46, 0.70), 0 0 8px 1px rgba(192, 104, 46, 0.50) !important;
+  }
+  .card-type-darkness:hover {
+    border-color: rgba(80, 80, 95, 0.90) !important;
+    box-shadow: 0 0 22px 4px rgba(80, 80, 95, 0.65), 0 0 8px 1px rgba(80, 80, 95, 0.45) !important;
+  }
+  .card-type-metal:hover {
+    border-color: rgba(148, 163, 184, 0.90) !important;
+    box-shadow: 0 0 22px 4px rgba(148, 163, 184, 0.70), 0 0 8px 1px rgba(148, 163, 184, 0.50) !important;
+  }
+  .card-type-dragon:hover {
+    border-color: rgba(45, 212, 191, 0.90) !important;
+    box-shadow: 0 0 22px 4px rgba(45, 212, 191, 0.70), 0 0 8px 1px rgba(45, 212, 191, 0.50) !important;
+  }
+  .card-type-fairy:hover {
+    border-color: rgba(244, 114, 182, 0.90) !important;
+    box-shadow: 0 0 22px 4px rgba(244, 114, 182, 0.70), 0 0 8px 1px rgba(244, 114, 182, 0.50) !important;
+  }
+  .card-type-colorless:hover {
+    border-color: rgba(203, 213, 225, 0.70) !important;
+    box-shadow: 0 0 22px 4px rgba(203, 213, 225, 0.45), 0 0 8px 1px rgba(203, 213, 225, 0.30) !important;
+  }
+}

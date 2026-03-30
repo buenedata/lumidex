@@ -1,0 +1,49 @@
+{
+  "name": "lumidex",
+  "version": "1.0.0",
+  "main": "index.js",
+  "private": true,
+  "scripts": {
+    "dev": "cross-env NODE_OPTIONS=--max-old-space-size=6144 next dev --turbo",
+    "build": "cross-env NODE_OPTIONS=--max-old-space-size=6144 next build",
+    "start": "cross-env NODE_OPTIONS=--max-old-space-size=6144 next start",
+    "lint": "next lint",
+    "import:pokemon": "tsx scripts/importPokemonData.ts",
+    "import:card-types": "tsx scripts/importCardTypes.ts",
+    "import:rarity": "tsx scripts/importRarityOnly.ts",
+    "test:manual": "tsx scripts/testManualData.ts",
+    "fetch:pricing": "tsx scripts/fetchPricing.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@headlessui/react": "^2.2.9",
+    "@heroicons/react": "^2.2.0",
+    "@supabase/ssr": "^0.9.0",
+    "@supabase/supabase-js": "^2.99.3",
+    "@tailwindcss/postcss": "^4.2.2",
+    "@types/cheerio": "^0.22.35",
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "autoprefixer": "^10.4.27",
+    "cheerio": "^1.2.0",
+    "dotenv": "^16.4.5",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^16.2.1",
+    "next": "^16.2.1",
+    "pokemontcgsdk": "^2.0.0",
+    "postcss": "^8.5.8",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tailwindcss": "^4.2.2",
+    "tsx": "^4.8.2",
+    "typescript": "^5.9.3",
+    "zustand": "^5.0.12"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0"
+  }
+}
