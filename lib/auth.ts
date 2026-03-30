@@ -1,6 +1,31 @@
 import { supabase, supabaseAdmin } from './supabase'
 import { type User } from '@supabase/supabase-js'
 
+export async function signInWithDiscord() {
+  try {
+    if (typeof window === 'undefined') {
+      return { data: null, error: { message: 'Discord OAuth is not available in server-side environment.' } }
+    }
+
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'discord',
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      }
+    })
+
+    if (error) {
+      if (error.message.includes('OAuth')) {
+        return { data, error: { ...error, message: 'Discord sign-in is not properly configured. Please contact support.' } }
+      }
+    }
+
+    return { data, error }
+  } catch (err: any) {
+    return { data: null, error: { message: 'Failed to initiate Discord sign-in. Please try again.' } }
+  }
+}
+
 export async function signInWithGoogle() {
   try {
     // Check if we're in a browser environment
@@ -11,7 +36,7 @@ export async function signInWithGoogle() {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/dashboard`,
+        redirectTo: `${window.location.origin}/auth/callback`,
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',
