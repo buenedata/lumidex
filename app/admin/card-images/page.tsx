@@ -110,6 +110,7 @@ export default function CardImagesPage() {
           <SetSelector
             selectedSetId={selectedSetId}
             onSetSelect={handleSetSelect}
+            showImageStatus
           />
         </section>
 

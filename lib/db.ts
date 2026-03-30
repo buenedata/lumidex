@@ -273,6 +273,30 @@ export async function getSetsWithProgress(userId: string): Promise<(DbSet & { us
 }
 
 /**
+ * Get image coverage stats for every set in one DB round-trip.
+ * Uses the `get_set_image_stats` Postgres function (GROUP BY on cards table).
+ * Migration: database/migration_set_image_stats.sql
+ */
+export async function getSetImageStats(): Promise<
+  { set_id: string; total_cards: number; cards_with_images: number }[]
+> {
+  const { data, error } = await supabase.rpc('get_set_image_stats')
+
+  if (error) {
+    console.error('Error fetching set image stats via RPC:', error)
+    throw new Error(`Failed to fetch set image stats: ${error.message}`)
+  }
+
+  return (data ?? []).map(
+    (row: { set_id: string; total_cards: number; cards_with_images: number }) => ({
+      set_id: row.set_id,
+      total_cards: Number(row.total_cards),
+      cards_with_images: Number(row.cards_with_images),
+    }),
+  )
+}
+
+/**
  * Database statistics for admin/debugging
  */
 export async function getDatabaseStats(): Promise<{
