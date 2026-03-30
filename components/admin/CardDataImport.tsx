@@ -7,6 +7,7 @@ import { useState } from 'react'
 interface TcgDebug {
   firstId: string | null
   tcgSetId: string | null
+  totalCards: number
   mapSize: number
 }
 
@@ -403,9 +404,11 @@ export function CardDataImport({ setId, onComplete }: Props) {
             : 'bg-yellow-900/20 border-yellow-500/30 text-yellow-300'
         }`}>
           {tcgDebug.mapSize > 0 ? (
-            <>🔍 TCG type lookup: set <code className="font-mono">{tcgDebug.tcgSetId}</code> — {tcgDebug.mapSize} card type{tcgDebug.mapSize !== 1 ? 's' : ''} fetched</>
+            <>🔍 TCG type lookup: set <code className="font-mono">{tcgDebug.tcgSetId}</code> — {tcgDebug.totalCards} cards found, {tcgDebug.mapSize} with types</>
+          ) : tcgDebug.firstId && tcgDebug.totalCards > 0 ? (
+            <>⚠️ TCG type lookup: set <code className="font-mono">{tcgDebug.tcgSetId}</code> — {tcgDebug.totalCards} cards found but none have element types in pokemontcg.io (common for promo sets)</>
           ) : tcgDebug.firstId ? (
-            <>⚠️ TCG type lookup: fetched set <code className="font-mono">{tcgDebug.tcgSetId}</code> but got 0 types — check the set ID</>
+            <>⚠️ TCG type lookup: set <code className="font-mono">{tcgDebug.tcgSetId}</code> not found in pokemontcg.io (0 cards returned)</>
           ) : (
             <>⚠️ TCG type lookup: no card with a pokemontcg.io-format ID found (card.id missing or no hyphen)</>
           )}

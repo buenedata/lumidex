@@ -111,8 +111,11 @@ interface PkmnCardData {
  *
  * Returns an empty Map on any error so the import degrades gracefully.
  */
-async function fetchSetTypesFromTcgApi(tcgSetId: string): Promise<Map<string, string>> {
-  const result = new Map<string, string>()
+async function fetchSetTypesFromTcgApi(
+  tcgSetId: string,
+): Promise<{ typeMap: Map<string, string>; totalCards: number }> {
+  const typeMap = new Map<string, string>()
+  let totalCards = 0
   try {
     const headers: Record<string, string> = { 'User-Agent': 'Lumidex/1.0' }
     if (process.env.POKEMON_TCG_API_KEY) {
@@ -133,13 +136,14 @@ async function fetchSetTypesFromTcgApi(tcgSetId: string): Promise<Map<string, st
     const res = await Promise.race([fetchPromise, timeoutPromise])
     if (!res.ok) {
       console.warn(`[import-card-data] TCG batch API ${res.status} for set ${tcgSetId}`)
-      return result
+      return { typeMap, totalCards }
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = await res.json() as any
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cards: any[] = json?.data ?? []
+    totalCards = cards.length
     console.log(`[import-card-data] TCG batch returned ${cards.length} cards for set ${tcgSetId}`)
 
     for (const card of cards) {
@@ -151,15 +155,15 @@ async function fetchSetTypesFromTcgApi(tcgSetId: string): Promise<Map<string, st
         const matched = types.filter(
           (t): t is string => typeof t === 'string' && POKEMON_ELEMENT_TYPES.has(t),
         )
-        if (matched.length > 0) result.set(normNum, matched.join('/'))
+        if (matched.length > 0) typeMap.set(normNum, matched.join('/'))
       }
     }
 
-    console.log(`[import-card-data] TCG batch type map: ${result.size} entries`)
+    console.log(`[import-card-data] TCG batch type map: ${typeMap.size} entries`)
   } catch (err) {
     console.warn(`[import-card-data] TCG batch fetch failed for set ${tcgSetId}:`, err)
   }
-  return result
+  return { typeMap, totalCards }
 }
 
 /**
@@ -484,8 +488,8 @@ export async function POST(request: NextRequest) {
         // the first card's dbId (e.g. "mcd25-3" → tcgSetId "mcd25"), then
         // fetch all cards for that set and build a normalizedNumber→type map.
         const tcgTypeMap = new Map<string, string>()
-        let tcgDebug: { firstId: string | null; tcgSetId: string | null; mapSize: number } = {
-          firstId: null, tcgSetId: null, mapSize: 0,
+        let tcgDebug: { firstId: string | null; tcgSetId: string | null; totalCards: number; mapSize: number } = {
+          firstId: null, tcgSetId: null, totalCards: 0, mapSize: 0,
         }
         if (lookupTypes) {
           const firstId = pkmnCards.find((c) => c.dbId)?.dbId ?? null
@@ -496,7 +500,8 @@ export async function POST(request: NextRequest) {
             tcgDebug.tcgSetId = tcgSetId
             console.log(`[import-card-data] TCG batch lookup for set ${tcgSetId} (from dbId ${firstId})`)
             const fetched = await fetchSetTypesFromTcgApi(tcgSetId)
-            for (const [k, v] of fetched) tcgTypeMap.set(k, v)
+            for (const [k, v] of fetched.typeMap) tcgTypeMap.set(k, v)
+            tcgDebug.totalCards = fetched.totalCards
             tcgDebug.mapSize = tcgTypeMap.size
           } else {
             console.warn('[import-card-data] lookupTypes enabled but no card has a dbId — skipping batch fetch')
