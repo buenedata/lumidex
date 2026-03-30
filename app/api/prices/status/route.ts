@@ -1,27 +1,15 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin'
 import { supabaseAdmin } from '@/lib/supabase'
 
 /**
- * GET /api/prices/status
+ * GET /api/prices/status?setId=sv1
  *
- * Returns a list of all sets with their price coverage statistics.
- * Admin-only endpoint used by the /admin/prices management page.
- *
- * Response shape:
- * {
- *   sets: Array<{
- *     set_id:        string
- *     name:          string
- *     setComplete:   number | null
- *     card_count:    number
- *     priced_count:  number
- *     product_count: number
- *     last_synced:   string | null   (ISO timestamp of most recent card_prices.fetched_at)
- *   }>
- * }
+ * Returns price coverage stats for a single set.
+ * If setId is omitted, returns a minimal list of all sets (id + name only)
+ * for populating the SetSelector dropdown.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     await requireAdmin()
   } catch (err) {
@@ -31,77 +19,83 @@ export async function GET() {
     )
   }
 
-  try {
-    // Fetch all sets
-    const { data: setsData, error: setsErr } = await supabaseAdmin
+  const setId = request.nextUrl.searchParams.get('setId')
+
+  // ── Set list mode (no setId) ──────────────────────────────────────────────
+  if (!setId) {
+    const { data, error } = await supabaseAdmin
       .from('sets')
-      .select('set_id, name, setComplete')
+      .select('set_id, name, series')
       .order('release_date', { ascending: false })
 
-    if (setsErr) throw setsErr
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
-    const sets = setsData ?? []
+    return NextResponse.json({
+      sets: (data ?? []).map(s => ({
+        set_id: s.set_id,
+        name:   s.name,
+        series: s.series,
+      })),
+    })
+  }
 
-    // For each set, count cards, priced cards, products, and last synced
-    // We do this in a single batch of parallel queries rather than N+1 queries.
-    const setIds = sets.map(s => s.set_id as string)
-
-    // Count cards grouped by set_id
-    const { data: cardCounts } = await supabaseAdmin
+  // ── Single-set stats mode ─────────────────────────────────────────────────
+  try {
+    // Card count for this set — use count: 'exact' to avoid row limits
+    const { count: cardCount, error: cardErr } = await supabaseAdmin
       .from('cards')
-      .select('set_id, id')
-      .in('set_id', setIds)
+      .select('id', { count: 'exact', head: true })
+      .eq('set_id', setId)
 
-    // Count priced cards (join card_prices → cards)
-    const { data: pricedCards } = await supabaseAdmin
-      .from('card_prices')
-      .select('card_id, cards!inner(set_id), fetched_at')
-      .in('cards.set_id', setIds)
+    if (cardErr) throw cardErr
 
-    // Count products per set
-    const { data: products } = await supabaseAdmin
+    // Priced card count — get all card UUIDs for the set, then count price rows
+    const { data: setCards, error: setCardsErr } = await supabaseAdmin
+      .from('cards')
+      .select('id')
+      .eq('set_id', setId)
+
+    if (setCardsErr) throw setCardsErr
+
+    const cardIds = (setCards ?? []).map(c => c.id as string)
+    let pricedCount = 0
+    let lastSynced: string | null = null
+
+    if (cardIds.length > 0) {
+      const { data: priceRows, error: priceErr } = await supabaseAdmin
+        .from('card_prices')
+        .select('card_id, fetched_at')
+        .in('card_id', cardIds)
+
+      if (priceErr) throw priceErr
+
+      pricedCount = (priceRows ?? []).length
+      const timestamps = (priceRows ?? []).map(r => r.fetched_at as string).filter(Boolean)
+      if (timestamps.length > 0) {
+        const sorted = timestamps.sort()
+        lastSynced = sorted[sorted.length - 1] ?? null
+      }
+    }
+
+    // Product count
+    const { count: productCount, error: prodErr } = await supabaseAdmin
       .from('set_products')
-      .select('set_id, id')
-      .in('set_id', setIds)
+      .select('id', { count: 'exact', head: true })
+      .eq('set_id', setId)
 
-    // Build lookup maps
-    const cardCountMap   = new Map<string, number>()
-    const pricedCountMap = new Map<string, number>()
-    const lastSyncedMap  = new Map<string, string>()
-    const productCountMap = new Map<string, number>()
+    if (prodErr) throw prodErr
 
-    for (const row of (cardCounts ?? [])) {
-      const sid = row.set_id as string
-      cardCountMap.set(sid, (cardCountMap.get(sid) ?? 0) + 1)
-    }
-
-    for (const row of (pricedCards ?? [])) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const sid = (row.cards as any)?.set_id as string | undefined
-      if (!sid) continue
-      pricedCountMap.set(sid, (pricedCountMap.get(sid) ?? 0) + 1)
-      const existing = lastSyncedMap.get(sid)
-      const fetched  = row.fetched_at as string
-      if (!existing || fetched > existing) lastSyncedMap.set(sid, fetched)
-    }
-
-    for (const row of (products ?? [])) {
-      const sid = row.set_id as string
-      productCountMap.set(sid, (productCountMap.get(sid) ?? 0) + 1)
-    }
-
-    const result = sets.map(s => ({
-      set_id:        s.set_id,
-      name:          s.name,
-      setComplete:   s.setComplete ?? null,
-      card_count:    cardCountMap.get(s.set_id as string) ?? 0,
-      priced_count:  pricedCountMap.get(s.set_id as string) ?? 0,
-      product_count: productCountMap.get(s.set_id as string) ?? 0,
-      last_synced:   lastSyncedMap.get(s.set_id as string) ?? null,
-    }))
-
-    return NextResponse.json({ sets: result })
-
+    return NextResponse.json({
+      stats: {
+        set_id:        setId,
+        card_count:    cardCount ?? 0,
+        priced_count:  pricedCount,
+        product_count: productCount ?? 0,
+        last_synced:   lastSynced,
+      },
+    })
   } catch (err) {
     console.error('[prices/status]', err)
     return NextResponse.json(

@@ -4,28 +4,27 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
 import { useRouter } from 'next/navigation'
+import { SetSelector } from '@/components/admin/SetSelector'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-interface SetPriceStatus {
-  set_id:       string
-  name:         string
-  setComplete:  number | null
-  card_count:   number
-  priced_count: number
-  product_count:number
-  last_synced:  string | null
+interface SetStats {
+  set_id:        string
+  card_count:    number
+  priced_count:  number
+  product_count: number
+  last_synced:   string | null
 }
 
 type SyncStatus = 'idle' | 'syncing' | 'done' | 'error'
 
 interface SyncState {
-  status:   SyncStatus
-  message:  string
-  matched:  number
-  total:    number
-  products: number
-  elapsed:  number
+  status:    SyncStatus
+  message:   string
+  matched:   number
+  total:     number
+  products:  number
+  elapsed:   number
   priceKeys?: string[]
 }
 
@@ -44,12 +43,11 @@ function timeAgo(iso: string | null): string {
   if (!iso) return 'Never'
   const diff = Date.now() - new Date(iso).getTime()
   const mins = Math.floor(diff / 60_000)
-  if (mins < 1)    return 'Just now'
-  if (mins < 60)   return `${mins}m ago`
+  if (mins < 1)  return 'Just now'
+  if (mins < 60) return `${mins}m ago`
   const hrs = Math.floor(mins / 60)
-  if (hrs < 24)    return `${hrs}h ago`
-  const days = Math.floor(hrs / 24)
-  return `${days}d ago`
+  if (hrs < 24)  return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -58,13 +56,14 @@ export default function AdminPricesPage() {
   const { user, profile, isLoading } = useAuthStore()
   const router = useRouter()
 
-  const [sets, setSets]       = useState<SetPriceStatus[]>([])
-  const [loading, setLoading] = useState(true)
-  const [fetchErr, setFetchErr] = useState<string | null>(null)
-
-  // Per-set sync state
-  const [syncStates, setSyncStates] = useState<Record<string, SyncState>>({})
-  const abortRefs = useRef<Record<string, AbortController>>({})
+  const [selectedSetId,   setSelectedSetId]   = useState<string | null>(null)
+  const [selectedSetName, setSelectedSetName] = useState<string | null>(null)
+  const [stats,           setStats]           = useState<SetStats | null>(null)
+  const [statsLoading,    setStatsLoading]    = useState(false)
+  const [syncState,       setSyncState]       = useState<SyncState>({
+    status: 'idle', message: '', matched: 0, total: 0, products: 0, elapsed: 0,
+  })
+  const abortRef = useRef<AbortController | null>(null)
 
   // ── Auth guard ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -74,35 +73,36 @@ export default function AdminPricesPage() {
     }
   }, [user, profile, isLoading, router])
 
-  // ── Load set price status ──────────────────────────────────────────────────
-  const loadStatus = useCallback(async () => {
-    setLoading(true)
-    setFetchErr(null)
+  // ── Load stats for selected set ────────────────────────────────────────────
+  const loadStats = useCallback(async (setId: string) => {
+    setStatsLoading(true)
+    setStats(null)
     try {
-      const res = await fetch('/api/prices/status')
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const json = await res.json()
-      setSets(json.sets ?? [])
-    } catch (e) {
-      setFetchErr(e instanceof Error ? e.message : 'Failed to load price status')
+      const res = await fetch(`/api/prices/status?setId=${encodeURIComponent(setId)}`)
+      if (res.ok) {
+        const json = await res.json()
+        setStats(json.stats ?? null)
+      }
     } finally {
-      setLoading(false)
+      setStatsLoading(false)
     }
   }, [])
 
-  useEffect(() => { loadStatus() }, [loadStatus])
+  // ── Set selection ──────────────────────────────────────────────────────────
+  const handleSetSelect = useCallback((setId: string, setName: string) => {
+    setSelectedSetId(setId)
+    setSelectedSetName(setName)
+    setSyncState({ status: 'idle', message: '', matched: 0, total: 0, products: 0, elapsed: 0 })
+    loadStats(setId)
+  }, [loadStats])
 
-  // ── Sync a single set ──────────────────────────────────────────────────────
+  // ── Sync selected set ──────────────────────────────────────────────────────
   const syncSet = useCallback(async (setId: string) => {
-    // Abort any ongoing sync for this set
-    abortRefs.current[setId]?.abort()
+    abortRef.current?.abort()
     const controller = new AbortController()
-    abortRefs.current[setId] = controller
+    abortRef.current = controller
 
-    setSyncStates(prev => ({
-      ...prev,
-      [setId]: { status: 'syncing', message: 'Starting…', matched: 0, total: 0, products: 0, elapsed: 0 },
-    }))
+    setSyncState({ status: 'syncing', message: 'Starting…', matched: 0, total: 0, products: 0, elapsed: 0 })
 
     try {
       const res = await fetch('/api/prices/sync', {
@@ -112,9 +112,7 @@ export default function AdminPricesPage() {
         signal:  controller.signal,
       })
 
-      if (!res.ok || !res.body) {
-        throw new Error(`HTTP ${res.status}`)
-      }
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
 
       const reader  = res.body.getReader()
       const decoder = new TextDecoder()
@@ -134,78 +132,47 @@ export default function AdminPricesPage() {
             const event = JSON.parse(line.slice(6))
 
             if (event.type === 'error') {
-              setSyncStates(prev => ({
-                ...prev,
-                [setId]: { ...prev[setId], status: 'error', message: event.message ?? 'Unknown error' },
-              }))
-              break
+              setSyncState(prev => ({ ...prev, status: 'error', message: event.message ?? 'Error' }))
             }
-
             if (event.type === 'progress') {
-              setSyncStates(prev => ({
+              setSyncState(prev => ({
                 ...prev,
-                [setId]: {
-                  ...prev[setId],
-                  status:  'syncing',
-                  message: `Page ${event.page} — ${event.matched} matched`,
-                  matched: event.matched ?? prev[setId].matched,
-                  total:   event.totalApiCards ?? prev[setId].total,
-                },
+                status:  'syncing',
+                message: `Page ${event.page} — ${event.matched ?? prev.matched} matched`,
+                matched: event.matched ?? prev.matched,
+                total:   event.totalApiCards ?? prev.total,
               }))
             }
-
             if (event.type === 'products') {
-              setSyncStates(prev => ({
-                ...prev,
-                [setId]: { ...prev[setId], products: event.count },
-              }))
+              setSyncState(prev => ({ ...prev, products: event.count }))
             }
-
             if (event.type === 'debug') {
-              setSyncStates(prev => ({
-                ...prev,
-                [setId]: { ...prev[setId], priceKeys: event.priceKeys },
-              }))
+              setSyncState(prev => ({ ...prev, priceKeys: event.priceKeys }))
             }
-
             if (event.type === 'complete') {
-              setSyncStates(prev => ({
-                ...prev,
-                [setId]: {
-                  status:   'done',
-                  message:  `${event.upsertedCount} prices saved · ${event.productCount} products · ${formatElapsed(event.elapsed)}`,
-                  matched:  event.matched,
-                  total:    event.matched + event.unmatched,
-                  products: event.productCount,
-                  elapsed:  event.elapsed,
-                  priceKeys: prev[setId]?.priceKeys,
-                },
-              }))
-              // Reload status to update coverage numbers
-              await loadStatus()
+              setSyncState({
+                status:   'done',
+                message:  `${event.upsertedCount} prices · ${event.productCount} products · ${formatElapsed(event.elapsed)}`,
+                matched:  event.matched,
+                total:    event.matched + event.unmatched,
+                products: event.productCount,
+                elapsed:  event.elapsed,
+                priceKeys: undefined,
+              })
+              loadStats(setId)
             }
-          } catch { /* malformed line — skip */ }
+          } catch { /* bad event line */ }
         }
       }
     } catch (e) {
       if ((e as Error).name === 'AbortError') return
-      setSyncStates(prev => ({
+      setSyncState(prev => ({
         ...prev,
-        [setId]: {
-          ...prev[setId],
-          status:  'error',
-          message: e instanceof Error ? e.message : 'Sync failed',
-        },
+        status:  'error',
+        message: e instanceof Error ? e.message : 'Sync failed',
       }))
     }
-  }, [loadStatus])
-
-  // ── Sync all sets (sequential to avoid rate limits) ────────────────────────
-  const syncAll = useCallback(async () => {
-    for (const s of sets) {
-      await syncSet(s.set_id)
-    }
-  }, [sets, syncSet])
+  }, [loadStats])
 
   // ── Render ─────────────────────────────────────────────────────────────────
   if (isLoading || !user || profile?.role !== 'admin') {
@@ -216,9 +183,11 @@ export default function AdminPricesPage() {
     )
   }
 
+  const pct = stats ? coverage(stats.priced_count, stats.card_count) : 0
+
   return (
     <div className="min-h-screen bg-black text-white">
-      <div className="max-w-6xl mx-auto px-4 py-12">
+      <div className="max-w-3xl mx-auto px-4 py-12">
 
         {/* Header */}
         <div className="mb-8">
@@ -229,159 +198,139 @@ export default function AdminPricesPage() {
             <span>←</span>
             <span>Back to Admin</span>
           </Link>
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-1">
-                <span className="text-3xl">💰</span>
-                <h1 className="text-3xl font-bold">Price Data Sync</h1>
-              </div>
-              <p className="text-gray-400 text-sm">
-                Fetches TCGPlayer + CardMarket prices (and graded / sealed product prices where available)
-                from the Pokémon TCG API via RapidAPI. Prices are cached in the database.
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={loadStatus}
-                className="px-4 py-2 text-sm border border-gray-600 rounded-lg hover:border-gray-400 transition-colors text-gray-300 hover:text-white"
-              >
-                Refresh
-              </button>
-              <button
-                onClick={syncAll}
-                className="px-4 py-2 text-sm bg-yellow-500 hover:bg-yellow-400 text-black font-semibold rounded-lg transition-colors"
-              >
-                Sync All Sets
-              </button>
-            </div>
+          <div className="flex items-center gap-3 mb-1">
+            <span className="text-3xl">💰</span>
+            <h1 className="text-3xl font-bold">Price Data Sync</h1>
           </div>
+          <p className="text-gray-400 text-sm">
+            Sync TCGPlayer + CardMarket prices (and sealed products / graded prices where available)
+            from the Pokémon TCG API via RapidAPI.
+          </p>
         </div>
 
-        {/* Error */}
-        {fetchErr && (
-          <div className="mb-6 p-4 bg-red-900/40 border border-red-700 rounded-lg text-red-300 text-sm">
-            {fetchErr}
+        {/* Set Selector */}
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-400 mb-2">Select a set to sync</label>
+          <SetSelector
+            onSetSelect={handleSetSelect}
+            selectedSetId={selectedSetId}
+          />
+        </div>
+
+        {/* Stats + Sync panel — only shown once a set is selected */}
+        {selectedSetId && (
+          <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 space-y-5">
+
+            {/* Set name */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-white">{selectedSetName}</h2>
+                <p className="text-xs text-gray-500 mt-0.5">{selectedSetId}</p>
+              </div>
+              <button
+                onClick={() => syncSet(selectedSetId)}
+                disabled={syncState.status === 'syncing'}
+                className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors"
+              >
+                {syncState.status === 'syncing' ? 'Syncing…' : 'Sync Prices'}
+              </button>
+            </div>
+
+            {/* Stats grid */}
+            {statsLoading ? (
+              <div className="text-gray-600 text-sm animate-pulse">Loading stats…</div>
+            ) : stats ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {/* Coverage */}
+                <div className="bg-gray-800 rounded-lg p-3">
+                  <div className="text-xs text-gray-500 mb-1">Coverage</div>
+                  <div className={`text-xl font-bold ${pct === 100 ? 'text-green-400' : pct > 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                    {pct}%
+                  </div>
+                  <div className="mt-1.5 h-1 bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${pct === 100 ? 'bg-green-500' : pct > 50 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">{stats.priced_count} / {stats.card_count} cards</div>
+                </div>
+
+                {/* Cards */}
+                <div className="bg-gray-800 rounded-lg p-3">
+                  <div className="text-xs text-gray-500 mb-1">Total Cards</div>
+                  <div className="text-xl font-bold text-white">{stats.card_count}</div>
+                  <div className="text-xs text-gray-500 mt-1">in database</div>
+                </div>
+
+                {/* Products */}
+                <div className="bg-gray-800 rounded-lg p-3">
+                  <div className="text-xs text-gray-500 mb-1">Sealed Products</div>
+                  <div className={`text-xl font-bold ${stats.product_count > 0 ? 'text-green-400' : 'text-gray-600'}`}>
+                    {stats.product_count}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">booster packs, ETBs…</div>
+                </div>
+
+                {/* Last synced */}
+                <div className="bg-gray-800 rounded-lg p-3">
+                  <div className="text-xs text-gray-500 mb-1">Last Synced</div>
+                  <div className="text-sm font-semibold text-white">{timeAgo(stats.last_synced)}</div>
+                  {stats.last_synced && (
+                    <div className="text-xs text-gray-500 mt-1">
+                      {new Date(stats.last_synced).toLocaleDateString()}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
+            {/* Sync progress / result */}
+            {syncState.status !== 'idle' && (
+              <div className={`rounded-lg p-4 text-sm border ${
+                syncState.status === 'error'  ? 'bg-red-900/30 border-red-700 text-red-300' :
+                syncState.status === 'done'   ? 'bg-green-900/30 border-green-700 text-green-300' :
+                'bg-indigo-900/30 border-indigo-700 text-indigo-300'
+              }`}>
+                <div className="flex items-center gap-2">
+                  {syncState.status === 'syncing' && (
+                    <span className="w-3 h-3 rounded-full bg-indigo-400 animate-pulse shrink-0" />
+                  )}
+                  {syncState.status === 'done'  && <span>✅</span>}
+                  {syncState.status === 'error' && <span>❌</span>}
+                  <span>{syncState.message}</span>
+                </div>
+
+                {/* Progress bar during sync */}
+                {syncState.status === 'syncing' && syncState.total > 0 && (
+                  <div className="mt-3 h-1.5 bg-indigo-900 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-indigo-400 rounded-full transition-all"
+                      style={{ width: `${Math.round((syncState.matched / syncState.total) * 100)}%` }}
+                    />
+                  </div>
+                )}
+
+                {/* Graded price key debug */}
+                {syncState.priceKeys && syncState.priceKeys.length > 0 && (
+                  <details className="mt-3">
+                    <summary className="text-xs text-indigo-400 cursor-pointer hover:text-indigo-300">
+                      TCGPlayer price keys seen ({syncState.priceKeys.length})
+                    </summary>
+                    <div className="mt-1 font-mono text-xs text-gray-400 space-y-0.5">
+                      {syncState.priceKeys.map(k => <div key={k}>{k}</div>)}
+                    </div>
+                  </details>
+                )}
+              </div>
+            )}
           </div>
         )}
 
-        {/* Table */}
-        {loading ? (
-          <div className="text-center py-16 text-gray-500 animate-pulse">Loading set data…</div>
-        ) : sets.length === 0 ? (
-          <div className="text-center py-16 text-gray-500">No sets found in database.</div>
-        ) : (
-          <div className="border border-gray-800 rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-gray-900 text-gray-400 text-xs uppercase tracking-wider">
-                  <th className="text-left px-5 py-3">Set</th>
-                  <th className="text-right px-4 py-3">Cards</th>
-                  <th className="text-right px-4 py-3">Coverage</th>
-                  <th className="text-right px-4 py-3">Products</th>
-                  <th className="text-right px-4 py-3">Last Synced</th>
-                  <th className="text-right px-5 py-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-800">
-                {sets.map(s => {
-                  const pct  = coverage(s.priced_count, s.card_count)
-                  const sync = syncStates[s.set_id]
-
-                  return (
-                    <tr key={s.set_id} className="hover:bg-gray-900/50 transition-colors">
-                      {/* Set name */}
-                      <td className="px-5 py-3">
-                        <div className="font-medium text-white">{s.name}</div>
-                        <div className="text-xs text-gray-500 mt-0.5">{s.set_id}</div>
-                      </td>
-
-                      {/* Card count */}
-                      <td className="px-4 py-3 text-right text-gray-300">
-                        {s.priced_count} / {s.card_count}
-                      </td>
-
-                      {/* Coverage bar */}
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <div className="w-24 h-1.5 bg-gray-800 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all ${
-                                pct === 100 ? 'bg-green-500' : pct > 50 ? 'bg-yellow-500' : 'bg-red-500'
-                              }`}
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                          <span className={`text-xs font-medium w-8 text-right ${
-                            pct === 100 ? 'text-green-400' : pct > 50 ? 'text-yellow-400' : 'text-red-400'
-                          }`}>
-                            {pct}%
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Products */}
-                      <td className="px-4 py-3 text-right text-gray-400">
-                        {s.product_count > 0 ? (
-                          <span className="text-green-400">{s.product_count}</span>
-                        ) : (
-                          <span className="text-gray-600">—</span>
-                        )}
-                      </td>
-
-                      {/* Last synced */}
-                      <td className="px-4 py-3 text-right text-gray-500 text-xs">
-                        {timeAgo(s.last_synced)}
-                      </td>
-
-                      {/* Sync action */}
-                      <td className="px-5 py-3 text-right">
-                        <div className="flex flex-col items-end gap-1">
-                          <button
-                            onClick={() => syncSet(s.set_id)}
-                            disabled={sync?.status === 'syncing'}
-                            className="px-3 py-1.5 text-xs font-medium bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors"
-                          >
-                            {sync?.status === 'syncing' ? 'Syncing…' : 'Sync'}
-                          </button>
-
-                          {/* Status message */}
-                          {sync && (
-                            <span className={`text-xs max-w-[180px] text-right leading-tight ${
-                              sync.status === 'error'  ? 'text-red-400' :
-                              sync.status === 'done'   ? 'text-green-400' :
-                              'text-yellow-400'
-                            }`}>
-                              {sync.message}
-                            </span>
-                          )}
-
-                          {/* Debug: price keys seen */}
-                          {sync?.priceKeys && sync.priceKeys.length > 0 && (
-                            <details className="text-right">
-                              <summary className="text-xs text-gray-600 cursor-pointer hover:text-gray-400">
-                                Price keys ({sync.priceKeys.length})
-                              </summary>
-                              <div className="text-xs text-gray-500 mt-1 space-y-0.5 text-right">
-                                {sync.priceKeys.map(k => (
-                                  <div key={k} className="font-mono">{k}</div>
-                                ))}
-                              </div>
-                            </details>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Legend */}
-        <p className="mt-6 text-xs text-gray-600 text-center">
-          Coverage = cards with at least one TCGPlayer or CardMarket price in the database. &nbsp;
-          Products = sealed products (booster packs, ETBs, boxes) synced from the API.
+        {/* Footer note */}
+        <p className="mt-8 text-xs text-gray-600 text-center">
+          Prices are cached — re-sync a set at any time. &nbsp;
+          Graded price key names are logged to the server console on the first sync.
         </p>
       </div>
     </div>
