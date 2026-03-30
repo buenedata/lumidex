@@ -283,10 +283,14 @@ export async function POST(request: NextRequest) {
         // Log all price keys seen on the first card — helps verify graded key names
         let gradedKeysLogged = false
 
+        // Determine which filter syntax the API uses on the first page
+        // We try q=set.id:{setId} first (pokemontcg.io v2 standard), then fallback to set_id=
+        let cardQueryFilter = `q=set.id:${encodeURIComponent(setId)}`
+
         let hasMore = true
         while (hasMore) {
           const res = await rapidApiFetch(
-            `/cards?q=set.id:${encodeURIComponent(setId)}&per_page=${PAGE_SIZE}&page=${page}`,
+            `/cards?${cardQueryFilter}&per_page=${PAGE_SIZE}&page=${page}`,
           )
 
           if (!res.ok) {
@@ -298,18 +302,24 @@ export async function POST(request: NextRequest) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const json = await res.json() as RapidApiResponse & Record<string, any>
 
+          // Support multiple response shapes
+          const apiCards: RapidApiCard[] = json.data ?? json.cards ?? json.results ?? []
+          totalApiCards = json.totalCount ?? json.total ?? json.count ?? 0
+
           // Probe the response shape on the first page and emit for debugging
           if (page === 1) {
             const topKeys = Object.keys(json)
-            const firstItem = (json.data ?? json.cards ?? json.results ?? [])[0]
+            const firstItem = apiCards[0]
             const cardKeys = firstItem ? Object.keys(firstItem) : []
             console.log(`[prices/sync] Response top-level keys:`, topKeys)
+            console.log(`[prices/sync] Cards returned: ${apiCards.length}, totalApiCards: ${totalApiCards}`)
             console.log(`[prices/sync] First card keys:`, cardKeys)
             emit({
               type:        'api_shape',
               topKeys,
               cardKeys,
               rawCounts: {
+                'apiCards.length': apiCards.length,
                 data:       json.data?.length,
                 cards:      json.cards?.length,
                 results:    json.results?.length,
@@ -318,11 +328,52 @@ export async function POST(request: NextRequest) {
                 count:      json.count,
               },
             })
-          }
 
-          // Support multiple response shapes
-          const apiCards: RapidApiCard[] = json.data ?? json.cards ?? json.results ?? []
-          totalApiCards = json.totalCount ?? json.total ?? json.count ?? 0
+            // If q=set.id: returned 0 cards, try the set_id= param format
+            if (apiCards.length === 0 && cardQueryFilter.startsWith('q=')) {
+              console.log(`[prices/sync] q=set.id: returned 0 cards — retrying with set_id= param`)
+              cardQueryFilter = `set_id=${encodeURIComponent(setId)}`
+              emit({ type: 'debug', message: `q=set.id: returned 0 — retrying with set_id=` })
+
+              const retryRes = await rapidApiFetch(
+                `/cards?${cardQueryFilter}&per_page=${PAGE_SIZE}&page=${page}`,
+              )
+              if (retryRes.ok) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const retryJson = await retryRes.json() as RapidApiResponse & Record<string, any>
+                const retryCards: RapidApiCard[] = retryJson.data ?? retryJson.cards ?? retryJson.results ?? []
+                totalApiCards = retryJson.totalCount ?? retryJson.total ?? retryJson.count ?? 0
+                emit({
+                  type: 'api_shape',
+                  topKeys:  Object.keys(retryJson),
+                  cardKeys: retryCards[0] ? Object.keys(retryCards[0]) : [],
+                  rawCounts: {
+                    'retry apiCards.length': retryCards.length,
+                    totalCount: retryJson.totalCount,
+                    total:      retryJson.total,
+                    count:      retryJson.count,
+                  },
+                })
+                // If the retry worked, use those cards instead
+                if (retryCards.length > 0) {
+                  // Process retry cards by appending to the outer scope
+                  for (const apiCard of retryCards) {
+                    if (!apiCard.id) { unmatched++; continue }
+                    const normNum = normalizeNumber(apiCard.number ?? '')
+                    const cardUuid = apiIdMap.get(apiCard.id) ?? numberMap.get(normNum)
+                    if (!cardUuid) { unmatched++; continue }
+                    matched++
+                    priceUpserts.push(buildCardPriceUpsert(cardUuid, apiCard.id, apiCard))
+                    if (missingApiId.has(cardUuid)) apiIdBackfills.push({ uuid: cardUuid, apiCardId: apiCard.id })
+                  }
+                  hasMore = page * PAGE_SIZE < totalApiCards
+                  page++
+                  emit({ type: 'progress', page: page - 1, fetched: retryCards.length, matched, unmatched, totalApiCards })
+                  continue
+                }
+              }
+            }
+          } // end if (page === 1)
 
           // Log price keys on first card of first page
           if (!gradedKeysLogged && apiCards.length > 0) {
