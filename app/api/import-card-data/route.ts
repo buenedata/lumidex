@@ -569,11 +569,15 @@ export async function POST(request: NextRequest) {
             pkmnCard.number.includes('/') &&
             (!dbCard.number.includes('/') || overwrite)
 
-          // Whether the type field needs to be written:
-          //  • DB has no type and pkmn.gg resolved one → fill it
-          //  • overwrite is on and pkmn.gg has a type → replace it
+          // Whether the DB type column could accept a write at all
+          const typeCouldUpdate = dbCard.type === null || overwrite
+
+          // typeNeedsUpdate: there is something to write.
+          //  • pkmn.gg already resolved a type, OR
+          //  • lookupTypes is on and the card has a dbId we can query
           const typeNeedsUpdate =
-            pkmnCard.type !== null && (dbCard.type === null || overwrite)
+            typeCouldUpdate &&
+            (pkmnCard.type !== null || (lookupTypes && !!pkmnCard.dbId))
 
           // Skip the card entirely when overwrite is off and all importable
           // fields (artist, supertype, name, number, type, image) are already populated.
@@ -620,12 +624,16 @@ export async function POST(request: NextRequest) {
             if (resolvedType) console.log(`[import-card-data] TCG type lookup → ${pkmnCard.dbId} = ${resolvedType}`)
           }
 
-          // Write element type (Fire, Water, …) when resolved and the DB field
-          // is blank (or overwrite is on).
-          if (typeNeedsUpdate && resolvedType !== null) updatePayload.type = resolvedType
-          // Clear corrupted type values from previous bad imports (language codes like "EN")
-          // that were written before the types parser was in place.
-          if (!typeNeedsUpdate && dbCard.type && /^[A-Z]{1,3}$/.test(dbCard.type)) {
+          // Write element type (Fire, Water, …) when resolved.
+          // Use typeCouldUpdate (not typeNeedsUpdate) so TCG-lookup results
+          // are always written even though typeNeedsUpdate was true only
+          // because of the fallback branch.
+          if (resolvedType !== null && typeCouldUpdate) {
+            updatePayload.type = resolvedType
+          }
+          // Clear corrupted type values (language codes like "EN") left from
+          // old imports when no valid type was resolved.
+          if (resolvedType === null && dbCard.type && /^[A-Z]{1,3}$/.test(dbCard.type)) {
             updatePayload.type = null
           }
 
