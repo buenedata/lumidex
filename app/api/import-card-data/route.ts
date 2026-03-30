@@ -109,9 +109,6 @@ interface PkmnCardData {
  * Given a pokemontcg.io set ID (e.g. "mcd25"), fetch ALL cards for that set
  * in one API call and return a Map<normalizedNumber, elementType>.
  *
- * pokemontcg.io card IDs follow the pattern "{setId}-{number}", e.g. "mcd25-3".
- * We extract the number by taking everything after the last "-".
- *
  * Returns an empty Map on any error so the import degrades gracefully.
  */
 async function fetchSetTypesFromTcgApi(tcgSetId: string): Promise<Map<string, string>> {
@@ -122,11 +119,18 @@ async function fetchSetTypesFromTcgApi(tcgSetId: string): Promise<Map<string, st
       headers['X-Api-Key'] = process.env.POKEMON_TCG_API_KEY
     }
 
-    // pageSize=250 covers the largest sets; add pagination if needed in future.
-    const url = `https://api.pokemontcg.io/v2/cards?q=set.id:${encodeURIComponent(tcgSetId)}&pageSize=250&select=number,types`
+    // pageSize=250 covers the largest sets.
+    // Note: no AbortSignal.timeout() — requires Node 17.3+; use promise-race instead.
+    const url = `https://api.pokemontcg.io/v2/cards?q=set.id:${encodeURIComponent(tcgSetId)}&pageSize=250`
     console.log('[import-card-data] TCG batch fetch:', url)
 
-    const res = await fetch(url, { headers, signal: AbortSignal.timeout(15000) })
+    const fetchPromise = fetch(url, { headers })
+    // 20 s manual timeout compatible with all Node versions
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('TCG batch fetch timed out after 20s')), 20000),
+    )
+
+    const res = await Promise.race([fetchPromise, timeoutPromise])
     if (!res.ok) {
       console.warn(`[import-card-data] TCG batch API ${res.status} for set ${tcgSetId}`)
       return result
@@ -475,25 +479,31 @@ export async function POST(request: NextRequest) {
           return
         }
 
-        emit({ type: 'start', payload: { total: pkmnCards.length } })
-
         // ── Batch-fetch element types from pokemontcg.io (one request) ───────
         // Only runs when lookupTypes is enabled. Extract the TCG set ID from
         // the first card's dbId (e.g. "mcd25-3" → tcgSetId "mcd25"), then
         // fetch all cards for that set and build a normalizedNumber→type map.
         const tcgTypeMap = new Map<string, string>()
+        let tcgDebug: { firstId: string | null; tcgSetId: string | null; mapSize: number } = {
+          firstId: null, tcgSetId: null, mapSize: 0,
+        }
         if (lookupTypes) {
           const firstId = pkmnCards.find((c) => c.dbId)?.dbId ?? null
+          tcgDebug.firstId = firstId
           if (firstId) {
             // TCG set ID = everything before the last "-"  ("mcd25-3" → "mcd25")
             const tcgSetId = firstId.split('-').slice(0, -1).join('-')
+            tcgDebug.tcgSetId = tcgSetId
             console.log(`[import-card-data] TCG batch lookup for set ${tcgSetId} (from dbId ${firstId})`)
             const fetched = await fetchSetTypesFromTcgApi(tcgSetId)
             for (const [k, v] of fetched) tcgTypeMap.set(k, v)
+            tcgDebug.mapSize = tcgTypeMap.size
           } else {
             console.warn('[import-card-data] lookupTypes enabled but no card has a dbId — skipping batch fetch')
           }
         }
+
+        emit({ type: 'start', payload: { total: pkmnCards.length, tcgDebug: lookupTypes ? tcgDebug : undefined } })
 
         // ── Process each card ────────────────────────────────────────────────
         let succeeded = 0

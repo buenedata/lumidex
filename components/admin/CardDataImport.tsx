@@ -4,8 +4,15 @@ import { useState } from 'react'
 
 // ── SSE event type definitions ────────────────────────────────────────────────
 
+interface TcgDebug {
+  firstId: string | null
+  tcgSetId: string | null
+  mapSize: number
+}
+
 interface StartPayload {
   total: number
+  tcgDebug?: TcgDebug
 }
 
 export interface ProgressPayload {
@@ -78,6 +85,7 @@ export function CardDataImport({ setId, onComplete }: Props) {
   const [isRunning, setIsRunning] = useState(false)
   const [isDone, setIsDone] = useState(false)
   const [total, setTotal] = useState(0)
+  const [tcgDebug, setTcgDebug] = useState<TcgDebug | null>(null)
   const [results, setResults] = useState<ProgressPayload[]>([])
   const [summary, setSummary] = useState({ succeeded: 0, skipped: 0, failed: 0, no_match: 0, created: 0 })
   const [fatalError, setFatalError] = useState<string | null>(null)
@@ -97,6 +105,7 @@ export function CardDataImport({ setId, onComplete }: Props) {
     setResults([])
     setSummary({ succeeded: 0, skipped: 0, failed: 0, no_match: 0, created: 0 })
     setTotal(0)
+    setTcgDebug(null)
     setFatalError(null)
 
     const res = await fetch('/api/import-card-data', {
@@ -133,6 +142,7 @@ export function CardDataImport({ setId, onComplete }: Props) {
 
         if (event.type === 'start') {
           setTotal(event.payload.total)
+          if (event.payload.tcgDebug) setTcgDebug(event.payload.tcgDebug)
         } else if (event.type === 'progress') {
           const p = event.payload
           setResults((prev) => [...prev, p])
@@ -189,6 +199,7 @@ export function CardDataImport({ setId, onComplete }: Props) {
     setResults([])
     setSummary({ succeeded: 0, skipped: 0, failed: 0, no_match: 0, created: 0 })
     setTotal(0)
+    setTcgDebug(null)
     setFatalError(null)
     setPreviewData(null)
     setPreviewError(null)
@@ -381,6 +392,23 @@ export function CardDataImport({ setId, onComplete }: Props) {
               style={{ width: `${progressPct}%` }}
             />
           </div>
+        </div>
+      )}
+
+      {/* ── TCG type lookup debug notice ──────────────────────────────────── */}
+      {tcgDebug && (
+        <div className={`text-xs px-3 py-2 rounded-lg border ${
+          tcgDebug.mapSize > 0
+            ? 'bg-blue-900/20 border-blue-500/30 text-blue-300'
+            : 'bg-yellow-900/20 border-yellow-500/30 text-yellow-300'
+        }`}>
+          {tcgDebug.mapSize > 0 ? (
+            <>🔍 TCG type lookup: set <code className="font-mono">{tcgDebug.tcgSetId}</code> — {tcgDebug.mapSize} card type{tcgDebug.mapSize !== 1 ? 's' : ''} fetched</>
+          ) : tcgDebug.firstId ? (
+            <>⚠️ TCG type lookup: fetched set <code className="font-mono">{tcgDebug.tcgSetId}</code> but got 0 types — check the set ID</>
+          ) : (
+            <>⚠️ TCG type lookup: no card with a pokemontcg.io-format ID found (card.id missing or no hyphen)</>
+          )}
         </div>
       )}
 
