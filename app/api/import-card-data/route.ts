@@ -193,30 +193,37 @@ async function extractCardDataFromPkmnGg(pkmnGgUrl: string, setTotal: number | n
       const name = rawName ? rawName.replace(/\bex\b/g, 'EX') : null
 
       // ── Element type ──────────────────────────────────────────────────────
-      //    Priority order for resolving the element type:
-      //      1. card.types  — standard pokemontcg.io array, e.g. ["Fire"]
-      //         (absent on some pkmn.gg set pages such as promo sets)
-      //      2. card.category — pkmn.gg-specific flat field that maps to the
-      //         element type on set pages that omit the types array
-      //      3. card.type   — singular flat field, last resort
-      //    Language codes (EN, JA, …) are filtered out in all cases.
-      const rawTypes: unknown = card.types
-      let elementTypes: string[] = Array.isArray(rawTypes)
-        ? rawTypes.filter(
-            (t): t is string =>
-              typeof t === 'string' && POKEMON_ELEMENT_TYPES.has(t),
-          )
-        : []
+      //    pkmn.gg exposes the element type in multiple places depending on
+      //    the set page version.  Check them all; first match wins:
+      //      1. card.category — pkmn.gg's own flat field ("Fire", "Water", …)
+      //         Present on most set pages including promo sets.
+      //      2. card.types   — pokemontcg.io array (["Fire"]), may be absent.
+      //      3. card.type    — singular flat field, last resort.
+      //    Language codes (EN, JA, …) are rejected by the allowlist in all cases.
 
-      if (elementTypes.length === 0) {
-        // Try flat fallback fields when the types array is absent
-        const flat = card.category ?? card.type
-        if (typeof flat === 'string' && POKEMON_ELEMENT_TYPES.has(flat)) {
-          elementTypes = [flat]
+      // 1. category (flat string)
+      let elementType: string | null = null
+      if (typeof card.category === 'string' && POKEMON_ELEMENT_TYPES.has(card.category)) {
+        elementType = card.category
+      }
+
+      // 2. types array
+      if (!elementType) {
+        const rawTypes: unknown = card.types
+        if (Array.isArray(rawTypes)) {
+          const matched = rawTypes.filter(
+            (t): t is string => typeof t === 'string' && POKEMON_ELEMENT_TYPES.has(t),
+          )
+          if (matched.length > 0) elementType = matched.join('/')
         }
       }
 
-      const type: string | null = elementTypes.length > 0 ? elementTypes.join('/') : null
+      // 3. type singular
+      if (!elementType && typeof card.type === 'string' && POKEMON_ELEMENT_TYPES.has(card.type)) {
+        elementType = card.type
+      }
+
+      const type: string | null = elementType
 
       // ── Supertype: Pokemon/Trainer/Energy ─────────────────────────────────
       const supertype: string | null = card.supertype ? String(card.supertype) : null
@@ -503,18 +510,21 @@ export async function POST(request: NextRequest) {
             pkmnCard.number.includes('/') &&
             (!dbCard.number.includes('/') || overwrite)
 
+          // Whether the type field needs to be written:
+          //  • DB has no type and pkmn.gg resolved one → fill it
+          //  • overwrite is on and pkmn.gg has a type → replace it
+          const typeNeedsUpdate =
+            pkmnCard.type !== null && (dbCard.type === null || overwrite)
+
           // Skip the card entirely when overwrite is off and all importable
-          // fields (artist, supertype, name, number, image) are already populated.
-          // Note: dbCard.type (element type) is intentionally excluded here —
-          // pkmn.gg set pages do not expose per-card element types, so that
-          // field can never be filled by this import route and must not block
-          // the "already full" short-circuit.
+          // fields (artist, supertype, name, number, type, image) are already populated.
           const alreadyFull =
             !overwrite &&
             dbCard.artist !== null &&
             dbCard.supertype !== null &&
             !nameNeedsUpdate &&
             !numberNeedsUpdate &&
+            !typeNeedsUpdate &&
             !needsImage
 
           if (alreadyFull) {
@@ -543,10 +553,12 @@ export async function POST(request: NextRequest) {
           if (numberNeedsUpdate) updatePayload.number = pkmnCard.number
           // Populate name from pkmn.gg when the DB entry is blank or overwrite is on
           if (nameNeedsUpdate && pkmnCard.name !== null) updatePayload.name = pkmnCard.name
+          // Write element type (Fire, Water, …) when pkmn.gg resolved one and the
+          // DB field is blank (or overwrite is on).
+          if (typeNeedsUpdate && pkmnCard.type !== null) updatePayload.type = pkmnCard.type
           // Clear corrupted type values from previous bad imports (language codes like "EN")
-          // pkmn.gg set pages never provide element types — any 1-3 uppercase letter value
-          // in the type column is a language/category code that should be nulled out.
-          if (dbCard.type && /^[A-Z]{1,3}$/.test(dbCard.type)) {
+          // that were written before the types parser was in place.
+          if (!typeNeedsUpdate && dbCard.type && /^[A-Z]{1,3}$/.test(dbCard.type)) {
             updatePayload.type = null
           }
 
