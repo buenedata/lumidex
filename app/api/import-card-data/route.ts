@@ -73,10 +73,16 @@ async function downloadAndStoreCardImage(
 
 // ── pkmn.gg scraping ─────────────────────────────────────────────────────────
 
+/** Known Pokémon element types as used by pokemontcg.io */
+const POKEMON_ELEMENT_TYPES = new Set([
+  'Grass', 'Fire', 'Water', 'Lightning', 'Psychic',
+  'Fighting', 'Darkness', 'Metal', 'Fairy', 'Dragon', 'Colorless',
+])
+
 interface PkmnCardData {
   /**
-   * Card number exactly as returned by pkmn.gg, e.g. "25" or "TG05".
-   * No slash-total suffix — that data is not reliably present in the pkmn.gg payload.
+   * Card number in "X/Y" format when the set total is known, e.g. "3/15".
+   * Falls back to the bare number from pkmn.gg (e.g. "003") when total is unavailable.
    */
   number: string
   /** Pokémon / card name as returned by pkmn.gg — "ex" already normalised to "EX" */
@@ -84,7 +90,7 @@ interface PkmnCardData {
   artist: string | null
   supertype: string | null
   rarity: string | null
-  /** Element type — always null for pkmn.gg set-page imports (element types not available) */
+  /** Element type, e.g. "Fire" or "Water/Psychic" — parsed from pkmn.gg card.types */
   type: string | null
   /** Full URL to the large card image from pokemontcg.io */
   largeImageUrl: string | null
@@ -97,8 +103,11 @@ interface PkmnCardData {
  * pkmn.gg is a Next.js app — its __NEXT_DATA__ blob contains structured card
  * data sourced from pokemontcg.io, including name, artist, hp, supertype,
  * subtypes and types.
+ *
+ * @param setTotal - DB setTotal value used as fallback when pkmn.gg doesn't
+ *   include a totalDisplay field (common on promo/unusual sets).
  */
-async function extractCardDataFromPkmnGg(pkmnGgUrl: string): Promise<PkmnCardData[]> {
+async function extractCardDataFromPkmnGg(pkmnGgUrl: string, setTotal: number | null): Promise<PkmnCardData[]> {
   const response = await fetch(pkmnGgUrl, {
     headers: {
       'User-Agent':
@@ -144,7 +153,6 @@ async function extractCardDataFromPkmnGg(pkmnGgUrl: string): Promise<PkmnCardDat
   }
 
   // pkmn.gg set-page cardData exposes name, artist, supertype, rarity, types and image URLs.
-  // hp and subtypes are absent from the set-page payload.
   // Log first card raw fields to diagnose what's actually available
   if (cards.length > 0) {
     const sample = cards[0]
@@ -154,6 +162,8 @@ async function extractCardDataFromPkmnGg(pkmnGgUrl: string): Promise<PkmnCardDat
       totalDisplay: sample.totalDisplay,
       set_total: sample.set?.total,
       set_printedTotal: sample.set?.printedTotal,
+      rarity: sample.rarity,
+      subtypes: sample.subtypes,
       types: sample.types,
       type: sample.type,
       category: sample.category,
@@ -163,29 +173,52 @@ async function extractCardDataFromPkmnGg(pkmnGgUrl: string): Promise<PkmnCardDat
 
   return cards
     .map((card) => {
-      // ── Number: construct "1/88" format.
-      //    pkmn.gg provides card.number (bare, e.g. "1") and card.totalDisplay ("088").
-      //    numberDisplay is zero-padded without total (e.g. "001"), not "1/88" format.
-      //    card.set.total/printedTotal are absent on set pages.
+      // ── Number: construct "X/Y" format ────────────────────────────────────
+      //    Priority order for the total:
+      //      1. card.totalDisplay from pkmn.gg (e.g. "088" → 88)
+      //      2. setTotal passed in from the DB sets table
+      //    If neither is available, fall back to the bare card.number string.
       const bareNumber = parseInt(String(card.number ?? '0'), 10)
-      const setTotalFromDisplay = card.totalDisplay
+      const totalFromDisplay = card.totalDisplay
         ? parseInt(String(card.totalDisplay), 10)
         : null
+      const resolvedTotal = totalFromDisplay ?? setTotal
       const number =
-        !isNaN(bareNumber) && setTotalFromDisplay
-          ? `${bareNumber}/${setTotalFromDisplay}`
+        !isNaN(bareNumber) && bareNumber > 0 && resolvedTotal
+          ? `${bareNumber}/${resolvedTotal}`
           : String(card.number ?? '')
 
       // ── Name: normalise "ex" (suffix) → "EX" ─────────────────────────────
       const rawName = card.name ? String(card.name) : null
       const name = rawName ? rawName.replace(/\bex\b/g, 'EX') : null
 
-      // ── Element type: pkmn.gg set pages expose card.types as LANGUAGE codes (["EN"]),
-      //    NOT element types like Grass/Fire. Always null for pkmn.gg imports.
-      const type: string | null = null
+      // ── Element type ──────────────────────────────────────────────────────
+      //    pkmn.gg / pokemontcg.io exposes card.types as an array of element
+      //    type strings, e.g. ["Fire"] or ["Water", "Psychic"].
+      //    Some older imports incorrectly set this to language codes (["EN"]).
+      //    Filter to only known Pokémon element types so language codes are dropped.
+      const rawTypes: unknown = card.types
+      const elementTypes: string[] = Array.isArray(rawTypes)
+        ? rawTypes.filter(
+            (t): t is string =>
+              typeof t === 'string' && POKEMON_ELEMENT_TYPES.has(t),
+          )
+        : []
+      const type: string | null = elementTypes.length > 0 ? elementTypes.join('/') : null
 
       // ── Supertype: Pokemon/Trainer/Energy ─────────────────────────────────
       const supertype: string | null = card.supertype ? String(card.supertype) : null
+
+      // ── Rarity ────────────────────────────────────────────────────────────
+      //    Try card.rarity first (standard pokemontcg.io field).
+      //    For promo cards pkmn.gg sometimes omits this; fall back to
+      //    card.rarity from nested set data or leave null.
+      const rarity: string | null =
+        card.rarity
+          ? String(card.rarity)
+          : card.set?.rarity
+          ? String(card.set.rarity)
+          : null
 
       // ── Image URLs: pkmn.gg may use flat fields (largeImageUrl / thumbImageUrl)
       //    or the nested pokemontcg.io format (images.large / images.small).
@@ -207,7 +240,7 @@ async function extractCardDataFromPkmnGg(pkmnGgUrl: string): Promise<PkmnCardDat
         name,
         artist: card.artist ? String(card.artist) : null,
         supertype,
-        rarity: card.rarity ? String(card.rarity) : null,
+        rarity,
         type,
         largeImageUrl,
         thumbImageUrl,
@@ -305,6 +338,17 @@ export async function POST(request: NextRequest) {
           .update({ language })
           .eq('set_id', setId)
 
+        // ── Fetch set total from DB (fallback for number formatting) ─────────
+        const { data: setRow } = await supabaseAdmin
+          .from('sets')
+          .select('setTotal, setComplete')
+          .eq('set_id', setId)
+          .single()
+        // Prefer setTotal (excl. secret rares); fall back to setComplete
+        const dbSetTotal: number | null =
+          setRow?.setTotal ?? setRow?.setComplete ?? null
+        console.log('[import-card-data] dbSetTotal for', setId, '=', dbSetTotal)
+
         // ── Fetch DB cards for this set ──────────────────────────────────────
         const { data: dbCards, error: dbError } = await supabaseAdmin
           .from('cards')
@@ -331,7 +375,7 @@ export async function POST(request: NextRequest) {
         // ── Fetch pkmn.gg card data ──────────────────────────────────────────
         let pkmnCards: PkmnCardData[]
         try {
-          pkmnCards = await extractCardDataFromPkmnGg(pkmnGgUrl)
+          pkmnCards = await extractCardDataFromPkmnGg(pkmnGgUrl, dbSetTotal)
         } catch (err) {
           emit({
             type: 'error',
