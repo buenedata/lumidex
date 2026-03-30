@@ -23,28 +23,20 @@ const FeaturebaseWidget = () => {
         if (res.ok) {
           const json = await res.json();
           featurebaseJwt = json.token;
-          usersName = json.name;
+          usersName = json.name; // passed through for the changelog popup greeting
         }
       } catch {
         // Network error — continue without JWT
       }
 
-      // ── Embed widget (inline Featurebase board) ──────────────────────────
-      win.Featurebase("init_embed_widget", {
+      // ── Feedback widget (floating button, right side) ────────────────────
+      win.Featurebase("initialize_feedback_widget", {
         organization: "lumidex",
-        embedOptions: {
-          path: "/",
-          filters: "",
-        },
-        stylingOptions: {
-          theme: "dark",
-          hideMenu: false,
-          hideLogo: false,
-        },
+        theme: "dark",
+        placement: "right",
         locale: "en",
-        ...(featurebaseJwt
-          ? { user: { jwt: featurebaseJwt } }
-          : {}),
+        metadata: null,
+        ...(featurebaseJwt ? { featurebaseJwt } : {}),
       });
 
       // ── Changelog widget (card + dropdown + popup for new updates) ────────
@@ -72,14 +64,11 @@ const FeaturebaseWidget = () => {
   }, []);
 
   return (
-    <>
-      <Script
-        src="https://do.featurebase.app/js/sdk.js"
-        id="featurebase-sdk"
-        strategy="afterInteractive"
-      />
-      <div data-featurebase-embed></div>
-    </>
+    <Script
+      src="https://do.featurebase.app/js/sdk.js"
+      id="featurebase-sdk"
+      strategy="afterInteractive"
+    />
   );
 };
 
