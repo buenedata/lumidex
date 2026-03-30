@@ -74,6 +74,7 @@ export function CardDataImport({ setId, onComplete }: Props) {
   const [language, setLanguage] = useState<'en' | 'ja'>('en')
   const [overwrite, setOverwrite] = useState(false)
   const [importImages, setImportImages] = useState(false)
+  const [lookupTypes, setLookupTypes] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
   const [isDone, setIsDone] = useState(false)
   const [total, setTotal] = useState(0)
@@ -101,7 +102,7 @@ export function CardDataImport({ setId, onComplete }: Props) {
     const res = await fetch('/api/import-card-data', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pkmnGgUrl: pkmnGgUrl.trim(), setId, overwrite, importImages, language }),
+      body: JSON.stringify({ pkmnGgUrl: pkmnGgUrl.trim(), setId, overwrite, importImages, lookupTypes, language }),
     })
 
     if (!res.ok || !res.body) {
@@ -275,6 +276,20 @@ export function CardDataImport({ setId, onComplete }: Props) {
             />
             <span className="text-gray-300">Import card images</span>
             <span className="text-gray-500 text-xs">— Slower: downloads and stores card images</span>
+          </label>
+        )}
+
+        {showImageCheckbox && (
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={lookupTypes}
+              onChange={(e) => setLookupTypes(e.target.checked)}
+              disabled={isRunning}
+              className="w-4 h-4 accent-yellow-500 disabled:opacity-50"
+            />
+            <span className="text-gray-300">Look up missing element types from pokemontcg.io</span>
+            <span className="text-gray-500 text-xs">— Slower: one API call per card without a type</span>
           </label>
         )}
 

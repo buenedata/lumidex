@@ -90,12 +90,61 @@ interface PkmnCardData {
   artist: string | null
   supertype: string | null
   rarity: string | null
-  /** Element type, e.g. "Fire" or "Water/Psychic" — parsed from pkmn.gg card.types */
+  /** Element type, e.g. "Fire" or "Water/Psychic" — parsed from pkmn.gg card data */
   type: string | null
+  /**
+   * pokemontcg.io card ID (e.g. "mcd25-1") from pkmn.gg's `dbId` field.
+   * Used as a fallback to fetch the element type when pkmn.gg doesn't include it.
+   */
+  dbId: string | null
   /** Full URL to the large card image from pokemontcg.io */
   largeImageUrl: string | null
   /** Full URL to the thumbnail card image from pokemontcg.io */
   thumbImageUrl: string | null
+}
+
+// ── pokemontcg.io type lookup ─────────────────────────────────────────────────
+
+/**
+ * Fetch the element type(s) for a single card from the pokemontcg.io API.
+ * Used as a fallback when pkmn.gg set-page data doesn't include element types.
+ * Returns e.g. "Fire" or "Water/Psychic", or null on any error or missing data.
+ */
+async function fetchCardTypeFromTcgApi(cardId: string): Promise<string | null> {
+  try {
+    const headers: Record<string, string> = {
+      'User-Agent': 'Lumidex/1.0',
+    }
+    // Use API key if configured — raises rate limit from ~1k to ~20k req/day
+    if (process.env.POKEMON_TCG_API_KEY) {
+      headers['X-Api-Key'] = process.env.POKEMON_TCG_API_KEY
+    }
+
+    const res = await fetch(`https://api.pokemontcg.io/v2/cards/${encodeURIComponent(cardId)}`, {
+      headers,
+      // 5 s timeout — don't let a slow API stall the whole import
+      signal: AbortSignal.timeout(5000),
+    })
+
+    if (!res.ok) {
+      console.warn(`[import-card-data] TCG API ${res.status} for card ${cardId}`)
+      return null
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const json = await res.json() as any
+    const types: unknown = json?.data?.types
+
+    if (!Array.isArray(types) || types.length === 0) return null
+
+    const matched = types.filter(
+      (t): t is string => typeof t === 'string' && POKEMON_ELEMENT_TYPES.has(t),
+    )
+    return matched.length > 0 ? matched.join('/') : null
+  } catch (err) {
+    console.warn(`[import-card-data] TCG API lookup failed for ${cardId}:`, err)
+    return null
+  }
 }
 
 /**
@@ -261,6 +310,7 @@ async function extractCardDataFromPkmnGg(pkmnGgUrl: string, setTotal: number | n
         supertype,
         rarity,
         type,
+        dbId: card.dbId ? String(card.dbId) : null,
         largeImageUrl,
         thumbImageUrl,
       }
@@ -313,7 +363,7 @@ export async function POST(request: NextRequest) {
   }
 
   // 2. Parse body
-  let body: { pkmnGgUrl?: string; setId?: string; overwrite?: boolean; importImages?: boolean; language?: string }
+  let body: { pkmnGgUrl?: string; setId?: string; overwrite?: boolean; importImages?: boolean; lookupTypes?: boolean; language?: string }
   try {
     body = await request.json()
   } catch {
@@ -329,8 +379,9 @@ export async function POST(request: NextRequest) {
   const setId = body.setId
   const overwrite = body.overwrite === true
   const importImages = body.importImages === true
+  const lookupTypes = body.lookupTypes === true
   const language = body.language === 'ja' ? 'ja' : 'en'
-  console.log('[import-card-data] importImages flag:', importImages, '| overwrite:', overwrite, '| language:', language)
+  console.log('[import-card-data] importImages:', importImages, '| overwrite:', overwrite, '| lookupTypes:', lookupTypes, '| language:', language)
 
   if (!pkmnGgUrl || !setId) {
     return new Response(
@@ -425,15 +476,23 @@ export async function POST(request: NextRequest) {
             // No existing DB card — INSERT a new one from pkmn.gg data.
             // `id` and `created_at` are auto-generated; `set_id` and `name`
             // are the only NOT NULL columns that must be supplied explicitly.
-            // pkmnCard.number comes from card.numberDisplay which is already "1/88" format.
+
+            // Optionally look up the element type from pokemontcg.io when pkmn.gg
+            // didn't include it and the card has a known dbId.
+            let resolvedType = pkmnCard.type
+            if (!resolvedType && lookupTypes && pkmnCard.dbId) {
+              resolvedType = await fetchCardTypeFromTcgApi(pkmnCard.dbId)
+              if (resolvedType) console.log(`[import-card-data] TCG type lookup → ${pkmnCard.dbId} = ${resolvedType}`)
+            }
+
             const insertPayload: Record<string, unknown> = {
               set_id: setId,
               number: pkmnCard.number,
-              name: pkmnCard.name ?? '',            // NOT NULL — fall back to ''
+              name: pkmnCard.name ?? '',             // NOT NULL — fall back to ''
               artist: pkmnCard.artist ?? null,
-              supertype: pkmnCard.supertype ?? null, // card category
+              supertype: pkmnCard.supertype ?? null,  // card category
               rarity: pkmnCard.rarity ?? null,
-              type: pkmnCard.type ?? null,           // element type
+              type: resolvedType ?? null,             // element type
             }
 
             // Optionally download and store the card image before inserting.
@@ -553,9 +612,17 @@ export async function POST(request: NextRequest) {
           if (numberNeedsUpdate) updatePayload.number = pkmnCard.number
           // Populate name from pkmn.gg when the DB entry is blank or overwrite is on
           if (nameNeedsUpdate && pkmnCard.name !== null) updatePayload.name = pkmnCard.name
-          // Write element type (Fire, Water, …) when pkmn.gg resolved one and the
-          // DB field is blank (or overwrite is on).
-          if (typeNeedsUpdate && pkmnCard.type !== null) updatePayload.type = pkmnCard.type
+          // Resolve element type: use pkmn.gg value; fall back to TCG API lookup
+          // when type is still null and lookupTypes is enabled.
+          let resolvedType = pkmnCard.type
+          if (!resolvedType && lookupTypes && pkmnCard.dbId && (dbCard.type === null || overwrite)) {
+            resolvedType = await fetchCardTypeFromTcgApi(pkmnCard.dbId)
+            if (resolvedType) console.log(`[import-card-data] TCG type lookup → ${pkmnCard.dbId} = ${resolvedType}`)
+          }
+
+          // Write element type (Fire, Water, …) when resolved and the DB field
+          // is blank (or overwrite is on).
+          if (typeNeedsUpdate && resolvedType !== null) updatePayload.type = resolvedType
           // Clear corrupted type values from previous bad imports (language codes like "EN")
           // that were written before the types parser was in place.
           if (!typeNeedsUpdate && dbCard.type && /^[A-Z]{1,3}$/.test(dbCard.type)) {
