@@ -193,17 +193,29 @@ async function extractCardDataFromPkmnGg(pkmnGgUrl: string, setTotal: number | n
       const name = rawName ? rawName.replace(/\bex\b/g, 'EX') : null
 
       // ── Element type ──────────────────────────────────────────────────────
-      //    pkmn.gg / pokemontcg.io exposes card.types as an array of element
-      //    type strings, e.g. ["Fire"] or ["Water", "Psychic"].
-      //    Some older imports incorrectly set this to language codes (["EN"]).
-      //    Filter to only known Pokémon element types so language codes are dropped.
+      //    Priority order for resolving the element type:
+      //      1. card.types  — standard pokemontcg.io array, e.g. ["Fire"]
+      //         (absent on some pkmn.gg set pages such as promo sets)
+      //      2. card.category — pkmn.gg-specific flat field that maps to the
+      //         element type on set pages that omit the types array
+      //      3. card.type   — singular flat field, last resort
+      //    Language codes (EN, JA, …) are filtered out in all cases.
       const rawTypes: unknown = card.types
-      const elementTypes: string[] = Array.isArray(rawTypes)
+      let elementTypes: string[] = Array.isArray(rawTypes)
         ? rawTypes.filter(
             (t): t is string =>
               typeof t === 'string' && POKEMON_ELEMENT_TYPES.has(t),
           )
         : []
+
+      if (elementTypes.length === 0) {
+        // Try flat fallback fields when the types array is absent
+        const flat = card.category ?? card.type
+        if (typeof flat === 'string' && POKEMON_ELEMENT_TYPES.has(flat)) {
+          elementTypes = [flat]
+        }
+      }
+
       const type: string | null = elementTypes.length > 0 ? elementTypes.join('/') : null
 
       // ── Supertype: Pokemon/Trainer/Energy ─────────────────────────────────
