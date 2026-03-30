@@ -33,6 +33,7 @@
     "dotenv": "^16.4.5",
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.1",
+    "jose": "^6.2.2",
     "next": "^16.2.1",
     "pokemontcgsdk": "^2.0.0",
     "postcss": "^8.5.8",

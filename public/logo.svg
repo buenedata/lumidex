@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 60" role="img" aria-label="Lumidex">
+  <defs>
+    <!-- Primary brand gradient: electric indigo-violet -->
+    <linearGradient id="brand-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#a78bff"/>
+      <stop offset="50%"  stop-color="#6d5fff"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
+    </linearGradient>
+
+    <!-- Wordmark gradient: accent → near-white -->
+    <linearGradient id="text-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#a78bff"/>
+      <stop offset="35%"  stop-color="#c4b5fd"/>
+      <stop offset="100%" stop-color="#f0f0ff"/>
+    </linearGradient>
+
+    <!-- Subtle card fill gradient -->
+    <linearGradient id="card-fill" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#2d2651"/>
+      <stop offset="100%" stop-color="#1a1a26"/>
+    </linearGradient>
+
+    <!-- Glow filter for sparkle -->
+    <filter id="sparkle-glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Soft glow behind card icon -->
+    <filter id="card-glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Clip for card interior -->
+    <clipPath id="card-clip">
+      <rect x="9" y="7" width="34" height="46" rx="5" ry="5"/>
+    </clipPath>
+  </defs>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!--  ICON — glowing card with four-pointed sparkle      -->
+  <!-- ═══════════════════════════════════════════════════ -->
+
+  <!-- Ambient glow behind card -->
+  <ellipse cx="26" cy="31" rx="16" ry="18" fill="rgba(109,95,255,0.18)" filter="url(#card-glow)"/>
+
+  <!-- Card body — dark surface with gradient fill -->
+  <rect x="9" y="7" width="34" height="46" rx="5" ry="5"
+        fill="url(#card-fill)"
+        stroke="url(#brand-gradient)"
+        stroke-width="1.5"
+        opacity="0.95"/>
+
+  <!-- Subtle card surface sheen (top-left highlight) -->
+  <rect x="9" y="7" width="34" height="46" rx="5" ry="5"
+        fill="url(#text-gradient)"
+        opacity="0.04"
+        clip-path="url(#card-clip)"/>
+
+  <!-- Inner border / frame line inside card -->
+  <rect x="13" y="11" width="26" height="38" rx="3" ry="3"
+        fill="none"
+        stroke="rgba(167,139,255,0.2)"
+        stroke-width="0.75"/>
+
+  <!-- ✦ Four-pointed star sparkle centered in card -->
+  <!-- Built from two rotated narrow diamond paths for crisp look -->
+  <g filter="url(#sparkle-glow)">
+    <!-- Vertical axis of star -->
+    <path d="M26 16 C26.4 22 26.4 22 26 30 C25.6 22 25.6 22 26 16 Z"
+          fill="url(#brand-gradient)" stroke="none"/>
+    <!-- Vertical long spike -->
+    <path d="M26 14.5 L27.2 25 L26 30 L24.8 25 Z"
+          fill="url(#brand-gradient)"/>
+    <path d="M26 45.5 L27.2 35 L26 30 L24.8 35 Z"
+          fill="url(#brand-gradient)"/>
+    <!-- Horizontal long spike -->
+    <path d="M10.5 30 L21 31.2 L26 30 L21 28.8 Z"
+          fill="url(#brand-gradient)"/>
+    <path d="M41.5 30 L31 31.2 L26 30 L31 28.8 Z"
+          fill="url(#brand-gradient)"/>
+
+    <!-- Star: clean four-pointed shape -->
+    <path d="
+      M26 14
+      C26.5 20.5, 26.5 20.5, 29.5 27
+      C33 28, 33 28, 42 30
+      C33 32, 33 32, 29.5 33
+      C26.5 39.5, 26.5 39.5, 26 46
+      C25.5 39.5, 25.5 39.5, 22.5 33
+      C19 32, 19 32, 10 30
+      C19 28, 19 28, 22.5 27
+      C25.5 20.5, 25.5 20.5, 26 14
+      Z"
+          fill="url(#brand-gradient)"/>
+  </g>
+
+  <!-- Small accent dots — floating particles of light -->
+  <circle cx="14.5" cy="15"  r="1.2" fill="#a78bff" opacity="0.65"/>
+  <circle cx="37.5" cy="14"  r="0.9" fill="#c4b5fd" opacity="0.5"/>
+  <circle cx="38"   cy="47"  r="0.8" fill="#6d5fff" opacity="0.55"/>
+  <circle cx="14"   cy="47"  r="1"   fill="#7c6fff" opacity="0.45"/>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!--  WORDMARK — "LUMIDEX"                               -->
+  <!-- ═══════════════════════════════════════════════════ -->
+  <text
+    x="54"
+    y="39"
+    font-family="'Space Grotesk', 'Inter', system-ui, -apple-system, sans-serif"
+    font-size="24"
+    font-weight="700"
+    letter-spacing="2"
+    fill="url(#text-gradient)"
+  >LUMIDEX</text>
+
+  <!-- Subtle underline glow accent beneath wordmark -->
+  <line x1="54" y1="43" x2="215" y2="43"
+        stroke="url(#brand-gradient)"
+        stroke-width="1"
+        stroke-linecap="round"
+        opacity="0.25"/>
+</svg>

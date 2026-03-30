@@ -30,14 +30,8 @@ export default function Footer() {
 
           {/* Brand */}
           <div className="flex flex-col gap-3 max-w-xs">
-            <Link href="/dashboard" className="flex items-center gap-2 w-fit">
-              <span className="text-accent text-xl">✦</span>
-              <span
-                className="font-bold text-lg tracking-wide gradient-text"
-                style={{ fontFamily: 'var(--font-space-grotesk)' }}
-              >
-                LUMIDEX
-              </span>
+            <Link href="/dashboard" className="flex items-center w-fit">
+              <img src="/logo.svg" alt="Lumidex" className="h-8 w-auto" />
             </Link>
             <p className="text-sm text-muted leading-relaxed">
               Your ultimate trading card collection tracker. Catalogue, track and showcase your Pokémon TCG collection with style.

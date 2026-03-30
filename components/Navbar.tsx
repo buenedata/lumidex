@@ -22,14 +22,8 @@ export default function Navbar() {
       <div className="max-w-screen-2xl mx-auto h-full px-4 flex items-center gap-4">
 
         {/* Logo */}
-        <Link href="/dashboard" className="flex items-center gap-2 shrink-0 mr-2">
-          <span className="text-accent text-xl">✦</span>
-          <span
-            className="font-bold text-lg tracking-wide gradient-text"
-            style={{ fontFamily: 'var(--font-space-grotesk)' }}
-          >
-            LUMIDEX
-          </span>
+        <Link href="/dashboard" className="flex items-center shrink-0 mr-2">
+          <img src="/logo.svg" alt="Lumidex" className="h-9 w-auto" />
         </Link>
 
         {/* Search */}

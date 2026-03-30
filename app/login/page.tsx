@@ -109,12 +109,7 @@ export default function LoginPage() {
 
         {/* ── Branding ─────────────────────────────────────────────── */}
         <div className="text-center">
-          <p
-            className="text-2xl font-bold gradient-text tracking-widest mb-2"
-            style={{ fontFamily: 'var(--font-space-grotesk)' }}
-          >
-            ✦ LUMIDEX
-          </p>
+          <img src="/logo.svg" alt="Lumidex" className="h-12 w-auto mx-auto mb-4" />
           <h1 className="text-base font-semibold text-primary">
             {isLogin ? 'Sign in to your account' : 'Create your account'}
           </h1>
