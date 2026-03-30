@@ -23,25 +23,33 @@ const FeaturebaseWidget = () => {
         if (res.ok) {
           const json = await res.json();
           featurebaseJwt = json.token;
-          usersName = json.name; // passed through for the changelog popup greeting
+          usersName = json.name;
         }
       } catch {
         // Network error — continue without JWT
       }
 
-      // ── Feedback widget (floating button, right side) ────────────────────
-      win.Featurebase("initialize_feedback_widget", {
-        organization: "lumidex", // update if workspace subdomain differs
-        theme: "dark",
-        placement: "right",
+      // ── Embed widget (inline Featurebase board) ──────────────────────────
+      win.Featurebase("init_embed_widget", {
+        organization: "lumidex",
+        embedOptions: {
+          path: "/",
+          filters: "",
+        },
+        stylingOptions: {
+          theme: "dark",
+          hideMenu: false,
+          hideLogo: false,
+        },
         locale: "en",
-        metadata: null,
-        ...(featurebaseJwt ? { featurebaseJwt } : {}),
+        ...(featurebaseJwt
+          ? { user: { jwt: featurebaseJwt } }
+          : {}),
       });
 
       // ── Changelog widget (card + dropdown + popup for new updates) ────────
       win.Featurebase("init_changelog_widget", {
-        organization: "lumidex", // update if workspace subdomain differs
+        organization: "lumidex",
         theme: "dark",
         locale: "en",
         changelogCard: {
@@ -64,11 +72,14 @@ const FeaturebaseWidget = () => {
   }, []);
 
   return (
-    <Script
-      src="https://do.featurebase.app/js/sdk.js"
-      id="featurebase-sdk"
-      strategy="afterInteractive"
-    />
+    <>
+      <Script
+        src="https://do.featurebase.app/js/sdk.js"
+        id="featurebase-sdk"
+        strategy="afterInteractive"
+      />
+      <div data-featurebase-embed></div>
+    </>
   );
 };
 
