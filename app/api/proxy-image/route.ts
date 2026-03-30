@@ -15,6 +15,7 @@ const ALLOWED_DOMAINS = [
   'public.getcollectr.com',
   'limitlesstcg.com',
   'www.limitlesstcg.com',
+  'bulbapedia.bulbagarden.net'
 ]
 
 export async function GET(request: NextRequest) {
