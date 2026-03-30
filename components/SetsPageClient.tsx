@@ -21,15 +21,22 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
   )
   const [searchQuery, setSearchQuery] = useState('')
   const [activeSeries, setActiveSeries] = useState<string>('All')
-  const [showEnglish, setShowEnglish] = useState(true)
-  const [showJapanese, setShowJapanese] = useState(true)
+  const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'ja'>('en')
+
+  // ── Language switch — also resets the active series pill ─────────────────
+  const handleLanguageChange = (lang: 'en' | 'ja') => {
+    setSelectedLanguage(lang)
+    setActiveSeries('All')
+  }
 
   // ── Series order ──────────────────────────────────────────────────────────
-  // Build list of unique series names, sorted by the most recent release_date
-  // found in each series (newest series first). "Other" is always last.
+  // Computed from only the sets that belong to the currently selected language
+  // so the pills always reflect the correct series for that language.
+  // Newest series first; "Other" always last.
   const seriesOrder = useMemo(() => {
+    const langSets = sets.filter(s => (s.language ?? 'en') === selectedLanguage)
     const latestDate = new Map<string, string>()
-    for (const set of sets) {
+    for (const set of langSets) {
       const s = set.series ?? 'Other'
       if (!latestDate.has(s) || (set.release_date && set.release_date > (latestDate.get(s) ?? ''))) {
         latestDate.set(s, set.release_date ?? '')
@@ -42,7 +49,7 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
         return b[1].localeCompare(a[1])
       })
       .map(([s]) => s)
-  }, [sets])
+  }, [sets, selectedLanguage])
 
   // ── Favorite toggle ───────────────────────────────────────────────────────
   const toggleFavorite = async (setId: string) => {
@@ -94,17 +101,14 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
 
   // ── Filter + group ────────────────────────────────────────────────────────
   const { filteredFavorites, groupedSets } = useMemo(() => {
-    let filtered = sets
+    // Always show only the selected language
+    let filtered = sets.filter(s => (s.language ?? 'en') === selectedLanguage)
 
     // Text search
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase()
       filtered = filtered.filter(s => s.name.toLowerCase().includes(q))
     }
-
-    // Language filter
-    if (!showEnglish) filtered = filtered.filter(s => (s.language ?? 'en') !== 'en')
-    if (!showJapanese) filtered = filtered.filter(s => (s.language ?? 'en') !== 'ja')
 
     // Series pill filter
     if (activeSeries !== 'All') {
@@ -141,7 +145,7 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
     }
 
     return { filteredFavorites, groupedSets: grouped }
-  }, [sets, searchQuery, activeSeries, showEnglish, showJapanese, favoritedIds, userId, seriesOrder])
+  }, [sets, searchQuery, activeSeries, selectedLanguage, favoritedIds, userId, seriesOrder])
 
   const totalVisible =
     filteredFavorites.length +
@@ -152,51 +156,55 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
     <div>
       {/* ── Search + series filter bar ─────────────────────────────────── */}
       <div className="mb-8 space-y-4">
-        {/* Search input + language checkboxes row */}
+        {/* Search input + language toggle row */}
         <div className="flex items-center gap-4 flex-wrap">
-        <div className="relative max-w-sm flex-1">
-          <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+          <div className="relative max-w-sm flex-1">
+            <svg
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+              />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search sets..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full h-10 bg-surface border border-subtle rounded-lg pl-9 pr-3 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
             />
-          </svg>
-          <input
-            type="text"
-            placeholder="Search sets..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full h-10 bg-surface border border-subtle rounded-lg pl-9 pr-3 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
-          />
-        </div>
+          </div>
 
-          {/* Language checkboxes */}
-          <div className="flex items-center gap-4">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={showEnglish}
-                onChange={e => setShowEnglish(e.target.checked)}
-                className="w-4 h-4 accent-[var(--color-accent)] rounded"
-              />
-              <span className="text-sm text-secondary">🇬🇧 English</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={showJapanese}
-                onChange={e => setShowJapanese(e.target.checked)}
-                className="w-4 h-4 accent-[var(--color-accent)] rounded"
-              />
-              <span className="text-sm text-secondary">🇯🇵 Japanese</span>
-            </label>
+          {/* Language segmented toggle */}
+          <div className="flex items-center bg-surface border border-subtle rounded-lg p-1 gap-1">
+            <button
+              onClick={() => handleLanguageChange('en')}
+              className={cn(
+                'px-3 py-1 rounded text-sm font-medium transition-all duration-150 select-none',
+                selectedLanguage === 'en'
+                  ? 'bg-accent text-white shadow-sm'
+                  : 'text-secondary hover:text-primary'
+              )}
+            >
+              English
+            </button>
+            <button
+              onClick={() => handleLanguageChange('ja')}
+              className={cn(
+                'px-3 py-1 rounded text-sm font-medium transition-all duration-150 select-none',
+                selectedLanguage === 'ja'
+                  ? 'bg-accent text-white shadow-sm'
+                  : 'text-secondary hover:text-primary'
+              )}
+            >
+              Japanese
+            </button>
           </div>
         </div>
 
