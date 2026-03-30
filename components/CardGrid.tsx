@@ -629,7 +629,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
               className="group cursor-pointer flex-shrink-0 flex flex-col"
               style={{ width: 220 }}
             >
-              {/* ── Image area — no overflow-hidden so buttons can bleed out ── */}
+              {/* ── Image area — relative container holds image + variant button overlay ── */}
               <div className="relative w-[220px] h-[308px]">
 
                 {/* Inner clip: rounded corners + overflow-hidden only on the image */}
@@ -670,75 +670,79 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
                   {/* Hover overlay */}
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-opacity z-10" />
-                </div>
 
-              </div>
-
-              {/* Quick-add variant buttons — below card image */}
-              {(buttonsToRender.length > 0 || showStarButton) && (
-                <div
-                  className="w-[220px] flex gap-1 flex-wrap justify-center pt-1 px-0.5"
-                  onClick={e => e.stopPropagation()}
-                >
-                  {buttonsToRender.map(variant => (
-                    <button
-                      key={variant.id}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (variant.color === 'gray') {
-                          handleCardClick(card)
-                        } else {
-                          handleVariantClick(e, card.id, variant.id)
-                        }
-                      }}
-                      onContextMenu={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        if (variant.color === 'gray') {
-                          handleCardClick(card)
-                        } else {
-                          handleVariantClick(e, card.id, variant.id)
-                        }
-                      }}
-                      title={`${variant.name} (${variant.quantity})`}
-                      className={`
-                        w-6 h-6 rounded flex items-center justify-center
-                        text-xs font-bold border border-black/30 shadow-sm
-                        ${colorMap[variant.color] || 'bg-zinc-500'}
-                        ${variant.quantity > 0 ? '!text-black' : 'text-transparent'}
-                        hover:scale-110 transition-transform cursor-pointer
-                      `}
-                    >
-                      {variant.quantity > 0 ? variant.quantity : ''}
-                    </button>
-                  ))}
-
-                  {/* Grey ★ — only when 2+ card-specific variants; clicking opens the modal */}
-                  {showStarButton && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleCardClick(card) }}
-                      title={`${specificQuick.length} card-specific variants — open card to manage`}
-                      className="w-6 h-6 rounded flex items-center justify-center text-xs font-bold border border-black/30 shadow-sm bg-gray-500 text-white hover:scale-110 transition-transform cursor-pointer"
-                    >
-                      ★
-                    </button>
+                  {/* Bottom gradient scrim — gives variant dots a readable backdrop */}
+                  {(buttonsToRender.length > 0 || showStarButton) && (
+                    <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-black/70 to-transparent pointer-events-none z-10" />
                   )}
                 </div>
-              )}
+
+                {/* Quick-add variant buttons — absolute overlay at bottom of image */}
+                {(buttonsToRender.length > 0 || showStarButton) && (
+                  <div
+                    className="absolute bottom-2 left-0 right-0 flex gap-1 flex-wrap justify-center px-2 z-20"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    {buttonsToRender.map(variant => (
+                      <button
+                        key={variant.id}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          if (variant.color === 'gray') {
+                            handleCardClick(card)
+                          } else {
+                            handleVariantClick(e, card.id, variant.id)
+                          }
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          if (variant.color === 'gray') {
+                            handleCardClick(card)
+                          } else {
+                            handleVariantClick(e, card.id, variant.id)
+                          }
+                        }}
+                        title={`${variant.name} (${variant.quantity})`}
+                        className={`
+                          w-6 h-6 rounded flex items-center justify-center
+                          text-xs font-bold border border-black/30 shadow-sm
+                          ${colorMap[variant.color] || 'bg-zinc-500'}
+                          ${variant.quantity > 0 ? '!text-black' : 'text-transparent'}
+                          hover:scale-110 transition-transform cursor-pointer
+                        `}
+                      >
+                        {variant.quantity > 0 ? variant.quantity : ''}
+                      </button>
+                    ))}
+
+                    {/* Grey ★ — only when 2+ card-specific variants; clicking opens the modal */}
+                    {showStarButton && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleCardClick(card) }}
+                        title={`${specificQuick.length} card-specific variants — open card to manage`}
+                        className="w-6 h-6 rounded flex items-center justify-center text-xs font-bold border border-black/30 shadow-sm bg-gray-500 text-white hover:scale-110 transition-transform cursor-pointer"
+                      >
+                        ★
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
 
               {/* ── Card info below image ── */}
-              <div className="w-[220px] flex flex-col gap-0.5 px-1 py-1">
-                {/* Row 1: Card name — prominent, full-width, truncated */}
+              <div className="w-[220px] flex flex-col gap-0.5 px-1 pt-1.5 pb-1">
+                {/* Row 1: Card name — prominent, full-width */}
                 <p className="text-sm font-semibold text-primary truncate leading-tight">
                   {card.name}
                 </p>
-                {/* Row 2: Card number (left) · Price (right) */}
-                <div className="flex justify-between">
-                  <span className="text-sm font-medium text-primary tabular-nums">#{card.number}</span>
-                  <span className="text-sm font-medium text-primary tabular-nums">
+                {/* Row 2: Card number (muted/small, left) · Price (accent, right) */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted tabular-nums">#{card.number}</span>
+                  <span className="text-sm font-semibold text-price tabular-nums">
                     {cardPricesUSD?.[card.id] != null
                       ? formatPrice(cardPricesUSD[card.id], currency)
-                      : '—'}
+                      : ''}
                   </span>
                 </div>
               </div>
