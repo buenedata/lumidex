@@ -203,7 +203,7 @@ export async function POST(request: NextRequest) {
   }
 
   // 2. Parse body
-  let body: { setId?: string }
+  let body: { setId?: string; apiSetId?: string }
   try {
     body = await request.json()
   } catch {
@@ -220,6 +220,11 @@ export async function POST(request: NextRequest) {
       headers: { 'Content-Type': 'application/json' },
     })
   }
+
+  // apiSetId is the pokemontcg.io / RapidAPI set ID (e.g. "sv9pt5").
+  // Our internal DB set_id (e.g. "sv14") may differ from pokemontcg.io's IDs.
+  // Priority: explicit override > derived from cards.api_id > fallback to setId
+  const apiSetIdOverride = body.apiSetId?.trim() || null
 
   // 3. Stream SSE response
   const stream = new ReadableStream({
@@ -265,11 +270,31 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // Derive the pokemontcg.io set ID from existing card api_id values
+        // api_id format: "{tcgSetId}-{number}", e.g. "sv9pt5-25" → tcgSetId = "sv9pt5"
+        let tcgApiSetId: string = apiSetIdOverride ?? setId
+        if (!apiSetIdOverride) {
+          const cardWithApiId = dbCards.find(c => c.api_id && String(c.api_id).includes('-'))
+          if (cardWithApiId) {
+            const parts = String(cardWithApiId.api_id).split('-')
+            if (parts.length >= 2) {
+              // Everything except the last segment is the set ID
+              // Handles both "sv9pt5-25" and "swsh1-1" correctly
+              const derived = parts.slice(0, -1).join('-')
+              tcgApiSetId = derived
+              console.log(`[prices/sync] Derived tcgApiSetId="${derived}" from card api_id="${cardWithApiId.api_id}"`)
+            }
+          } else {
+            console.warn(`[prices/sync] No cards with api_id found for set ${setId} — using setId as API filter (may fail if IDs don't match pokemontcg.io)`)
+          }
+        }
+
         emit({
           type: 'start',
           setId,
+          tcgApiSetId,
           dbCardCount: dbCards.length,
-          message: `Fetching prices for ${dbCards.length} cards from RapidAPI…`,
+          message: `Fetching prices for ${dbCards.length} cards (API set ID: ${tcgApiSetId})…`,
         })
 
         // ── Step 2: Paginate RapidAPI cards ─────────────────────────────────
@@ -283,9 +308,9 @@ export async function POST(request: NextRequest) {
         // Log all price keys seen on the first card — helps verify graded key names
         let gradedKeysLogged = false
 
-        // Determine which filter syntax the API uses on the first page
-        // We try q=set.id:{setId} first (pokemontcg.io v2 standard), then fallback to set_id=
-        let cardQueryFilter = `q=set.id:${encodeURIComponent(setId)}`
+        // tcggo.com API uses set= or set_id= (NOT the pokemontcg.io q=set.id: Lucene syntax)
+        // Try set= first, then set_id= as fallback
+        let cardQueryFilter = `set=${encodeURIComponent(tcgApiSetId)}`
 
         let hasMore = true
         while (hasMore) {
@@ -332,8 +357,8 @@ export async function POST(request: NextRequest) {
             // If q=set.id: returned 0 cards, try the set_id= param format
             if (apiCards.length === 0 && cardQueryFilter.startsWith('q=')) {
               console.log(`[prices/sync] q=set.id: returned 0 cards — retrying with set_id= param`)
-              cardQueryFilter = `set_id=${encodeURIComponent(setId)}`
-              emit({ type: 'debug', message: `q=set.id: returned 0 — retrying with set_id=` })
+              cardQueryFilter = `set_id=${encodeURIComponent(tcgApiSetId)}`
+              emit({ type: 'debug', message: `set= returned 0 — retrying with set_id=` })
 
               const retryRes = await rapidApiFetch(
                 `/cards?${cardQueryFilter}&per_page=${PAGE_SIZE}&page=${page}`,
@@ -450,8 +475,9 @@ export async function POST(request: NextRequest) {
         // ── Step 5: Products (conditional) ──────────────────────────────────
         let productCount = 0
         try {
+          // tcggo.com products use /products/search endpoint with set_id= filter
           const prodRes = await rapidApiFetch(
-            `/products?q=set.id:${encodeURIComponent(setId)}&per_page=100`,
+            `/products/search?set_id=${encodeURIComponent(tcgApiSetId)}&per_page=100`,
           )
 
           if (prodRes.ok) {

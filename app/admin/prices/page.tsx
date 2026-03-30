@@ -63,6 +63,10 @@ export default function AdminPricesPage() {
 
   const [selectedSetId,   setSelectedSetId]   = useState<string | null>(null)
   const [selectedSetName, setSelectedSetName] = useState<string | null>(null)
+  const [apiSetIdInput,   setApiSetIdInput]   = useState('')   // RapidAPI set ID override
+  const [apiSuggestions,  setApiSuggestions]  = useState<{ id: string; name: string; series?: string }[]>([])
+  const [discoverLoading, setDiscoverLoading] = useState(false)
+  const [discoverErr,     setDiscoverErr]     = useState<string | null>(null)
   const [stats,           setStats]           = useState<SetStats | null>(null)
   const [statsLoading,    setStatsLoading]    = useState(false)
   const [syncState,       setSyncState]       = useState<SyncState>({
@@ -97,9 +101,38 @@ export default function AdminPricesPage() {
   const handleSetSelect = useCallback((setId: string, setName: string) => {
     setSelectedSetId(setId)
     setSelectedSetName(setName)
+    setApiSetIdInput('')
+    setApiSuggestions([])
+    setDiscoverErr(null)
     setSyncState({ status: 'idle', message: '', matched: 0, total: 0, products: 0, elapsed: 0 })
     loadStats(setId)
   }, [loadStats])
+
+  // Search the RapidAPI for sets matching this set's name
+  const discoverApiSetId = useCallback(async (setName: string) => {
+    setDiscoverLoading(true)
+    setDiscoverErr(null)
+    setApiSuggestions([])
+    try {
+      const res = await fetch(`/api/prices/discover?name=${encodeURIComponent(setName)}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const json = await res.json()
+      const sets = json.sets ?? []
+      if (sets.length === 0) {
+        setDiscoverErr(`No sets found matching "${setName}" in the API. Try the full API set list below.`)
+      } else {
+        setApiSuggestions(sets.map((s: { id: string; name: string; series?: string }) => ({
+          id:     s.id,
+          name:   s.name,
+          series: s.series,
+        })))
+      }
+    } catch (e) {
+      setDiscoverErr(e instanceof Error ? e.message : 'Discovery failed')
+    } finally {
+      setDiscoverLoading(false)
+    }
+  }, [])
 
   // ── Sync selected set ──────────────────────────────────────────────────────
   const syncSet = useCallback(async (setId: string) => {
@@ -110,10 +143,13 @@ export default function AdminPricesPage() {
     setSyncState({ status: 'syncing', message: 'Starting…', matched: 0, total: 0, products: 0, elapsed: 0 })
 
     try {
+      const body: Record<string, string> = { setId }
+      if (apiSetIdInput.trim()) body.apiSetId = apiSetIdInput.trim()
+
       const res = await fetch('/api/prices/sync', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ setId }),
+        body:    JSON.stringify(body),
         signal:  controller.signal,
       })
 
@@ -236,7 +272,7 @@ export default function AdminPricesPage() {
         {selectedSetId && (
           <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 space-y-5">
 
-            {/* Set name */}
+            {/* Set name + Sync button */}
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-white">{selectedSetName}</h2>
@@ -249,6 +285,66 @@ export default function AdminPricesPage() {
               >
                 {syncState.status === 'syncing' ? 'Syncing…' : 'Sync Prices'}
               </button>
+            </div>
+
+            {/* RapidAPI Set ID — lookup + override */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-gray-400">
+                  RapidAPI Set ID
+                  <span className="text-gray-600 font-normal ml-1">
+                    — our DB uses <code className="font-mono text-gray-500">{selectedSetId}</code>; the API may use a different ID
+                  </span>
+                </label>
+                <button
+                  onClick={() => selectedSetName && discoverApiSetId(selectedSetName)}
+                  disabled={discoverLoading}
+                  className="text-xs px-3 py-1 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-300 rounded transition-colors"
+                >
+                  {discoverLoading ? 'Searching…' : '🔍 Find in API'}
+                </button>
+              </div>
+
+              {/* Manual override input */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Auto-detect from cards, or type API set ID here"
+                  value={apiSetIdInput}
+                  onChange={e => { setApiSetIdInput(e.target.value); setApiSuggestions([]) }}
+                  className="flex-1 h-9 bg-gray-800 border border-gray-700 rounded-lg px-3 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-indigo-500 font-mono"
+                />
+                {apiSetIdInput.trim() && (
+                  <button onClick={() => setApiSetIdInput('')} className="text-gray-500 hover:text-gray-300 text-sm">✕</button>
+                )}
+              </div>
+
+              {/* Discovery error */}
+              {discoverErr && (
+                <p className="text-xs text-red-400">{discoverErr}</p>
+              )}
+
+              {/* Suggestions from API */}
+              {apiSuggestions.length > 0 && (
+                <div className="border border-gray-700 rounded-lg overflow-hidden">
+                  <div className="px-3 py-1.5 bg-gray-800 text-xs text-gray-500 border-b border-gray-700">
+                    Click a set to use its API ID
+                  </div>
+                  {apiSuggestions.map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => { setApiSetIdInput(s.id); setApiSuggestions([]) }}
+                      className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-700 transition-colors text-left border-b border-gray-800 last:border-0"
+                    >
+                      <div>
+                        <span className="text-sm text-white">{s.name}</span>
+                        {s.series && <span className="text-xs text-gray-500 ml-2">{s.series}</span>}
+                      </div>
+                      <code className="text-xs font-mono text-indigo-400 ml-4 shrink-0">{s.id}</code>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Stats grid */}
