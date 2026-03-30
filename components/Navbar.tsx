@@ -60,25 +60,25 @@ export default function Navbar() {
             <div className="flex items-center gap-1">
               <Link
                 href="/sets"
-                className="px-3 py-1.5 text-sm text-secondary hover:text-primary hover:bg-elevated rounded-lg transition-all"
+                className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all"
               >
                 Sets
               </Link>
               <Link
                 href="/collection"
-                className="px-3 py-1.5 text-sm text-secondary hover:text-primary hover:bg-elevated rounded-lg transition-all"
+                className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all"
               >
                 Collection
               </Link>
               <Link
                 href="/dashboard"
-                className="px-3 py-1.5 text-sm text-secondary hover:text-primary hover:bg-elevated rounded-lg transition-all"
+                className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all"
               >
                 Dashboard
               </Link>
               <Link
                 href={`/profile/${user.id}`}
-                className="px-3 py-1.5 text-sm text-secondary hover:text-primary hover:bg-elevated rounded-lg transition-all"
+                className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all"
               >
                 Profile
               </Link>
