@@ -100,6 +100,7 @@ export interface PokemonCard {
   rarity: string | null;
   type: string | null; // Pokemon element type e.g. "Grass", "Fire", "Water"
   image: string | null; // New single image field
+  artist?: string | null; // Illustrator credit, e.g. "GIDORA" (optional — not all routes fetch it)
   /** FK → variants.id — which variant is added when the card tile is double-clicked */
   default_variant_id?: string | null;
   created_at: string;
@@ -107,6 +108,24 @@ export interface PokemonCard {
   image_small?: string | null;
   image_large?: string | null;
   image_url?: string; // Computed fallback for backward compatibility
+}
+
+/** A single data point in the price history chart. */
+export interface PriceHistoryPoint {
+  /** Variant key from card_price_history.variant_key */
+  variantKey: 'normal' | 'reverse_holo' | 'holo' | '1st_edition' | string;
+  /** Price in USD */
+  priceUsd: number;
+  /** ISO timestamp when this price was recorded */
+  recordedAt: string;
+}
+
+/** Friend who owns a card — returned by /api/friends/card/[cardId] */
+export interface FriendCardOwner {
+  userId: string;
+  username: string | null;
+  avatarUrl: string | null;
+  variants: { variantName: string; quantity: number }[];
 }
 
 // UI types

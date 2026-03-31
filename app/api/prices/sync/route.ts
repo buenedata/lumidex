@@ -598,6 +598,47 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // ── Step 3.5: Record price history snapshot ───────────────────────────
+        // One row per non-null variant price per card. Powers the Price tab chart.
+        const historyRows: Record<string, unknown>[] = []
+        const historyTs = new Date().toISOString()
+        for (const row of priceUpserts) {
+          const cid = row.card_id as string
+          const variants: [string, string][] = [
+            ['normal',       'tcgp_normal'],
+            ['reverse_holo', 'tcgp_reverse_holo'],
+            ['holo',         'tcgp_holo'],
+            ['1st_edition',  'tcgp_1st_edition'],
+          ]
+          for (const [variantKey, field] of variants) {
+            const price = (row as Record<string, unknown>)[field]
+            if (price != null) {
+              historyRows.push({
+                card_id:     cid,
+                variant_key: variantKey,
+                price_usd:   price,
+                source:      'tcgplayer',
+                recorded_at: historyTs,
+              })
+            }
+          }
+        }
+        if (historyRows.length > 0) {
+          let historyInserted = 0
+          for (let i = 0; i < historyRows.length; i += BATCH_SIZE) {
+            const batch = historyRows.slice(i, i + BATCH_SIZE)
+            const { error: hErr } = await supabaseAdmin
+              .from('card_price_history')
+              .insert(batch)
+            if (hErr) {
+              emit({ type: 'warning', message: `Price history insert failed: ${hErr.message}` })
+            } else {
+              historyInserted += batch.length
+            }
+          }
+          emit({ type: 'history', count: historyInserted })
+        }
+
         // ── Step 4: Backfill tcgid → api_id ──────────────────────────────────
         for (const { uuid, tcgid } of apiIdBackfills) {
           await supabaseAdmin.from('cards').update({ api_id: tcgid }).eq('id', uuid)

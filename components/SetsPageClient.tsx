@@ -26,10 +26,14 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId, seriesWi
   )
   const [searchQuery, setSearchQuery] = useState('')
   const [activeSeries, setActiveSeries] = useState<string>('All')
-  const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'ja'>('en')
+  const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'ja'>(() => {
+    if (typeof window === 'undefined') return 'en'
+    return (localStorage.getItem('lumidex_sets_lang') as 'en' | 'ja') ?? 'en'
+  })
 
   // ── Language switch — also resets the active series pill ─────────────────
   const handleLanguageChange = (lang: 'en' | 'ja') => {
+    localStorage.setItem('lumidex_sets_lang', lang)
     setSelectedLanguage(lang)
     setActiveSeries('All')
   }

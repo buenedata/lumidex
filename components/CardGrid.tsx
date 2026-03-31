@@ -1,12 +1,17 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import dynamic from 'next/dynamic'
 import Image from 'next/image'
-import { PokemonCard, UserCard, VariantWithQuantity, QuickAddVariant, VARIANT_COLOR_CLASSES, CollectionGoal } from '@/types'
+import { PokemonCard, UserCard, VariantWithQuantity, QuickAddVariant, VARIANT_COLOR_CLASSES, CollectionGoal, PriceHistoryPoint, FriendCardOwner } from '@/types'
 import { useCollectionStore, useAuthStore } from '@/lib/store'
 import Modal from '@/components/ui/Modal'
 import VariantSuggestionModal from '@/components/VariantSuggestionModal'
 import { formatPrice } from '@/lib/pricing'
+import type { PriceChartRange } from '@/components/PriceChart'
+
+// Recharts has SSR issues — load only on client
+const PriceChart = dynamic(() => import('@/components/PriceChart'), { ssr: false })
 
 // ── Price row shape returned by /api/prices/card/[cardId] ─────────────────────
 interface CardPriceRow {
@@ -29,7 +34,7 @@ interface CardPriceRow {
   fetched_at:        string
 }
 
-type ModalTab = 'card' | 'price'
+type ModalTab = 'card' | 'price' | 'trade' | 'friends'
 
 type SortBy    = 'number' | 'name' | 'price'
 type FilterTab = 'all' | 'owned' | 'missing' | 'duplicates'
@@ -201,10 +206,21 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const [relatedCards, setRelatedCards] = useState<RelatedCard[]>([])
   const [relatedCardsTotal, setRelatedCardsTotal] = useState(0)
   const [isFetchingRelated, setIsFetchingRelated] = useState(false)
-  // Modal tab state (Card / Price)
+  // Modal tab state (Card / Price / Trade / Friends)
   const [modalTab, setModalTab]             = useState<ModalTab>('card')
   const [cardPriceCache, setCardPriceCache] = useState<Map<string, CardPriceRow | null>>(new Map())
   const [isLoadingPrice, setIsLoadingPrice] = useState(false)
+  // Price history chart state
+  const [priceChartRange, setPriceChartRange]           = useState<PriceChartRange>('30d')
+  const [priceHistoryCache, setPriceHistoryCache]       = useState<Map<string, PriceHistoryPoint[]>>(new Map())
+  const [isLoadingHistory, setIsLoadingHistory]         = useState(false)
+  // Wanted list state
+  const [wantedCardIds, setWantedCardIds]               = useState<Set<string>>(new Set())
+  const [wantedLoading, setWantedLoading]               = useState(false)
+  const [wantedInitialized, setWantedInitialized]       = useState(false)
+  // Friends tab state
+  const [friendsCache, setFriendsCache]                 = useState<Map<string, FriendCardOwner[]>>(new Map())
+  const [isLoadingFriends, setIsLoadingFriends]         = useState(false)
   // Ensures we only auto-open the initialCardId modal once
   const autoOpenedRef = useRef(false)
   // Used to distinguish single-click (open modal) from double-click (add default variant)
@@ -548,6 +564,86 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     }
   }, [cardPriceCache])
 
+  // Fetch price history for a card (cached per session, re-fetched on range change)
+  const fetchCardPriceHistory = useCallback(async (cardId: string, range: PriceChartRange) => {
+    const cacheKey = `${cardId}:${range}`
+    if (priceHistoryCache.has(cacheKey)) return
+    setIsLoadingHistory(true)
+    try {
+      const res = await fetch(`/api/prices/history/${cardId}?range=${range}`)
+      if (res.ok) {
+        const json = await res.json()
+        setPriceHistoryCache(prev => new Map(prev).set(cacheKey, json.history ?? []))
+      }
+    } catch {
+      setPriceHistoryCache(prev => new Map(prev).set(cacheKey, []))
+    } finally {
+      setIsLoadingHistory(false)
+    }
+  }, [priceHistoryCache])
+
+  // Load the user's wanted card IDs once on first modal open (if authenticated)
+  const fetchWantedCards = useCallback(async () => {
+    if (wantedInitialized) return
+    try {
+      const res = await fetch('/api/wanted-cards')
+      if (res.ok) {
+        const json = await res.json()
+        setWantedCardIds(new Set(json.wantedCardIds ?? []))
+        setWantedInitialized(true)
+      }
+    } catch { /* non-critical */ }
+  }, [wantedInitialized])
+
+  // Toggle wanted status for a card
+  const toggleWanted = useCallback(async (cardId: string) => {
+    if (wantedLoading) return
+    const isCurrentlyWanted = wantedCardIds.has(cardId)
+    // Optimistic update
+    setWantedCardIds(prev => {
+      const next = new Set(prev)
+      if (isCurrentlyWanted) next.delete(cardId)
+      else next.add(cardId)
+      return next
+    })
+    setWantedLoading(true)
+    try {
+      const res = await fetch('/api/wanted-cards', {
+        method: isCurrentlyWanted ? 'DELETE' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cardId }),
+      })
+      if (!res.ok) throw new Error('Request failed')
+    } catch {
+      // Revert optimistic update on error
+      setWantedCardIds(prev => {
+        const next = new Set(prev)
+        if (isCurrentlyWanted) next.add(cardId)
+        else next.delete(cardId)
+        return next
+      })
+    } finally {
+      setWantedLoading(false)
+    }
+  }, [wantedCardIds, wantedLoading])
+
+  // Fetch friends who own a card (cached per card per session)
+  const fetchFriendsForCard = useCallback(async (cardId: string) => {
+    if (friendsCache.has(cardId)) return
+    setIsLoadingFriends(true)
+    try {
+      const res = await fetch(`/api/friends/card/${cardId}`)
+      if (res.ok) {
+        const json = await res.json()
+        setFriendsCache(prev => new Map(prev).set(cardId, json.friends ?? []))
+      }
+    } catch {
+      setFriendsCache(prev => new Map(prev).set(cardId, []))
+    } finally {
+      setIsLoadingFriends(false)
+    }
+  }, [friendsCache])
+
   // Open card modal when clicked (used by auto-open and right-click)
   const handleCardClick = (card: PokemonCard) => {
     setSelectedCard(card)
@@ -556,6 +652,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     if (!cardVariants.has(card.id)) {
       setTimeout(() => loadCardVariants(card.id, false), 100)
     }
+    // Pre-load wanted list on first modal open
+    if (user) fetchWantedCards()
   }
 
   // Single click on card image — open modal after short delay so double-click can cancel it
@@ -805,12 +903,29 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       >
         {selectedCard && (
           <div className="flex gap-6">
-            {/* Left side - Card Image with holographic glare */}
-            <div className="flex-shrink-0">
+            {/* Left side - Card Image with holographic glare + artist */}
+            <div className="flex-shrink-0 flex flex-col">
               <CardGlareImage
                 src={selectedCard.image_url}
                 alt={selectedCard.name ?? undefined}
               />
+              {/* Artist credit — displayed below card image */}
+              {selectedCard.artist && (
+                <div className="px-5 pt-2 pb-3 flex flex-col gap-1">
+                  <div className="flex items-center gap-1.5 text-xs text-muted">
+                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                    <span className="font-medium text-secondary">{selectedCard.artist}</span>
+                  </div>
+                  <a
+                    href={`/browse?artist=${encodeURIComponent(selectedCard.artist)}`}
+                    className="text-xs text-accent hover:underline transition-colors"
+                  >
+                    See more cards from this artist →
+                  </a>
+                </div>
+              )}
             </div>
 
             {/* Right side - Card Details */}
@@ -824,12 +939,28 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                     #{(selectedCard.number || 'Unknown').split('/')[0]}/{setComplete ?? setTotal}
                   </p>
                 </div>
-                <button
-                  onClick={() => setSelectedCard(null)}
-                  className="text-muted hover:text-primary text-2xl transition-colors p-2"
-                >
-                  ✕
-                </button>
+                <div className="flex items-center">
+                  {/* Wanted / Wishlist star — authenticated users only */}
+                  {user && (
+                    <button
+                      onClick={() => toggleWanted(selectedCard.id)}
+                      disabled={wantedLoading}
+                      title={wantedCardIds.has(selectedCard.id) ? 'Remove from wanted list' : 'Add to wanted list'}
+                      className="p-2 transition-colors disabled:opacity-40"
+                    >
+                      {wantedCardIds.has(selectedCard.id)
+                        ? <span className="text-2xl leading-none text-yellow-400">★</span>
+                        : <span className="text-2xl leading-none text-muted hover:text-yellow-400 transition-colors">☆</span>
+                      }
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setSelectedCard(null)}
+                    className="text-muted hover:text-primary text-2xl transition-colors p-2"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
 
               {/* Tabs */}
@@ -846,110 +977,135 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                     onClick={() => {
                       setModalTab('price')
                       fetchCardPrice(selectedCard.id)
+                      fetchCardPriceHistory(selectedCard.id, priceChartRange)
                     }}
                   >
                     Price
+                  </button>
+                  <button
+                    className={modalTab === 'trade' ? 'tab-active pb-2 text-sm font-medium' : 'tab-inactive pb-2 text-sm'}
+                    onClick={() => setModalTab('trade')}
+                  >
+                    Trade
+                  </button>
+                  <button
+                    className={modalTab === 'friends' ? 'tab-active pb-2 text-sm font-medium' : 'tab-inactive pb-2 text-sm'}
+                    onClick={() => {
+                      setModalTab('friends')
+                      fetchFriendsForCard(selectedCard.id)
+                    }}
+                  >
+                    Friends
                   </button>
                 </div>
               </div>
 
               {/* ── Price Tab ─── */}
               {modalTab === 'price' && (
-                <div className="flex-1 overflow-y-auto">
+                <div className="flex-1 overflow-y-auto space-y-5">
+
+                  {/* Price history line chart */}
+                  <PriceChart
+                    history={priceHistoryCache.get(`${selectedCard.id}:${priceChartRange}`) ?? []}
+                    currency={currency ?? 'USD'}
+                    isLoading={isLoadingHistory && !priceHistoryCache.has(`${selectedCard.id}:${priceChartRange}`)}
+                    range={priceChartRange}
+                    onRangeChange={(r) => {
+                      setPriceChartRange(r)
+                      fetchCardPriceHistory(selectedCard.id, r)
+                    }}
+                  />
+
+                  {/* Current prices snapshot */}
                   {isLoadingPrice && !cardPriceCache.has(selectedCard.id) ? (
-                    <div className="text-muted text-center py-12 animate-pulse">Loading prices…</div>
+                    <div className="text-muted text-center py-4 animate-pulse text-sm">Loading prices…</div>
                   ) : (() => {
                     const row = cardPriceCache.get(selectedCard.id)
                     if (!row) {
                       return (
-                        <div className="text-center py-12">
-                          <div className="text-4xl mb-3">📊</div>
+                        <div className="rounded-lg bg-elevated border border-subtle px-4 py-5 text-center">
                           <p className="text-muted text-sm">No price data synced for this card yet.</p>
-                          <p className="text-muted/60 text-xs mt-1">An admin can sync prices from /admin/prices.</p>
+                          <p className="text-muted/60 text-xs mt-0.5">An admin can sync prices from /admin/prices.</p>
                         </div>
                       )
                     }
 
-                    // Build graded price rows — only show grades with actual data
-                    const gradeRows: { label: string; price: number | null; badge?: string }[] = [
-                      { label: 'BGS 9.5',  price: row.tcgp_bgs95,  badge: '🏅' },
-                      { label: 'PSA 10',   price: row.tcgp_psa10,  badge: '🥇' },
-                      { label: 'CGC 10',   price: row.tcgp_cgc10,  badge: '🥇' },
-                      { label: 'PSA 9',    price: row.tcgp_psa9,   badge: '🥈' },
-                      { label: 'BGS 9',    price: row.tcgp_bgs9,   badge: '🥈' },
-                    ]
-                    const maxGraded = Math.max(...gradeRows.map(g => g.price ?? 0))
+                    const variantRows = [
+                      { label: 'Normal',       price: row.tcgp_normal,       dot: '#10b981' },
+                      { label: 'Reverse Holo', price: row.tcgp_reverse_holo, dot: '#3b82f6' },
+                      { label: 'Holofoil',     price: row.tcgp_holo,         dot: '#8b5cf6' },
+                      { label: '1st Edition',  price: row.tcgp_1st_edition,  dot: '#f59e0b' },
+                    ].filter(r => r.price != null)
+
+                    const gradeRows: { label: string; price: number }[] = [
+                      { label: 'PSA 10',  price: row.tcgp_psa10  ?? 0 },
+                      { label: 'BGS 9.5', price: row.tcgp_bgs95  ?? 0 },
+                      { label: 'CGC 10',  price: row.tcgp_cgc10  ?? 0 },
+                      { label: 'PSA 9',   price: row.tcgp_psa9   ?? 0 },
+                      { label: 'BGS 9',   price: row.tcgp_bgs9   ?? 0 },
+                    ].filter(g => g.price > 0)
+                    const maxGraded = gradeRows.length > 0 ? Math.max(...gradeRows.map(g => g.price)) : 0
 
                     return (
                       <div className="space-y-5">
-                        {/* Raw variant prices */}
+
+                        {/* TCGPlayer variant prices */}
                         <div>
-                          <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2.5">TCGPlayer Prices</h3>
-                          <div className="space-y-1.5">
-                            {[
-                              { label: 'Normal',       price: row.tcgp_normal },
-                              { label: 'Reverse Holo', price: row.tcgp_reverse_holo },
-                              { label: 'Holofoil',     price: row.tcgp_holo },
-                              { label: '1st Edition',  price: row.tcgp_1st_edition },
-                            ].filter(r => r.price != null).map(r => (
-                              <div key={r.label} className="flex items-center justify-between text-sm">
-                                <span className="text-secondary">{r.label}</span>
-                                <span className="text-success font-semibold tabular-nums">
-                                  {formatPrice(r.price!, currency)}
-                                </span>
-                              </div>
-                            ))}
-                            {[row.tcgp_normal, row.tcgp_reverse_holo, row.tcgp_holo, row.tcgp_1st_edition].every(v => v == null) && (
-                              <p className="text-muted text-xs">No variant prices available.</p>
-                            )}
-                          </div>
+                          <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">Current Prices · TCGPlayer</h3>
+                          {variantRows.length === 0 ? (
+                            <p className="text-muted text-xs">No variant prices available.</p>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {variantRows.map(r => (
+                                <div key={r.label} className="flex items-center justify-between text-sm bg-elevated rounded-lg px-3 py-2 border border-subtle">
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: r.dot }} />
+                                    <span className="text-secondary">{r.label}</span>
+                                  </div>
+                                  <span className="font-semibold tabular-nums text-success">{formatPrice(r.price!, currency ?? 'USD')}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
 
                         {/* CardMarket prices */}
                         {(row.cm_avg_sell != null || row.cm_trend != null) && (
                           <div>
-                            <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2.5">CardMarket Prices</h3>
+                            <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">CardMarket</h3>
                             <div className="space-y-1.5">
-                              {row.cm_avg_sell != null && (
-                                <div className="flex items-center justify-between text-sm">
-                                  <span className="text-secondary">Avg Sell</span>
-                                  <span className="text-success font-semibold tabular-nums">€{row.cm_avg_sell.toFixed(2)}</span>
+                              {[
+                                { label: 'Avg Sell',   val: row.cm_avg_sell != null ? `€${row.cm_avg_sell.toFixed(2)}` : null },
+                                { label: 'Trend',      val: row.cm_trend    != null ? `€${row.cm_trend.toFixed(2)}`    : null },
+                                { label: '30-day Avg', val: row.cm_avg_30d  != null ? `€${row.cm_avg_30d.toFixed(2)}`  : null },
+                              ].filter(r => r.val != null).map(r => (
+                                <div key={r.label} className="flex items-center justify-between text-sm bg-elevated rounded-lg px-3 py-2 border border-subtle">
+                                  <span className="text-secondary">{r.label}</span>
+                                  <span className="font-semibold tabular-nums text-success">{r.val}</span>
                                 </div>
-                              )}
-                              {row.cm_trend != null && (
-                                <div className="flex items-center justify-between text-sm">
-                                  <span className="text-secondary">Trend</span>
-                                  <span className="text-success font-semibold tabular-nums">€{row.cm_trend.toFixed(2)}</span>
-                                </div>
-                              )}
-                              {row.cm_avg_30d != null && (
-                                <div className="flex items-center justify-between text-sm">
-                                  <span className="text-secondary">30-day Avg</span>
-                                  <span className="text-success font-semibold tabular-nums">€{row.cm_avg_30d.toFixed(2)}</span>
-                                </div>
-                              )}
+                              ))}
                             </div>
                           </div>
                         )}
 
-                        {/* Graded prices */}
+                        {/* Graded prices — bar chart style */}
                         {maxGraded > 0 && (
                           <div>
-                            <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2.5">🏅 Graded Prices (TCGPlayer)</h3>
+                            <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">🏅 Graded Value</h3>
                             <div className="space-y-2">
-                              {gradeRows.filter(g => g.price != null).map(g => {
-                                const pct = maxGraded > 0 ? Math.round(((g.price ?? 0) / maxGraded) * 100) : 0
+                              {gradeRows.map(g => {
+                                const pct = Math.round((g.price / maxGraded) * 100)
                                 return (
-                                  <div key={g.label} className="flex items-center gap-2">
-                                    <span className="text-xs text-secondary w-16 shrink-0">{g.label}</span>
+                                  <div key={g.label} className="flex items-center gap-3">
+                                    <span className="text-xs text-secondary w-14 shrink-0">{g.label}</span>
                                     <div className="flex-1 h-1.5 bg-elevated rounded-full overflow-hidden">
                                       <div
-                                        className="h-full bg-accent rounded-full transition-all"
-                                        style={{ width: `${pct}%` }}
+                                        className="h-full rounded-full transition-all"
+                                        style={{ width: `${pct}%`, backgroundColor: '#7c3aed' }}
                                       />
                                     </div>
                                     <span className="text-xs font-semibold text-success tabular-nums w-16 text-right shrink-0">
-                                      {formatPrice(g.price!, currency)}
+                                      {formatPrice(g.price, currency ?? 'USD')}
                                     </span>
                                   </div>
                                 )
@@ -958,7 +1114,6 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                           </div>
                         )}
 
-                        {/* Fetched timestamp */}
                         <p className="text-muted/50 text-xs border-t border-subtle pt-3">
                           Prices synced {new Date(row.fetched_at).toLocaleDateString()}
                         </p>
@@ -1136,6 +1291,94 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                   </div>
                 )}
               </div>}
+
+              {/* ── Trade Tab ─── */}
+              {modalTab === 'trade' && (
+                <div className="flex-1 flex flex-col items-center justify-center py-12 px-4 text-center">
+                  <span className="text-5xl mb-4">🔄</span>
+                  <h3 className="text-lg font-semibold text-primary mb-2">Trading Coming Soon</h3>
+                  <p className="text-secondary text-sm max-w-xs leading-relaxed">
+                    Trade your duplicates with other Lumidex collectors.
+                    We&rsquo;re building this feature — check back soon!
+                  </p>
+                </div>
+              )}
+
+              {/* ── Friends Tab ─── */}
+              {modalTab === 'friends' && (
+                <div className="flex-1 overflow-y-auto">
+                  {!user ? (
+                    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                      <span className="text-4xl mb-3">👥</span>
+                      <p className="text-secondary text-sm">Sign in to see which friends have this card.</p>
+                    </div>
+                  ) : isLoadingFriends && !friendsCache.has(selectedCard.id) ? (
+                    <div className="space-y-3 py-4">
+                      {[0, 1, 2].map(i => (
+                        <div key={i} className="flex items-center gap-3 animate-pulse">
+                          <div className="w-8 h-8 rounded-full bg-elevated" />
+                          <div className="flex-1 h-4 bg-elevated rounded" />
+                          <div className="w-20 h-4 bg-elevated rounded" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (() => {
+                    const friends = friendsCache.get(selectedCard.id) ?? []
+                    if (friends.length === 0) {
+                      return (
+                        <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                          <span className="text-4xl mb-3">🤝</span>
+                          <p className="text-secondary text-sm font-medium">None of your friends have this card yet.</p>
+                          <p className="text-muted text-xs mt-1">Connect with more collectors to see who has it.</p>
+                        </div>
+                      )
+                    }
+                    return (
+                      <div className="space-y-2">
+                        {friends.map(friend => (
+                          <div
+                            key={friend.userId}
+                            className="flex items-center gap-3 bg-elevated rounded-lg px-3 py-2.5 border border-subtle"
+                          >
+                            {/* Avatar */}
+                            <div className="w-8 h-8 rounded-full bg-surface flex items-center justify-center overflow-hidden flex-shrink-0 ring-1 ring-subtle">
+                              {friend.avatarUrl ? (
+                                <Image
+                                  src={friend.avatarUrl}
+                                  alt={friend.username ?? ''}
+                                  width={32}
+                                  height={32}
+                                  className="object-cover"
+                                />
+                              ) : (
+                                <span className="text-base">👤</span>
+                              )}
+                            </div>
+                            {/* Username */}
+                            <a
+                              href={`/profile/${friend.userId}`}
+                              className="text-sm font-medium text-primary hover:text-accent transition-colors truncate"
+                            >
+                              {friend.username ?? 'Unknown collector'}
+                            </a>
+                            {/* Variant badges */}
+                            <div className="flex flex-wrap gap-1 ml-auto">
+                              {friend.variants.map(v => (
+                                <span
+                                  key={v.variantName}
+                                  className="text-xs bg-surface border border-subtle rounded px-1.5 py-0.5 text-secondary tabular-nums whitespace-nowrap"
+                                >
+                                  {v.variantName} ×{v.quantity}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
             </div>
           </div>
         )}

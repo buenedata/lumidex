@@ -42,6 +42,7 @@ export interface DbCard {
   rarity: string | null
   type: string | null
   image: string | null
+  artist: string | null
   /** FK → variants.id — the default variant for double-click quick-add */
   default_variant_id: string | null
   /** pokemontcg.io / RapidAPI card ID e.g. "sv1-1". Used for price matching. */
