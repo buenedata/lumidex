@@ -11,12 +11,45 @@ import AvatarUpload from '@/components/profile/AvatarUpload'
 import BannerUpload from '@/components/profile/BannerUpload'
 import SettingsModal from '@/components/profile/SettingsModal'
 import FirstTimeSetupModal from '@/components/profile/FirstTimeSetupModal'
-import { defaultSettings, type SettingsValues } from '@/components/profile/SettingsForm'
+import FriendButton from '@/components/profile/FriendButton'
+import FriendsList from '@/components/profile/FriendsList'
+import FriendRequests from '@/components/profile/FriendRequests'
+import { type SettingsValues } from '@/components/profile/SettingsForm'
 import { User, Achievement, PokemonSet, SetProgress } from '@/types'
+import type { FriendEntry } from '@/components/profile/FriendsList'
 import { cn } from '@/lib/utils'
 
-// ProfileUser uses the full User type (which now includes all new fields)
+// ── Pure price formatter (client-safe, no server imports) ─────────────────────
+const EXCHANGE_RATES: Record<string, number> = {
+  USD: 1.00, EUR: 0.92, GBP: 0.79, NOK: 10.55,
+  SEK: 10.35, DKK: 6.88, CAD: 1.36, AUD: 1.52, JPY: 149.00, CHF: 0.90,
+}
+const CURRENCY_LOCALES: Record<string, string> = {
+  USD: 'en-US', EUR: 'de-DE', GBP: 'en-GB', NOK: 'nb-NO',
+  SEK: 'sv-SE', DKK: 'da-DK', CAD: 'en-CA', AUD: 'en-AU', JPY: 'ja-JP', CHF: 'de-CH',
+}
+function formatPrice(usdAmount: number, toCurrency: string): string {
+  const rate     = EXCHANGE_RATES[toCurrency] ?? 1
+  const locale   = CURRENCY_LOCALES[toCurrency] ?? 'en-US'
+  const currency = toCurrency in EXCHANGE_RATES ? toCurrency : 'USD'
+  return new Intl.NumberFormat(locale, {
+    style:                 'currency',
+    currency,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(usdAmount * rate)
+}
+
+// ── Types ──────────────────────────────────────────────────────────────────────
+
 type ProfileUser = User
+
+interface FriendshipRow {
+  id: string
+  status: string
+  requester_id: string
+  addressee_id: string
+}
 
 function userToSettings(u: ProfileUser): SettingsValues {
   return {
@@ -32,35 +65,44 @@ function userToSettings(u: ProfileUser): SettingsValues {
   }
 }
 
+// ── Component ──────────────────────────────────────────────────────────────────
+
 export default function ProfilePage() {
   const params = useParams()
   const userId = params.id as string
   const { user: currentUser, profile, setProfile } = useAuthStore()
   const router = useRouter()
 
-  const [profileUser, setProfileUser] = useState<ProfileUser | null>(null)
-  const [userSets, setUserSets] = useState<string[]>([])
-  const [profileSets, setProfileSets] = useState<PokemonSet[]>([])
-  const [setProgressMap, setSetProgressMap] = useState<Record<string, SetProgress>>({})
+  const [profileUser, setProfileUser]         = useState<ProfileUser | null>(null)
+  const [userSets, setUserSets]               = useState<string[]>([])
+  const [profileSets, setProfileSets]         = useState<PokemonSet[]>([])
+  const [setProgressMap, setSetProgressMap]   = useState<Record<string, SetProgress>>({})
   const [userAchievements, setUserAchievements] = useState<Achievement[]>([])
   const [stats, setStats] = useState({
     totalCards: 0,
     completedSets: 0,
     achievementCount: 0,
   })
+  const [collectionValueUsd, setCollectionValueUsd] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
 
   // Local mutable URLs (may change after an upload without re-fetching the whole profile)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [bannerUrl, setBannerUrl] = useState<string | null>(null)
 
+  // Friends state
+  const [acceptedFriends, setAcceptedFriends]     = useState<FriendEntry[]>([])
+  const [pendingIncoming, setPendingIncoming]     = useState<FriendEntry[]>([])
+  const [currentUserFriendship, setCurrentUserFriendship] = useState<FriendshipRow | null>(null)
+  const [friendsLoading, setFriendsLoading]       = useState(false)
+
   // Modal state
-  const [showSetupModal, setShowSetupModal] = useState(false)
+  const [showSetupModal, setShowSetupModal]       = useState(false)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
 
   const isOwnProfile = currentUser?.id === userId
 
-  // ── Load profile ──────────────────────────────────────────────
+  // ── Load profile ──────────────────────────────────────────────────────────────
   useEffect(() => {
     const loadProfile = async () => {
       setLoading(true)
@@ -106,7 +148,7 @@ export default function ProfilePage() {
           supabase.rpc('get_user_card_counts_by_set', { p_user_id: userId }),
         ])
 
-        setsInfo = (setsResult.data ?? []) as PokemonSet[]
+        setsInfo   = (setsResult.data ?? []) as PokemonSet[]
         cardCounts = (rpcResult.data ?? []) as CardCountRow[]
 
         setProfileSets(setsInfo)
@@ -151,7 +193,7 @@ export default function ProfilePage() {
       // Calculate stats — sum quantities from user_card_variants (the source of truth)
       const { data: cardsData } = await supabase
         .from('user_card_variants')
-        .select('quantity')
+        .select('card_id, quantity, variant_type')
         .eq('user_id', userId)
 
       const totalCards = cardsData?.reduce((sum, row) => sum + (row.quantity ?? 0), 0) || 0
@@ -169,13 +211,134 @@ export default function ProfilePage() {
         achievementCount: achievementsData?.length || 0,
       })
 
+      // ── Portfolio value: card variants + sealed products ──────────────────────
+      try {
+        const priceSource = userData?.price_source ?? 'tcgplayer'
+
+        // 1. Card variant values — join fetched cardsData with card_prices
+        const cardIds = [
+          ...new Set(
+            (cardsData ?? [])
+              .map(v => v.card_id)
+              .filter((id): id is string => typeof id === 'string')
+          ),
+        ]
+
+        let cardValueUsd = 0
+        if (cardIds.length > 0) {
+          const { data: prices } = await supabase
+            .from('card_prices')
+            .select('card_id, tcgp_normal, tcgp_reverse_holo, tcgp_holo, tcgp_1st_edition, tcgp_market, cm_trend')
+            .in('card_id', cardIds)
+
+          const priceMap = new Map(prices?.map(p => [p.card_id, p]) ?? [])
+
+          for (const v of cardsData ?? []) {
+            if (!v.card_id || !v.quantity) continue
+            const row = priceMap.get(v.card_id)
+            if (!row) continue
+
+            let unitPrice: number | null = null
+            if (priceSource === 'cardmarket') {
+              unitPrice = (row.cm_trend as number | null) ?? null
+            } else {
+              const vt = (v.variant_type ?? '').toLowerCase()
+              if (vt === 'normal')                                 unitPrice = row.tcgp_normal as number | null
+              else if (vt === 'reverse' || vt === 'reverse_holo') unitPrice = row.tcgp_reverse_holo as number | null
+              else if (vt === 'holo')                             unitPrice = row.tcgp_holo as number | null
+              else if (vt.includes('1st'))                        unitPrice = row.tcgp_1st_edition as number | null
+              unitPrice ??= (row.tcgp_market as number | null)
+            }
+            cardValueUsd += (unitPrice ?? 0) * v.quantity
+          }
+        }
+
+        // 2. Sealed product values
+        const { data: ownedSealed } = await supabase
+          .from('user_sealed_products')
+          .select('product_id, quantity')
+          .eq('user_id', userId)
+          .gt('quantity', 0)
+
+        let sealedValueUsd = 0
+        if (ownedSealed && ownedSealed.length > 0) {
+          const productIds = ownedSealed.map(p => p.product_id)
+          const { data: productPrices } = await supabase
+            .from('set_products')
+            .select('api_product_id, tcgp_market, cm_trend')
+            .in('api_product_id', productIds)
+
+          const productMap = new Map(productPrices?.map(p => [p.api_product_id, p]) ?? [])
+          for (const owned of ownedSealed) {
+            const product = productMap.get(owned.product_id)
+            if (!product || !owned.quantity) continue
+            const unitPrice =
+              priceSource === 'cardmarket'
+                ? ((product.cm_trend as number | null) ?? (product.tcgp_market as number | null) ?? 0)
+                : ((product.tcgp_market as number | null) ?? 0)
+            sealedValueUsd += (unitPrice ?? 0) * owned.quantity
+          }
+        }
+
+        setCollectionValueUsd(cardValueUsd + sealedValueUsd)
+      } catch (err) {
+        console.warn('[profile] portfolio value computation failed:', err)
+        setCollectionValueUsd(null)
+      }
+
       setLoading(false)
     }
 
     if (userId) loadProfile()
   }, [userId, currentUser?.id])
 
-  // ── Setup wizard complete ─────────────────────────────────────
+  // ── Load friends data ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!userId) return
+
+    const loadFriends = async () => {
+      setFriendsLoading(true)
+      try {
+        if (isOwnProfile) {
+          // Own profile: full friend list + incoming pending requests
+          const res = await fetch('/api/friendships')
+          if (res.ok) {
+            const data = await res.json()
+            setAcceptedFriends(data.accepted ?? [])
+            setPendingIncoming(data.pending_incoming ?? [])
+          }
+        } else {
+          // Another user's profile: run both fetches in parallel
+          const [publicFriendsRes, friendshipStatusRes] = await Promise.all([
+            // The profile user's public friends list
+            fetch(`/api/friendships/public/${userId}`),
+            // Current viewer's specific friendship with this user (login required)
+            currentUser
+              ? fetch(`/api/friendships?user_id=${userId}`)
+              : Promise.resolve(null),
+          ])
+
+          if (publicFriendsRes.ok) {
+            const data = await publicFriendsRes.json()
+            setAcceptedFriends(data.friends ?? [])
+          }
+
+          if (friendshipStatusRes?.ok) {
+            const data = await friendshipStatusRes.json()
+            if (data.friendship) setCurrentUserFriendship(data.friendship)
+          }
+        }
+      } catch (err) {
+        console.error('loadFriends error:', err)
+      } finally {
+        setFriendsLoading(false)
+      }
+    }
+
+    loadFriends()
+  }, [userId, isOwnProfile, currentUser?.id])
+
+  // ── Setup wizard complete ─────────────────────────────────────────────────────
   function handleSetupComplete(
     savedValues: SettingsValues,
     newAvatarUrl: string | null,
@@ -184,7 +347,6 @@ export default function ProfilePage() {
     setShowSetupModal(false)
     if (newAvatarUrl) setAvatarUrl(newAvatarUrl)
     if (newBannerUrl) setBannerUrl(newBannerUrl)
-    // Patch local profileUser state so the page reflects changes immediately
     setProfileUser(prev =>
       prev
         ? {
@@ -198,12 +360,12 @@ export default function ProfilePage() {
     )
   }
 
-  // ── Settings modal saved ──────────────────────────────────────
+  // ── Settings modal saved ──────────────────────────────────────────────────────
   function handleSettingsSaved(savedValues: SettingsValues) {
     setProfileUser(prev => (prev ? { ...prev, ...savedValues } : prev))
   }
 
-  // ── Loading State ─────────────────────────────────────────────
+  // ── Loading State ─────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="min-h-screen bg-base">
@@ -218,8 +380,8 @@ export default function ProfilePage() {
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-4 mb-6">
-            {Array.from({ length: 3 }).map((_, i) => (
+          <div className="grid grid-cols-4 gap-4 mb-6">
+            {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="bg-surface border border-subtle rounded-xl p-4">
                 <div className="skeleton h-3 w-20 rounded mb-2" />
                 <div className="skeleton h-7 w-12 rounded" />
@@ -231,7 +393,7 @@ export default function ProfilePage() {
     )
   }
 
-  // ── Not Found State ───────────────────────────────────────────
+  // ── Not Found State ───────────────────────────────────────────────────────────
   if (!profileUser) {
     return (
       <div className="min-h-screen bg-base">
@@ -258,24 +420,42 @@ export default function ProfilePage() {
     )
   }
 
-  // ── Derived display values ────────────────────────────────────
-  const displayName   = profileUser.display_name || profileUser.username
-  const initials      = profileUser.username.slice(0, 2).toUpperCase()
-  const joinDate      = profileUser.created_at
+  // ── Derived display values ────────────────────────────────────────────────────
+  const displayName = profileUser.display_name || profileUser.username
+  const initials    = profileUser.username.slice(0, 2).toUpperCase()
+  const joinDate    = profileUser.created_at
     ? new Date(profileUser.created_at).toLocaleDateString('en-US', {
         month: 'long',
-        year: 'numeric',
+        year:  'numeric',
       })
     : null
-  const isPrivate     = !isOwnProfile && (profileUser.profile_private ?? false)
-  const displaySets = isPrivate ? [] : profileSets
+  const isPrivate = !isOwnProfile && (profileUser.profile_private ?? false)
 
-  // ── Render ─────────────────────────────────────────────────────
+  // Portfolio visibility: own profile always, else check the user's setting
+  const canSeePortfolioValue =
+    isOwnProfile ||
+    profileUser.show_portfolio_value === 'public' ||
+    (profileUser.show_portfolio_value === 'friends_only' &&
+      currentUserFriendship?.status === 'accepted')
+
+  // Sort sets: highest completion % first, then newest release date
+  const displaySets = (isPrivate ? [] : profileSets)
+    .slice()
+    .sort((a, b) => {
+      const pA = setProgressMap[a.id]?.percentage ?? 0
+      const pB = setProgressMap[b.id]?.percentage ?? 0
+      if (pB !== pA) return pB - pA
+      const dA = a.release_date ? new Date(a.release_date).getTime() : 0
+      const dB = b.release_date ? new Date(b.release_date).getTime() : 0
+      return dB - dA
+    })
+
+  // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-base">
       <div className="max-w-screen-2xl mx-auto px-6 py-8">
 
-        {/* ── Hero Card ─────────────────────────────────────────── */}
+        {/* ── Hero Card ─────────────────────────────────────────────────────── */}
         <div className="relative bg-surface border border-subtle rounded-2xl overflow-hidden mb-6">
 
           {/* Banner */}
@@ -318,14 +498,13 @@ export default function ProfilePage() {
             </button>
           )}
 
-          {/* Avatar + user info — overlapping the banner */}
+          {/* Avatar + user info */}
           <div className="relative z-10 px-6 pb-6 -mt-10 md:-mt-12 flex flex-col md:flex-row items-center md:items-end gap-4">
             <AvatarUpload
               currentUrl={avatarUrl}
               initials={initials}
               onUploaded={url => {
                 setAvatarUrl(url)
-                // Keep the navbar avatar in sync without a full page reload
                 if (isOwnProfile && profile) {
                   setProfile({ ...profile, avatar_url: url })
                 }
@@ -383,10 +562,22 @@ export default function ProfilePage() {
                 )}
               </div>
             </div>
+
+            {/* Friend button — only shown when viewing another user's profile */}
+            {!isOwnProfile && currentUser && !friendsLoading && (
+              <div className="pb-1 shrink-0">
+                <FriendButton
+                  key={currentUserFriendship?.id ?? 'no-friendship'}
+                  targetUserId={userId}
+                  currentUserId={currentUser.id}
+                  initialFriendship={currentUserFriendship}
+                />
+              </div>
+            )}
           </div>
         </div>
 
-        {/* ── Private profile notice ────────────────────────────── */}
+        {/* ── Private profile notice ─────────────────────────────────────────── */}
         {isPrivate && (
           <div className="bg-surface border border-subtle rounded-xl p-8 mb-6 flex flex-col items-center gap-3 text-center">
             <div className="text-3xl">🔒</div>
@@ -398,8 +589,8 @@ export default function ProfilePage() {
 
         {!isPrivate && (
           <>
-            {/* ── Stats Row ───────────────────────────────────────── */}
-            <div className="grid grid-cols-3 gap-4 mb-8">
+            {/* ── Stats Row ────────────────────────────────────────────────────── */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
               <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
                 <span className="text-xs text-muted uppercase tracking-wider">Cards Collected</span>
                 <span className="text-2xl font-bold text-primary">
@@ -411,12 +602,33 @@ export default function ProfilePage() {
                 <span className="text-2xl font-bold text-primary">{userSets.length}</span>
               </div>
               <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
-                <span className="text-xs text-muted uppercase tracking-wider">Achievements</span>
-                <span className="text-2xl font-bold text-accent">{stats.achievementCount}</span>
+                <span className="text-xs text-muted uppercase tracking-wider">Collection Value</span>
+                <span className="text-2xl font-bold text-primary">
+                  {!canSeePortfolioValue
+                    ? '—'
+                    : collectionValueUsd === null
+                      ? '…'
+                      : formatPrice(collectionValueUsd, profileUser.preferred_currency ?? 'USD')
+                  }
+                </span>
+                {!canSeePortfolioValue && (
+                  <span className="text-[10px] text-muted">Private</span>
+                )}
+              </div>
+              <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
+                <span className="text-xs text-muted uppercase tracking-wider">Friends</span>
+                <span className="text-2xl font-bold text-primary">
+                  {friendsLoading ? '—' : acceptedFriends.length}
+                </span>
               </div>
             </div>
 
-            {/* ── Achievements Section ─────────────────────────────── */}
+            {/* ── Friend Requests (own profile only) ────────────────────────────── */}
+            {isOwnProfile && pendingIncoming.length > 0 && (
+              <FriendRequests initialRequests={pendingIncoming} />
+            )}
+
+            {/* ── Achievements Section ──────────────────────────────────────────── */}
             <section className="mb-8">
               <h2
                 className="text-xl font-bold text-primary mb-4"
@@ -456,7 +668,30 @@ export default function ProfilePage() {
               )}
             </section>
 
-            {/* ── Collection / Sets Section ────────────────────────── */}
+            {/* ── Friends Section ───────────────────────────────────────────────── */}
+            <section className="mb-8">
+              <h2
+                className="text-xl font-bold text-primary mb-4"
+                style={{ fontFamily: 'var(--font-space-grotesk)' }}
+              >
+                {isOwnProfile ? 'Friends' : `${displayName}'s Friends`}
+              </h2>
+
+              {friendsLoading ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="bg-surface border border-subtle rounded-xl p-3 flex flex-col items-center gap-2">
+                      <div className="skeleton w-12 h-12 rounded-full" />
+                      <div className="skeleton h-3 w-16 rounded" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <FriendsList friends={acceptedFriends} />
+              )}
+            </section>
+
+            {/* ── Collection / Sets Section ──────────────────────────────────────── */}
             <section>
               <h2
                 className="text-xl font-bold text-primary mb-4"
@@ -510,7 +745,7 @@ export default function ProfilePage() {
         )}
       </div>
 
-      {/* ── First-Time Setup Modal ──────────────────────────────── */}
+      {/* ── First-Time Setup Modal ─────────────────────────────────────────────── */}
       {showSetupModal && (
         <FirstTimeSetupModal
           userId={userId}
@@ -521,7 +756,7 @@ export default function ProfilePage() {
         />
       )}
 
-      {/* ── Settings Modal ──────────────────────────────────────── */}
+      {/* ── Settings Modal ─────────────────────────────────────────────────────── */}
       {isOwnProfile && (
         <SettingsModal
           isOpen={showSettingsModal}
