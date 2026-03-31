@@ -3,11 +3,11 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
-import { PokemonCard, UserCard, VariantWithQuantity, QuickAddVariant, VARIANT_COLOR_CLASSES, CollectionGoal, PriceHistoryPoint, FriendCardOwner } from '@/types'
+import { PokemonCard, UserCard, VariantWithQuantity, QuickAddVariant, VARIANT_COLOR_CLASSES, CollectionGoal, PriceHistoryPoint, FriendCardOwner, PriceSource } from '@/types'
 import { useCollectionStore, useAuthStore } from '@/lib/store'
 import Modal from '@/components/ui/Modal'
 import VariantSuggestionModal from '@/components/VariantSuggestionModal'
-import { formatPrice } from '@/lib/pricing'
+import { formatPrice, EUR_TO_USD } from '@/lib/pricing'
 import type { PriceChartRange } from '@/components/PriceChart'
 
 // Recharts has SSR issues — load only on client
@@ -72,6 +72,8 @@ interface CardGridProps {
   cardPricesUSD?: Record<string, number>
   /** User's preferred currency code, e.g. 'USD', 'NOK'. */
   currency?: string
+  /** User's preferred price source — drives which source label is shown. */
+  priceSource?: PriceSource
   /** Called once the batch variant fetch completes with the deduplicated legend variants. */
   onVariantsLegendChange?: (variants: QuickAddVariant[]) => void
 }
@@ -161,7 +163,19 @@ function getTypeGlowClass(type: string | null | undefined): string {
   return known.includes(key) ? `card-type-${key}` : ''
 }
 
-export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', onVariantsLegendChange }: CardGridProps) {
+/**
+ * Maps a variant display name to the matching per-variant TCGPlayer price field.
+ * Falls back to tcgp_normal for any variant not explicitly matched.
+ */
+function getVariantMarketPrice(variantName: string, row: CardPriceRow): number | null {
+  const name = variantName.toLowerCase()
+  if (name.includes('reverse'))                          return row.tcgp_reverse_holo
+  if (name.includes('1st') || name.includes('first'))   return row.tcgp_1st_edition
+  if (name.includes('holo'))                             return row.tcgp_holo
+  return row.tcgp_normal
+}
+
+export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', priceSource = 'tcgplayer', onVariantsLegendChange }: CardGridProps) {
   const { updateCardQuantity, userCards: storeUserCards, fetchUserCards } = useCollectionStore()
   const { user, isLoading, profile } = useAuthStore()
   const greyOutUnowned: boolean = profile?.grey_out_unowned ?? false
@@ -649,6 +663,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     setSelectedCard(card)
     setModalTab('card')      // always open on Card tab
     fetchRelatedCards(card)
+    fetchCardPrice(card.id)  // eagerly load so Market Price column is populated on Card tab
     if (!cardVariants.has(card.id)) {
       setTimeout(() => loadCardVariants(card.id, false), 100)
     }
@@ -1075,9 +1090,9 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                             <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">CardMarket</h3>
                             <div className="space-y-1.5">
                               {[
-                                { label: 'Avg Sell',   val: row.cm_avg_sell != null ? `€${row.cm_avg_sell.toFixed(2)}` : null },
-                                { label: 'Trend',      val: row.cm_trend    != null ? `€${row.cm_trend.toFixed(2)}`    : null },
-                                { label: '30-day Avg', val: row.cm_avg_30d  != null ? `€${row.cm_avg_30d.toFixed(2)}`  : null },
+                                { label: 'Avg Sell',   val: row.cm_avg_sell != null ? formatPrice(row.cm_avg_sell * EUR_TO_USD, currency ?? 'USD') : null },
+                                { label: 'Trend',      val: row.cm_trend    != null ? formatPrice(row.cm_trend    * EUR_TO_USD, currency ?? 'USD') : null },
+                                { label: '30-day Avg', val: row.cm_avg_30d  != null ? formatPrice(row.cm_avg_30d  * EUR_TO_USD, currency ?? 'USD') : null },
                               ].filter(r => r.val != null).map(r => (
                                 <div key={r.label} className="flex items-center justify-between text-sm bg-elevated rounded-lg px-3 py-2 border border-subtle">
                                   <span className="text-secondary">{r.label}</span>
@@ -1159,7 +1174,11 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                           {/* Market Price */}
                           <div className="w-20 text-center shrink-0">
                             <div className="text-price font-medium text-sm">
-                              {(variant as any).market_price ? `kr${Number((variant as any).market_price).toFixed(2)}` : '—'}
+                              {(() => {
+                                const priceRow = cardPriceCache.get(selectedCard.id)
+                                const price = priceRow ? getVariantMarketPrice(variant.name, priceRow) : null
+                                return price != null ? formatPrice(price, currency ?? 'USD') : isLoadingPrice ? '…' : '—'
+                              })()}
                             </div>
                           </div>
 

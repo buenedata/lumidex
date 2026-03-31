@@ -459,6 +459,7 @@ export default function SetPageCards({
               collectionGoal={collectionGoal}
               cardPricesUSD={cardPricesUSD}
               currency={currency}
+              priceSource={priceSource}
               onVariantsLegendChange={setLegendVariants}
             />
         )}
