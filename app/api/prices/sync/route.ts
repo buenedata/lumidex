@@ -490,13 +490,27 @@ export async function POST(request: NextRequest) {
         // or CardMarket trend.  pokemontcg.io has both — we merge it in here.
         const ptcgoSetId = (() => {
           const firstTcgId = dbCards.find(c => c.api_id)?.api_id as string | undefined
-          if (!firstTcgId) return null
+          if (!firstTcgId) {
+            // Fallback: try the DB set_id directly as the pokemontcg.io set ID.
+            // This works when the DB set_id was imported from pokemontcg.io (e.g. "sv1", "sv2", "swsh8").
+            // It will silently return 0 cards if the set_id doesn't match pokemontcg.io's ID scheme.
+            return setId ?? null
+          }
           // Strip the card-number suffix after the last hyphen.
           // Works for numeric ("sv13-1" → "sv13"), alphanumeric ("swsh12pt5gg-GG1" → "swsh12pt5gg"),
           // and promo-style suffixes ("swsh8-183" → "swsh8", "sv8pt5-1" → "sv8pt5").
           const idx = firstTcgId.lastIndexOf('-')
           return idx > 0 ? firstTcgId.slice(0, idx) : null
         })()
+
+        const noApiIds = !dbCards.some(c => c.api_id)
+        if (noApiIds) {
+          emit({
+            type: 'warning',
+            message: `Cards have no api_id — using set_id "${ptcgoSetId}" for pokemontcg.io lookup. ` +
+              `If prices are 0, re-import card data for this set (Admin → Card Data Import) to populate api_ids, then re-sync.`,
+          })
+        }
 
         if (ptcgoSetId) {
           emit({ type: 'fetching', message: `pokemontcg.io: fetching set ${ptcgoSetId}…`, page: 0 })

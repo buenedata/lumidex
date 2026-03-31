@@ -228,7 +228,10 @@ export default function AdminPricesPage() {
               setSyncState(prev => ({ ...prev, status: 'error', message: event.message ?? 'Error' }))
             }
             if (event.type === 'fetching') {
-              setSyncState(prev => ({ ...prev, status: 'syncing', message: `Calling API (page ${event.page})…` }))
+              setSyncState(prev => ({ ...prev, status: 'syncing', message: event.message ?? `Calling API (page ${event.page})…` }))
+            }
+            if (event.type === 'warning') {
+              setSyncState(prev => ({ ...prev, status: 'syncing', message: `⚠️ ${event.message ?? 'Warning'}` }))
             }
             if (event.type === 'fetched') {
               setSyncState(prev => ({ ...prev, status: 'syncing', message: `API responded HTTP ${event.httpStatus} (page ${event.page})` }))
