@@ -491,9 +491,11 @@ export async function POST(request: NextRequest) {
         const ptcgoSetId = (() => {
           const firstTcgId = dbCards.find(c => c.api_id)?.api_id as string | undefined
           if (!firstTcgId) return null
-          // "sv13-1" → "sv13",  "swsh8-183" → "swsh8",  "sv8pt5-1" → "sv8pt5"
-          const m = firstTcgId.match(/^(.+)-\d+$/)
-          return m?.[1] ?? null
+          // Strip the card-number suffix after the last hyphen.
+          // Works for numeric ("sv13-1" → "sv13"), alphanumeric ("swsh12pt5gg-GG1" → "swsh12pt5gg"),
+          // and promo-style suffixes ("swsh8-183" → "swsh8", "sv8pt5-1" → "sv8pt5").
+          const idx = firstTcgId.lastIndexOf('-')
+          return idx > 0 ? firstTcgId.slice(0, idx) : null
         })()
 
         if (ptcgoSetId) {
