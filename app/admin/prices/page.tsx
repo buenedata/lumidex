@@ -63,10 +63,11 @@ export default function AdminPricesPage() {
 
   const [selectedSetId,   setSelectedSetId]   = useState<string | null>(null)
   const [selectedSetName, setSelectedSetName] = useState<string | null>(null)
-  const [apiSetIdInput,   setApiSetIdInput]   = useState('')
-  const [apiSuggestions,  setApiSuggestions]  = useState<{ id: string; name: string; series?: string }[]>([])
-  const [allApiSets,      setAllApiSets]      = useState<{ id: string; name: string; series?: string }[]>([])
-  const [allSetsSearch,   setAllSetsSearch]   = useState('')
+  const [apiSetIdInput,     setApiSetIdInput]     = useState('')
+  const [apiSuggestions,    setApiSuggestions]    = useState<{ id: string; name: string; series?: string }[]>([])
+  const [suggestionsSearch, setSuggestionsSearch] = useState('')
+  const [allApiSets,        setAllApiSets]        = useState<{ id: string; name: string; series?: string }[]>([])
+  const [allSetsSearch,     setAllSetsSearch]     = useState('')
   const [discoverLoading, setDiscoverLoading] = useState(false)
   const [discoverErr,     setDiscoverErr]     = useState<string | null>(null)
   const [probeResult,     setProbeResult]     = useState<Record<string, unknown> | null>(null)
@@ -107,6 +108,7 @@ export default function AdminPricesPage() {
     setSelectedSetName(setName)
     setApiSetIdInput('')
     setApiSuggestions([])
+    setSuggestionsSearch('')
     setDiscoverErr(null)
     setSyncState({ status: 'idle', message: '', matched: 0, total: 0, products: 0, elapsed: 0 })
     loadStats(setId)
@@ -367,7 +369,7 @@ export default function AdminPricesPage() {
                   type="text"
                   placeholder="Episode ID (integer) — e.g. 396 for Ascended Heroes"
                   value={apiSetIdInput}
-                  onChange={e => { setApiSetIdInput(e.target.value); setApiSuggestions([]) }}
+                  onChange={e => { setApiSetIdInput(e.target.value); setApiSuggestions([]); setSuggestionsSearch('') }}
                   className="flex-1 h-9 bg-gray-800 border border-gray-700 rounded-lg px-3 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-indigo-500 font-mono"
                 />
                 {apiSetIdInput.trim() && (
@@ -413,7 +415,7 @@ export default function AdminPricesPage() {
                       .map(s => (
                         <button
                           key={String(s.id)}
-                          onClick={() => { setApiSetIdInput(String(s.id)); setAllApiSets([]); setApiSuggestions([]) }}
+                          onClick={() => { setApiSetIdInput(String(s.id)); setAllApiSets([]); setApiSuggestions([]); setSuggestionsSearch('') }}
                           className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-700 transition-colors text-left"
                         >
                           <div>
@@ -431,22 +433,38 @@ export default function AdminPricesPage() {
               {/* Suggestions from API */}
               {apiSuggestions.length > 0 && (
                 <div className="border border-gray-700 rounded-lg overflow-hidden">
-                  <div className="px-3 py-1.5 bg-gray-800 text-xs text-gray-500 border-b border-gray-700">
-                    Click an episode to use its integer ID
+                  <div className="px-3 py-2 bg-gray-800 border-b border-gray-700 flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="Filter episodes…"
+                      value={suggestionsSearch}
+                      onChange={e => setSuggestionsSearch(e.target.value)}
+                      className="flex-1 h-7 bg-gray-700 border border-gray-600 rounded px-2 text-xs text-white placeholder:text-gray-500 focus:outline-none focus:border-indigo-500"
+                    />
+                    <span className="text-xs text-gray-500 shrink-0">{apiSuggestions.length} episodes</span>
                   </div>
-                  {apiSuggestions.map(s => (
-                    <button
-                      key={String(s.id)}
-                      onClick={() => { setApiSetIdInput(String(s.id)); setApiSuggestions([]) }}
-                      className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-700 transition-colors text-left border-b border-gray-800 last:border-0"
-                    >
-                      <div>
-                        <span className="text-sm text-white">{s.name}</span>
-                        {s.series && <span className="text-xs text-gray-500 ml-2">{s.series}</span>}
-                      </div>
-                      <code className="text-xs font-mono text-indigo-400 ml-4 shrink-0">{s.id}</code>
-                    </button>
-                  ))}
+                  <div className="max-h-56 overflow-y-auto divide-y divide-gray-800">
+                    {apiSuggestions
+                      .filter(s => {
+                        if (!suggestionsSearch.trim()) return true
+                        const q = suggestionsSearch.toLowerCase()
+                        return s.name?.toLowerCase().includes(q) || String(s.id).includes(q)
+                      })
+                      .map(s => (
+                        <button
+                          key={String(s.id)}
+                          onClick={() => { setApiSetIdInput(String(s.id)); setApiSuggestions([]); setSuggestionsSearch('') }}
+                          className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-700 transition-colors text-left"
+                        >
+                          <div>
+                            <span className="text-sm text-white">{s.name}</span>
+                            {s.series && <span className="text-xs text-gray-500 ml-2">{s.series}</span>}
+                          </div>
+                          <code className="text-xs font-mono text-indigo-400 ml-4 shrink-0">{s.id}</code>
+                        </button>
+                      ))
+                    }
+                  </div>
                 </div>
               )}
             </div>
