@@ -11,7 +11,7 @@ const supabase = createClient(
 )
 
 interface BrowsePageProps {
-  searchParams: Promise<{ name?: string }>
+  searchParams: Promise<{ name?: string; artist?: string }>
 }
 
 // RelatedCard extended with type for hover-glow support
@@ -35,6 +35,53 @@ function parseSearchQuery(raw: string): { name: string; number: string | null } 
   const match = /^(.+?)\s+(\d[\w/]*)$/.exec(raw.trim())
   if (match) return { name: match[1].trim(), number: match[2] }
   return { name: raw.trim(), number: null }
+}
+
+async function searchCardsByArtist(artist: string): Promise<BrowseCard[]> {
+  const { data: cards, error: cardsError } = await supabase
+    .from('cards')
+    .select('id, name, number, rarity, type, image, set_id')
+    .ilike('artist', `%${artist}%`)
+    .order('name', { ascending: true })
+    .order('set_id', { ascending: true })
+    .limit(500)
+
+  if (cardsError || !cards || cards.length === 0) return []
+
+  const setIds = [...new Set(cards.map((c) => c.set_id).filter(Boolean) as string[])]
+
+  const { data: sets } = await supabase
+    .from('sets')
+    .select('set_id, name, logo_url, release_date')
+    .in('set_id', setIds)
+    .order('release_date', { ascending: false })
+
+  const setsMap = new Map((sets ?? []).map((s) => [s.set_id, s]))
+  const sortedSetIds = (sets ?? []).map((s) => s.set_id)
+
+  return cards
+    .map((card) => {
+      const setMeta = card.set_id ? setsMap.get(card.set_id) : undefined
+      return {
+        id: card.id,
+        name: card.name,
+        number: card.number,
+        rarity: card.rarity,
+        type: card.type ?? null,
+        image: card.image,
+        set_id: card.set_id,
+        setName: setMeta?.name ?? null,
+        setLogoUrl: setMeta?.logo_url ?? null,
+      }
+    })
+    .sort((a, b) => {
+      const ai = sortedSetIds.indexOf(a.set_id ?? '')
+      const bi = sortedSetIds.indexOf(b.set_id ?? '')
+      if (ai === -1 && bi === -1) return 0
+      if (ai === -1) return 1
+      if (bi === -1) return -1
+      return ai - bi
+    })
 }
 
 async function searchCards(name: string, number: string | null): Promise<BrowseCard[]> {
@@ -91,14 +138,16 @@ async function searchCards(name: string, number: string | null): Promise<BrowseC
 }
 
 export default async function BrowsePage({ searchParams }: BrowsePageProps) {
-  const { name: rawName } = await searchParams
+  const { name: rawName, artist: rawArtist } = await searchParams
   const rawQuery = rawName?.trim() ?? ''
+  const rawArtistQuery = rawArtist?.trim() ?? ''
+  const isArtistSearch = !!rawArtistQuery && !rawQuery
 
-  if (!rawQuery) {
+  if (!rawQuery && !rawArtistQuery) {
     return (
       <div className="min-h-screen" style={{ backgroundColor: 'var(--color-bg-base)' }}>
         <div className="max-w-screen-xl mx-auto px-6 py-12 text-center">
-          <p className="text-muted text-lg">No Pokémon name specified.</p>
+          <p className="text-muted text-lg">No search query specified.</p>
           <Link href="/sets" className="mt-4 inline-block text-accent hover:underline text-sm">
             ← Browse sets
           </Link>
@@ -107,8 +156,17 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
     )
   }
 
-  const { name, number } = parseSearchQuery(rawQuery)
-  const relatedCards = await searchCards(name, number)
+  let relatedCards: BrowseCard[]
+  let displayName: string
+
+  if (isArtistSearch) {
+    relatedCards = await searchCardsByArtist(rawArtistQuery)
+    displayName = rawArtistQuery
+  } else {
+    const { name, number } = parseSearchQuery(rawQuery)
+    relatedCards = await searchCards(name, number)
+    displayName = rawQuery
+  }
 
   // Convert BrowseCard → PokemonCard
   // type is included so card-type-* CSS glow classes work on hover
@@ -151,7 +209,9 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
                 className="text-3xl font-bold text-primary mb-1"
                 style={{ fontFamily: 'var(--font-space-grotesk)' }}
               >
-                Results for &ldquo;{rawQuery}&rdquo;
+                {isArtistSearch
+                  ? <>Cards by &ldquo;{displayName}&rdquo;</>
+                  : <>Results for &ldquo;{displayName}&rdquo;</>}
               </h1>
               <p className="text-secondary text-sm">
                 {cards.length === 0
@@ -178,7 +238,7 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
       {/* ── Cards (identical to set page, no search bar) ── */}
       {cards.length === 0 ? (
         <div className="max-w-screen-2xl mx-auto px-6 text-center py-24">
-          <p className="text-muted text-lg mb-2">No cards found for &ldquo;{rawQuery}&rdquo;</p>
+          <p className="text-muted text-lg mb-2">No cards found for &ldquo;{displayName}&rdquo;</p>
           <Link href="/sets" className="text-accent hover:underline text-sm">
             ← Browse sets
           </Link>
@@ -187,7 +247,7 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
         <SetPageCards
           cards={cards}
           setTotal={cards.length}
-          setName={name}
+          setName={displayName}
           showSearch={false}
           setId=""
           hasPromos={cards.some(c => c.rarity?.toLowerCase().includes('promo'))}
