@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin'
 
-const RAPIDAPI_HOST = 'pokemon-tcg-api.p.rapidapi.com'
-const RAPIDAPI_BASE = `https://${RAPIDAPI_HOST}`
+const EPISODES_HOST = 'cardmarket-api-tcg.p.rapidapi.com'
+const EPISODES_URL  = `https://${EPISODES_HOST}/pokemon/episodes`
+
+// Legacy cards-probe host (unchanged)
+const CARDS_HOST = 'pokemon-tcg-api.p.rapidapi.com'
+const CARDS_BASE = `https://${CARDS_HOST}`
 
 /**
  * GET /api/prices/discover
  *
  * Multi-mode discovery endpoint for exploring the tcggo.com / RapidAPI.
  *
- * ?probe=cards           — fetch 3 cards to inspect API response structure
- * ?name={setName}        — search for episodes matching name
- * (no params)            — browse all episodes (limited to 100)
+ * ?probe=cards    — fetch 3 cards to inspect API response structure
+ * ?name={name}    — fetch ALL episodes, then filter by name server-side
+ * (no params)     — fetch ALL episodes (single call, no pagination needed)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -28,20 +32,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'RAPIDAPI_KEY not set', sets: [] })
   }
 
-  const makeHeaders = () => ({
-    'x-rapidapi-key':  key,
-    'x-rapidapi-host': RAPIDAPI_HOST,
-    'Content-Type':    'application/json',
-  })
-
   const probe = request.nextUrl.searchParams.get('probe')
   const name  = request.nextUrl.searchParams.get('name')?.trim() ?? ''
 
   // ── Probe: list a few cards to inspect API data structure ─────────────────
   if (probe === 'cards') {
     try {
-      const res = await fetch(`${RAPIDAPI_BASE}/cards?per_page=3&page=1`, {
-        headers: makeHeaders(),
+      const res = await fetch(`${CARDS_BASE}/cards?per_page=3&page=1`, {
+        headers: {
+          'x-rapidapi-key':  key,
+          'x-rapidapi-host': CARDS_HOST,
+          'Content-Type':    'application/json',
+        },
         cache: 'no-store',
       })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -60,81 +62,60 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // ── Episodes search (name filter) ─────────────────────────────────────────
-  if (name) {
-    const endpoints = [
-      `/episodes?name=${encodeURIComponent(name)}&per_page=20`,
-      `/episodes?search=${encodeURIComponent(name)}&per_page=20`,
-    ]
+  // ── Fetch ALL episodes (used for both name-search and browse-all) ─────────
+  let allEpisodes: { id?: unknown; name?: string; series?: unknown }[] = []
+  let topKeys: string[] = []
 
-    for (const path of endpoints) {
-      try {
-        const res = await fetch(`${RAPIDAPI_BASE}${path}`, {
-          headers: makeHeaders(),
-          cache: 'no-store',
-        })
-        if (!res.ok) {
-          console.log(`[discover] ${path} → HTTP ${res.status}`)
-          continue
-        }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const json = await res.json() as Record<string, any>
-        const episodes = json.data ?? json.episodes ?? json.results ?? []
-        if (episodes.length > 0) {
-          const lq = name.toLowerCase()
-          const filtered = episodes.filter((e: { id?: unknown; name?: string }) =>
-            e.name?.toLowerCase().includes(lq) || String(e.id).includes(lq)
-          )
-          return NextResponse.json({
-            sets:   filtered.length > 0 ? filtered : episodes,
-            query:  name,
-            path,
-            topKeys: Object.keys(json),
-          })
-        }
-      } catch (e) {
-        console.warn(`[discover] error for ${path}:`, e)
-        continue
-      }
-    }
-
-    // All attempts returned 0 — report what happened
-    return NextResponse.json({
-      sets:    [],
-      query:   name,
-      message: `No episodes found for "${name}". Try "Browse all API episodes" to see what the API has.`,
-    })
-  }
-
-  // ── Browse all episodes ───────────────────────────────────────────────────
   try {
-    const res = await fetch(`${RAPIDAPI_BASE}/episodes?per_page=100&page=1`, {
-      headers: makeHeaders(),
+    const res = await fetch(EPISODES_URL, {
+      headers: {
+        'x-rapidapi-key':  key,
+        'x-rapidapi-host': EPISODES_HOST,
+        'Content-Type':    'application/json',
+      },
       cache: 'no-store',
     })
 
     if (!res.ok) {
       return NextResponse.json({
-        sets:    [],
-        error:   `API returned HTTP ${res.status} for /episodes endpoint. This endpoint may not exist on this API.`,
-        topKeys: [],
+        sets:  [],
+        error: `API returned HTTP ${res.status} for ${EPISODES_URL}`,
       })
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const json = await res.json() as Record<string, any>
-    const episodes = json.data ?? json.episodes ?? json.results ?? []
+    topKeys     = Object.keys(json)
+    allEpisodes = json.data ?? json.episodes ?? json.results ?? json ?? []
 
-    return NextResponse.json({
-      sets:      episodes,
-      total:     json.total ?? json.totalCount ?? episodes.length,
-      topKeys:   Object.keys(json),
-      firstItem: episodes[0] ?? null,
-    })
+    // If the API returned a plain array at root level, handle that too
+    if (!Array.isArray(allEpisodes)) allEpisodes = []
   } catch (e) {
     return NextResponse.json({
       sets:  [],
-      error: `Browse failed: ${String(e)}`,
+      error: `Episodes fetch failed: ${String(e)}`,
     })
   }
+
+  // ── Name filter (Find in API button) ─────────────────────────────────────
+  if (name) {
+    const lq = name.toLowerCase()
+    const filtered = allEpisodes.filter(e =>
+      e.name?.toLowerCase().includes(lq) || String(e.id ?? '').includes(lq)
+    )
+    return NextResponse.json({
+      sets:    filtered.length > 0 ? filtered : allEpisodes,
+      query:   name,
+      total:   allEpisodes.length,
+      topKeys,
+    })
+  }
+
+  // ── Browse all (no filter) ────────────────────────────────────────────────
+  return NextResponse.json({
+    sets:      allEpisodes,
+    total:     allEpisodes.length,
+    topKeys,
+    firstItem: allEpisodes[0] ?? null,
+  })
 }
