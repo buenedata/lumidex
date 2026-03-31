@@ -19,11 +19,36 @@ interface BrowseCard extends RelatedCard {
   type: string | null
 }
 
-async function getAllCardsByName(name: string): Promise<BrowseCard[]> {
-  const { data: cards, error: cardsError } = await supabase
+/**
+ * Splits a raw search string into a name part and an optional card-number part.
+ *
+ * Examples:
+ *   "pikachu"        → { name: "pikachu",     number: null }
+ *   "pikachu 24"     → { name: "pikachu",     number: "24" }
+ *   "pikachu ex 24"  → { name: "pikachu ex",  number: "24" }
+ *   "pikachu 24/165" → { name: "pikachu",     number: "24/165" }
+ *
+ * A trailing token is treated as a number if it starts with a digit
+ * (optionally followed by word chars or slashes, e.g. "24", "24/165", "SV01").
+ */
+function parseSearchQuery(raw: string): { name: string; number: string | null } {
+  const match = /^(.+?)\s+(\d[\w/]*)$/.exec(raw.trim())
+  if (match) return { name: match[1].trim(), number: match[2] }
+  return { name: raw.trim(), number: null }
+}
+
+async function searchCards(name: string, number: string | null): Promise<BrowseCard[]> {
+  let q = supabase
     .from('cards')
     .select('id, name, number, rarity, type, image, set_id')
-    .eq('name', name)
+    .ilike('name', `%${name}%`)
+
+  if (number) {
+    q = q.ilike('number', `%${number}%`)
+  }
+
+  const { data: cards, error: cardsError } = await q
+    .order('name', { ascending: true })
     .order('set_id', { ascending: true })
     .limit(200)
 
@@ -67,9 +92,9 @@ async function getAllCardsByName(name: string): Promise<BrowseCard[]> {
 
 export default async function BrowsePage({ searchParams }: BrowsePageProps) {
   const { name: rawName } = await searchParams
-  const name = rawName?.trim() ?? ''
+  const rawQuery = rawName?.trim() ?? ''
 
-  if (!name) {
+  if (!rawQuery) {
     return (
       <div className="min-h-screen" style={{ backgroundColor: 'var(--color-bg-base)' }}>
         <div className="max-w-screen-xl mx-auto px-6 py-12 text-center">
@@ -82,7 +107,8 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
     )
   }
 
-  const relatedCards = await getAllCardsByName(name)
+  const { name, number } = parseSearchQuery(rawQuery)
+  const relatedCards = await searchCards(name, number)
 
   // Convert BrowseCard → PokemonCard
   // type is included so card-type-* CSS glow classes work on hover
@@ -125,7 +151,7 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
                 className="text-3xl font-bold text-primary mb-1"
                 style={{ fontFamily: 'var(--font-space-grotesk)' }}
               >
-                {name}
+                Results for &ldquo;{rawQuery}&rdquo;
               </h1>
               <p className="text-secondary text-sm">
                 {cards.length === 0
@@ -152,7 +178,7 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
       {/* ── Cards (identical to set page, no search bar) ── */}
       {cards.length === 0 ? (
         <div className="max-w-screen-2xl mx-auto px-6 text-center py-24">
-          <p className="text-muted text-lg mb-2">No cards found for &ldquo;{name}&rdquo;</p>
+          <p className="text-muted text-lg mb-2">No cards found for &ldquo;{rawQuery}&rdquo;</p>
           <Link href="/sets" className="text-accent hover:underline text-sm">
             ← Browse sets
           </Link>
