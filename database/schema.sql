@@ -114,6 +114,20 @@ create table if not exists public.user_cards (
     constraint user_cards_user_id_card_id_key unique (user_id, card_id)
 );
 
+-- User sealed products (tracks which sealed products a user owns)
+-- product_id references set_products.id (text)
+create table if not exists public.user_sealed_products (
+    id           uuid not null default gen_random_uuid() primary key,
+    user_id      uuid not null,               -- FK → users.id
+    product_id   text not null,               -- FK → set_products.id
+    quantity     integer not null default 1
+                   check (quantity >= 0),
+    created_at   timestamp without time zone default now(),
+    updated_at   timestamp without time zone default now(),
+    constraint user_sealed_products_user_id_product_id_key
+        unique (user_id, product_id)
+);
+
 -- Achievements
 create table if not exists public.achievements (
     id          uuid not null default gen_random_uuid() primary key,
@@ -140,6 +154,7 @@ alter table public.user_card_variants enable row level security;
 alter table public.variant_suggestions enable row level security;
 alter table public.user_sets enable row level security;
 alter table public.user_cards enable row level security;
+alter table public.user_sealed_products enable row level security;
 alter table public.achievements enable row level security;
 alter table public.user_achievements enable row level security;
 
@@ -200,6 +215,19 @@ create policy "Users can insert their own sets."
 create policy "Users can delete their own sets."
     on public.user_sets for delete using (auth.uid() = user_id);
 
+-- ── Policies: user_sealed_products ───────────────────────────
+create policy "Users can view their own sealed products."
+    on public.user_sealed_products for select using (auth.uid() = user_id);
+
+create policy "Users can insert their own sealed products."
+    on public.user_sealed_products for insert with check (auth.uid() = user_id);
+
+create policy "Users can update their own sealed products."
+    on public.user_sealed_products for update using (auth.uid() = user_id);
+
+create policy "Users can delete their own sealed products."
+    on public.user_sealed_products for delete using (auth.uid() = user_id);
+
 -- ── Policies: user_cards (legacy) ────────────────────────────
 create policy "Users can view their own cards."
     on public.user_cards for select using (auth.uid() = user_id);
@@ -259,6 +287,9 @@ create index if not exists variants_is_quick_add_idx on public.variants(is_quick
 create index if not exists vs_status_idx             on public.variant_suggestions(status);
 create index if not exists vs_card_id_idx            on public.variant_suggestions(card_id);
 
+create index if not exists usp_user_id_idx    on public.user_sealed_products(user_id);
+create index if not exists usp_product_id_idx on public.user_sealed_products(product_id);
+
 create index if not exists ua_user_id_idx            on public.user_achievements(user_id);
 
 -- ── Triggers: updated_at ─────────────────────────────────────
@@ -272,6 +303,10 @@ $$ language plpgsql;
 
 create trigger handle_updated_at_user_card_variants
     before update on public.user_card_variants
+    for each row execute function public.handle_updated_at();
+
+create trigger handle_updated_at_user_sealed_products
+    before update on public.user_sealed_products
     for each row execute function public.handle_updated_at();
 
 -- ── Default variant seed data ─────────────────────────────────

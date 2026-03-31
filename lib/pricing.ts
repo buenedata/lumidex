@@ -117,6 +117,17 @@ export interface SetProductPrice {
   fetched_at:   string
 }
 
+export interface SeriesProductGroup {
+  /** Series name, e.g. "Scarlet & Violet" */
+  series:  string
+  sets: Array<{
+    setId:    string
+    setName:  string
+    logoUrl:  string | null
+    products: SetProductPrice[]
+  }>
+}
+
 // ── Main query ────────────────────────────────────────────────────────────────
 
 /**
@@ -209,6 +220,140 @@ export async function getSealedProductsForSet(
   }
 
   return (data ?? []) as SetProductPrice[]
+}
+
+/**
+ * Returns the set of series names that have at least one sealed product
+ * in `set_products`. Used by the Sets page to conditionally show the
+ * "Products" entry card per series.
+ */
+export async function getSeriesWithProducts(): Promise<Set<string>> {
+  // Fetch all set_ids that have at least one product row
+  const { data: productRows, error: prodErr } = await supabaseAdmin
+    .from('set_products')
+    .select('set_id')
+
+  if (prodErr) {
+    console.error('[pricing] getSeriesWithProducts product lookup error:', prodErr)
+    return new Set()
+  }
+
+  const setIds = [...new Set((productRows ?? []).map(r => r.set_id as string))]
+  if (setIds.length === 0) return new Set()
+
+  // Resolve which series those sets belong to
+  const { data: setRows, error: setErr } = await supabaseAdmin
+    .from('sets')
+    .select('set_id, series')
+    .in('set_id', setIds)
+
+  if (setErr) {
+    console.error('[pricing] getSeriesWithProducts set lookup error:', setErr)
+    return new Set()
+  }
+
+  const seriesSet = new Set<string>()
+  for (const row of (setRows ?? [])) {
+    if (row.series) seriesSet.add(row.series as string)
+  }
+  return seriesSet
+}
+
+/**
+ * Fetches ALL sealed products across ALL series and groups them by series
+ * then by set. Used by the /products page.
+ *
+ * Returns SeriesProductGroup[] sorted the same way as the Sets page
+ * (newest series first by latest release date within the series).
+ */
+export async function getSealedProductsForAllSeries(): Promise<SeriesProductGroup[]> {
+  // Step 1: fetch all products
+  const { data: products, error: prodErr } = await supabaseAdmin
+    .from('set_products')
+    .select('id, set_id, name, product_type, tcgp_market, tcgp_low, tcgp_high, tcgp_url, cm_avg_sell, cm_trend, cm_url, fetched_at')
+    .order('product_type')
+
+  if (prodErr) {
+    console.error('[pricing] getSealedProductsForAllSeries product error:', prodErr)
+    return []
+  }
+
+  const allProducts = (products ?? []) as SetProductPrice[]
+  if (allProducts.length === 0) return []
+
+  // Step 2: fetch the sets that have products
+  const setIds = [...new Set(allProducts.map(p => p.set_id))]
+  const { data: setRows, error: setErr } = await supabaseAdmin
+    .from('sets')
+    .select('set_id, name, series, logo_url, release_date')
+    .in('set_id', setIds)
+
+  if (setErr) {
+    console.error('[pricing] getSealedProductsForAllSeries set error:', setErr)
+    return []
+  }
+
+  // Build a map of setId → set metadata
+  type SetMeta = { setId: string; setName: string; logoUrl: string | null; series: string; releaseDate: string | null }
+  const setMap = new Map<string, SetMeta>()
+  for (const row of (setRows ?? [])) {
+    setMap.set(row.set_id as string, {
+      setId:        row.set_id as string,
+      setName:      row.name as string,
+      logoUrl:      (row.logo_url as string | null) ?? null,
+      series:       (row.series as string) ?? 'Other',
+      releaseDate:  (row.release_date as string | null) ?? null,
+    })
+  }
+
+  // Step 3: group products by series → set
+  // series → setId → products
+  const groupMap = new Map<string, Map<string, SetProductPrice[]>>()
+  for (const product of allProducts) {
+    const meta = setMap.get(product.set_id)
+    if (!meta) continue
+    const series = meta.series
+    if (!groupMap.has(series)) groupMap.set(series, new Map())
+    const setGroup = groupMap.get(series)!
+    if (!setGroup.has(product.set_id)) setGroup.set(product.set_id, [])
+    setGroup.get(product.set_id)!.push(product)
+  }
+
+  // Step 4: compute latest release date per series for sorting (newest first)
+  const seriesLatestDate = new Map<string, string>()
+  for (const [series, setGroup] of groupMap) {
+    for (const setId of setGroup.keys()) {
+      const meta = setMap.get(setId)
+      if (meta?.releaseDate && (meta.releaseDate > (seriesLatestDate.get(series) ?? ''))) {
+        seriesLatestDate.set(series, meta.releaseDate)
+      }
+    }
+  }
+
+  // Step 5: build output sorted newest series first, "Other" last
+  const sortedSeries = [...groupMap.keys()].sort((a, b) => {
+    if (a === 'Other') return 1
+    if (b === 'Other') return -1
+    return (seriesLatestDate.get(b) ?? '').localeCompare(seriesLatestDate.get(a) ?? '')
+  })
+
+  return sortedSeries.map(series => {
+    const setGroup = groupMap.get(series)!
+    // Sort sets within a series by release date (newest first)
+    const sortedSets = [...setGroup.entries()]
+      .map(([setId, prods]) => ({ setId, meta: setMap.get(setId)! , products: prods }))
+      .sort((a, b) => (b.meta.releaseDate ?? '').localeCompare(a.meta.releaseDate ?? ''))
+
+    return {
+      series,
+      sets: sortedSets.map(entry => ({
+        setId:    entry.setId,
+        setName:  entry.meta.setName,
+        logoUrl:  entry.meta.logoUrl,
+        products: entry.products,
+      })),
+    }
+  })
 }
 
 /**

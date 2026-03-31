@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import Link from 'next/link'
+import Image from 'next/image'
 import SetCard from '@/components/SetCard'
 import { supabase } from '@/lib/supabase'
 import type { DbSet } from '@/lib/db'
@@ -13,9 +15,12 @@ interface SetsPageClientProps {
   sets: EnrichedSet[]
   favoritedSetIds: string[]
   userId: string | null
+  /** Series names that have at least one sealed product in the DB */
+  seriesWithProducts?: string[]
 }
 
-export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPageClientProps) {
+export default function SetsPageClient({ sets, favoritedSetIds, userId, seriesWithProducts = [] }: SetsPageClientProps) {
+  const seriesWithProductsSet = useMemo(() => new Set(seriesWithProducts), [seriesWithProducts])
   const [favoritedIds, setFavoritedIds] = useState<Set<string>>(
     () => new Set(favoritedSetIds)
   )
@@ -278,35 +283,107 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
       )}
 
       {/* ── Series sections ────────────────────────────────────────────── */}
-      {Array.from(groupedSets.entries()).map(([series, seriesSets]) => (
-        <section key={series} className="mb-10">
-          {/* Series heading — only shown in "All" mode */}
-          {activeSeries === 'All' && (
-            <div className="flex items-center gap-2 mb-4">
-              <h2
-                className="text-lg font-semibold"
-                style={{ fontFamily: 'var(--font-space-grotesk)' }}
-              >
-                {series}
-              </h2>
-              <span className="text-xs text-muted bg-elevated px-2 py-0.5 rounded-full">
-                {seriesSets.length}
-              </span>
+      {Array.from(groupedSets.entries()).map(([series, seriesSets]) => {
+        const hasProducts = seriesWithProductsSet.has(series)
+        // Use the logo of the first set in the series (newest) for the Products card background
+        const seriesLogoUrl = seriesSets[0]?.logo_url ?? null
+
+        return (
+          <section key={series} className="mb-10">
+            {/* Series heading — only shown in "All" mode */}
+            {activeSeries === 'All' && (
+              <div className="flex items-center gap-2 mb-4">
+                <h2
+                  className="text-lg font-semibold"
+                  style={{ fontFamily: 'var(--font-space-grotesk)' }}
+                >
+                  {series}
+                </h2>
+                <span className="text-xs text-muted bg-elevated px-2 py-0.5 rounded-full">
+                  {seriesSets.length}
+                </span>
+              </div>
+            )}
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
+              {seriesSets.map(set => (
+                <SetCard
+                  key={set.id}
+                  set={set}
+                  progress={getProgress(set)}
+                  isFavorited={favoritedIds.has(set.id)}
+                  onFavorite={userId ? () => toggleFavorite(set.id) : undefined}
+                />
+              ))}
+
+              {/* Products entry card — only shown when this series has sealed products */}
+              {hasProducts && (
+                <Link
+                  href={`/products?series=${encodeURIComponent(series)}`}
+                  className={cn(
+                    'group relative flex flex-col rounded-xl overflow-hidden h-full min-h-[220px]',
+                    'bg-surface border border-dashed border-accent/40',
+                    'hover:border-accent hover:shadow-[0_0_20px_rgba(109,95,255,0.2)]',
+                    'transition-all duration-200 cursor-pointer'
+                  )}
+                >
+                  {/* Blurred set logo background */}
+                  <div className="relative h-36 bg-elevated overflow-hidden">
+                    {seriesLogoUrl && (
+                      <div className="absolute inset-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={seriesLogoUrl}
+                          alt=""
+                          aria-hidden
+                          className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-20"
+                        />
+                      </div>
+                    )}
+                    {/* Bottom gradient */}
+                    <div className="absolute inset-0 z-[5] bg-gradient-to-t from-black via-black/40 to-transparent" />
+
+                    {/* Center icon */}
+                    <div className="relative z-10 flex flex-col items-center justify-center h-full gap-2">
+                      <div className="w-14 h-14 rounded-full bg-accent/15 border border-accent/30 flex items-center justify-center group-hover:bg-accent/25 transition-colors">
+                        <span className="text-3xl">📦</span>
+                      </div>
+                    </div>
+
+                    {/* Set logo faded in corner for context */}
+                    {seriesLogoUrl && (
+                      <div className="absolute bottom-2 right-2 z-10 opacity-40">
+                        <Image
+                          src={seriesLogoUrl}
+                          alt=""
+                          width={60}
+                          height={30}
+                          unoptimized
+                          aria-hidden
+                          className="object-contain"
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Card info */}
+                  <div className="p-3 flex flex-col flex-1 gap-1">
+                    <h3
+                      className="font-semibold text-sm text-accent leading-tight"
+                      style={{ fontFamily: 'var(--font-space-grotesk)' }}
+                    >
+                      Products
+                    </h3>
+                    <p className="text-xs text-muted">Sealed product collection</p>
+                    <span className="mt-auto text-xs text-accent/70 group-hover:text-accent transition-colors">
+                      View all →
+                    </span>
+                  </div>
+                </Link>
+              )}
             </div>
-          )}
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
-            {seriesSets.map(set => (
-              <SetCard
-                key={set.id}
-                set={set}
-                progress={getProgress(set)}
-                isFavorited={favoritedIds.has(set.id)}
-                onFavorite={userId ? () => toggleFavorite(set.id) : undefined}
-              />
-            ))}
-          </div>
-        </section>
-      ))}
+          </section>
+        )
+      })}
     </div>
   )
 }
