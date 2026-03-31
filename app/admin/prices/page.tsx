@@ -117,6 +117,7 @@ export default function AdminPricesPage() {
     setDiscoverLoading(true)
     setDiscoverErr(null)
     setApiSuggestions([])
+    setAllApiSets([])  // clear any previous browse-all results
     try {
       const res = await fetch(`/api/prices/discover?name=${encodeURIComponent(setName)}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -392,19 +393,20 @@ export default function AdminPricesPage() {
                       .filter(s => {
                         if (!allSetsSearch.trim()) return true
                         const q = allSetsSearch.toLowerCase()
-                        return s.name?.toLowerCase().includes(q) || s.id?.toLowerCase().includes(q)
+                        const idStr = String(s.id ?? '')
+                        return s.name?.toLowerCase().includes(q) || idStr.toLowerCase().includes(q)
                       })
                       .map(s => (
                         <button
-                          key={s.id}
-                          onClick={() => { setApiSetIdInput(s.id); setAllApiSets([]); setApiSuggestions([]) }}
+                          key={String(s.id)}
+                          onClick={() => { setApiSetIdInput(String(s.id)); setAllApiSets([]); setApiSuggestions([]) }}
                           className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-700 transition-colors text-left"
                         >
                           <div>
                             <span className="text-sm text-white">{s.name}</span>
                             {s.series && <span className="text-xs text-gray-500 ml-2">{s.series}</span>}
                           </div>
-                          <code className="text-xs font-mono text-indigo-400 ml-4 shrink-0">{s.id}</code>
+                          <code className="text-xs font-mono text-indigo-400 ml-4 shrink-0">{String(s.id)}</code>
                         </button>
                       ))
                     }
@@ -420,8 +422,8 @@ export default function AdminPricesPage() {
                   </div>
                   {apiSuggestions.map(s => (
                     <button
-                      key={s.id}
-                      onClick={() => { setApiSetIdInput(s.id); setApiSuggestions([]) }}
+                      key={String(s.id)}
+                      onClick={() => { setApiSetIdInput(String(s.id)); setApiSuggestions([]) }}
                       className="w-full flex items-center justify-between px-3 py-2 hover:bg-gray-700 transition-colors text-left border-b border-gray-800 last:border-0"
                     >
                       <div>
