@@ -7,11 +7,11 @@ export const maxDuration = 300
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-// tcggo.com API via RapidAPI — The RapidAPI version doesn't use /{game}/ prefix;
-// that prefix is for the main tcggo.com API which is multi-game. The RapidAPI
-// wrapper is poker-specific: https://pokemon-tcg-api.p.rapidapi.com/{endpoint}
-const RAPIDAPI_HOST = 'pokemon-tcg-api.p.rapidapi.com'
-const RAPIDAPI_BASE = `https://${RAPIDAPI_HOST}`
+// Correct RapidAPI host for the tcggo.com / cardmarket Pokémon TCG API.
+// Episodes and cards are scoped under the /pokemon path prefix.
+// Confirmed working: GET /pokemon/episodes and GET /pokemon/episodes/{id}/cards
+const RAPIDAPI_HOST = 'cardmarket-api-tcg.p.rapidapi.com'
+const RAPIDAPI_BASE = `https://${RAPIDAPI_HOST}/pokemon`
 
 // tcggo.com API pagination limits:
 // - per_page max 100 when filtering by episode_id
@@ -94,16 +94,20 @@ interface TcggoCard {
 }
 
 interface TcggoResponse {
-  data?:      TcggoCard[]
-  cards?:     TcggoCard[]
-  results?:   TcggoCard[]
-  page?:      number
-  per_page?:  number
-  total?:     number
-  totalCount?:number
-  count?:     number
-  // tcggo.com actual pagination wrapper
-  paging?:    { total?: number; count?: number; page?: number; per_page?: number }
+  data?:       TcggoCard[]
+  cards?:      TcggoCard[]
+  // NOTE: tcggo.com returns `results` as an integer total count, NOT an array of cards
+  results?:    number
+  page?:       number
+  per_page?:   number
+  total?:      number
+  totalCount?: number
+  count?:      number
+  // tcggo.com actual pagination wrapper:
+  //   paging.total    = total number of PAGES (e.g. 9 for 175 episodes at 20/page)
+  //   paging.per_page = items per page
+  //   results         = total number of items (e.g. 175)
+  paging?:     { total?: number; count?: number; current?: number; per_page?: number }
 }
 
 interface TcggoProduct {
@@ -379,13 +383,14 @@ export async function POST(request: NextRequest) {
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const json = await res.json() as TcggoResponse & Record<string, any>
-            const apiCards: TcggoCard[] = json.data ?? json.cards ?? json.results ?? []
-            // tcggo.com wraps pagination in a "paging" object — log it to find the right field
+            const apiCards: TcggoCard[] = json.data ?? json.cards ?? []
+            // tcggo.com: `results` is the integer total card count; `paging.total` is total pages
             if (page === 1) {
               console.log('[prices/sync] paging object:', JSON.stringify(json.paging ?? null))
+              console.log('[prices/sync] results (total items):', json.results)
             }
-            // Use explicit total fields only; do NOT use paging.count (= per-page count, not grand total)
-            totalCards = json.total ?? json.totalCount ?? json.count ?? 0
+            // Prefer `results` (total items), fall back to legacy fields
+            totalCards = json.results ?? json.total ?? json.totalCount ?? json.count ?? 0
 
             if (page === 1) {
               const firstCard   = apiCards[0]
@@ -449,7 +454,7 @@ export async function POST(request: NextRequest) {
             }
 
             const json: TcggoResponse = await res.json()
-            const apiCards: TcggoCard[] = json.data ?? json.cards ?? json.results ?? []
+            const apiCards: TcggoCard[] = json.data ?? json.cards ?? []
 
             if (i === 0) {
               const firstCardKeys = apiCards[0] ? Object.keys(apiCards[0]) : []
