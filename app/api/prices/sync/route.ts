@@ -480,6 +480,110 @@ export async function POST(request: NextRequest) {
           await writer.close().catch(() => {}); return
         }
 
+        // ── Step 2.5: pokemontcg.io supplemental fetch ───────────────────────
+        // tcggo.com doesn't return TCGPlayer variant prices (normal/reverseHolo/holo)
+        // or CardMarket trend.  pokemontcg.io has both — we merge it in here.
+        const ptcgoSetId = (() => {
+          const firstTcgId = dbCards.find(c => c.api_id)?.api_id as string | undefined
+          if (!firstTcgId) return null
+          // "sv13-1" → "sv13",  "swsh8-183" → "swsh8",  "sv8pt5-1" → "sv8pt5"
+          const m = firstTcgId.match(/^(.+)-\d+$/)
+          return m?.[1] ?? null
+        })()
+
+        if (ptcgoSetId) {
+          emit({ type: 'fetching', message: `pokemontcg.io: fetching set ${ptcgoSetId}…`, page: 0 })
+          try {
+            const ptcgoKey = process.env.POKEMONTCG_API_KEY
+            const ptcgoHeaders: Record<string, string> = {}
+            if (ptcgoKey) ptcgoHeaders['X-Api-Key'] = ptcgoKey
+
+            let ptcgoPage = 1
+            let ptcgoDone = false
+            let ptcgoMerged = 0
+
+            while (!ptcgoDone) {
+              const controller2 = new AbortController()
+              const t2 = setTimeout(() => controller2.abort(), FETCH_TIMEOUT_MS)
+              let ptcgoRes: Response
+              try {
+                ptcgoRes = await fetch(
+                  `https://api.pokemontcg.io/v2/cards?q=set.id:${encodeURIComponent(ptcgoSetId)}&pageSize=250&page=${ptcgoPage}`,
+                  { headers: ptcgoHeaders, cache: 'no-store', signal: controller2.signal },
+                )
+              } finally { clearTimeout(t2) }
+
+              if (!ptcgoRes.ok) {
+                emit({ type: 'warning', message: `pokemontcg.io HTTP ${ptcgoRes.status} — variant prices unavailable` })
+                break
+              }
+
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const ptcgoJson = await ptcgoRes.json() as { data?: any[]; totalCount?: number; count?: number }
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const ptcgoCards: any[] = ptcgoJson.data ?? []
+
+              for (const pc of ptcgoCards) {
+                const uuid = apiIdMap.get(pc.id as string)
+                          ?? numberMap.get(normalizeNumber(String(pc.number ?? '')))
+                if (!uuid) continue
+
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const tp: any = pc.tcgplayer?.prices  ?? {}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const cm2: any = pc.cardmarket?.prices ?? {}
+
+                const tcgp_normal       = tp.normal?.market                ?? null
+                const tcgp_reverse_holo = tp.reverseHolofoil?.market       ?? null
+                const tcgp_holo         = tp.holofoil?.market              ?? null
+                const tcgp_1st_edition  = tp['1stEditionHolofoil']?.market ?? tp['1stEditionNormal']?.market ?? null
+                const tcgp_market_p     = tp.holofoil?.market ?? tp.reverseHolofoil?.market ?? tp.normal?.market ?? null
+                const cm_trend          = cm2.trendPrice       ?? null
+                const cm_avg_30d_p      = cm2.avg30            ?? null
+                const cm_avg_sell_p     = cm2.averageSellPrice ?? null
+                const cm_low_p          = cm2.lowPrice         ?? null
+
+                const existingIdx = priceUpserts.findIndex(r => r.card_id === uuid)
+                if (existingIdx >= 0) {
+                  const row = priceUpserts[existingIdx]
+                  // Always overwrite variant prices (pokemontcg.io is the authoritative source)
+                  if (tcgp_normal       != null) row.tcgp_normal       = tcgp_normal
+                  if (tcgp_reverse_holo != null) row.tcgp_reverse_holo = tcgp_reverse_holo
+                  if (tcgp_holo         != null) row.tcgp_holo         = tcgp_holo
+                  if (tcgp_1st_edition  != null) row.tcgp_1st_edition  = tcgp_1st_edition
+                  if (cm_trend          != null) row.cm_trend          = cm_trend
+                  // Fill gaps only (don't overwrite tcggo.com values)
+                  if (tcgp_market_p != null && row.tcgp_market == null) row.tcgp_market = tcgp_market_p
+                  if (cm_avg_30d_p  != null && row.cm_avg_30d  == null) row.cm_avg_30d  = cm_avg_30d_p
+                  if (cm_avg_sell_p != null && row.cm_avg_sell == null) row.cm_avg_sell = cm_avg_sell_p
+                  if (cm_low_p      != null && row.cm_low      == null) row.cm_low      = cm_low_p
+                } else {
+                  // Card wasn't found by tcggo.com — add pokemontcg.io-only row
+                  priceUpserts.push({
+                    card_id: uuid, api_card_id: pc.id as string,
+                    tcgp_normal, tcgp_reverse_holo, tcgp_holo, tcgp_1st_edition,
+                    tcgp_market: tcgp_market_p,
+                    tcgp_psa10: null, tcgp_psa9: null, tcgp_bgs95: null, tcgp_bgs9: null, tcgp_cgc10: null,
+                    cm_avg_sell: cm_avg_sell_p, cm_low: cm_low_p, cm_trend, cm_avg_30d: cm_avg_30d_p,
+                    fetched_at: new Date().toISOString(),
+                  })
+                  matched++
+                }
+                ptcgoMerged++
+              }
+
+              const pageTotal = ptcgoJson.totalCount ?? 0
+              ptcgoDone = pageTotal > 0 ? ptcgoPage * 250 >= pageTotal : ptcgoCards.length < 250
+              ptcgoPage++
+            }
+
+            emit({ type: 'fetched', httpStatus: 200, page: 0, ok: true,
+              message: `pokemontcg.io merged ${ptcgoMerged} cards` })
+          } catch (ptcgoErr) {
+            emit({ type: 'warning', message: `pokemontcg.io failed (non-critical): ${ptcgoErr instanceof Error ? ptcgoErr.message : String(ptcgoErr)}` })
+          }
+        }
+
         // ── Step 3: Upsert card prices ────────────────────────────────────────
         let upsertedCount = 0
         for (let i = 0; i < priceUpserts.length; i += BATCH_SIZE) {
