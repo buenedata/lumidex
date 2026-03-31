@@ -2,6 +2,9 @@ import { NextRequest } from 'next/server'
 import { requireAdmin } from '@/lib/admin'
 import { supabaseAdmin } from '@/lib/supabase'
 
+// Allow Vercel Pro functions to run up to 300s (hobby capped at 10s)
+export const maxDuration = 300
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 // tcggo.com API via RapidAPI — The RapidAPI version doesn't use /{game}/ prefix;
@@ -15,6 +18,7 @@ const RAPIDAPI_BASE = `https://${RAPIDAPI_HOST}`
 // - per_page max 20 otherwise
 const EPISODE_PAGE_SIZE = 100
 const BATCH_SIZE        = 50    // Supabase upsert batch size
+const FETCH_TIMEOUT_MS  = 30_000 // 30s per API call
 
 // ── SSE helper ────────────────────────────────────────────────────────────────
 
@@ -114,14 +118,29 @@ interface TcggoProduct {
 async function rapidApiFetch(path: string): Promise<Response> {
   const key = process.env.RAPIDAPI_KEY
   if (!key) throw new Error('RAPIDAPI_KEY environment variable is not set')
-  return fetch(`${RAPIDAPI_BASE}${path}`, {
-    headers: {
-      'x-rapidapi-key':  key,
-      'x-rapidapi-host': RAPIDAPI_HOST,
-      'Content-Type':    'application/json',
-    },
-    cache: 'no-store',
-  })
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+
+  try {
+    const res = await fetch(`${RAPIDAPI_BASE}${path}`, {
+      headers: {
+        'x-rapidapi-key':  key,
+        'x-rapidapi-host': RAPIDAPI_HOST,
+        'Content-Type':    'application/json',
+      },
+      cache:  'no-store',
+      signal: controller.signal,
+    })
+    clearTimeout(timer)
+    return res
+  } catch (err) {
+    clearTimeout(timer)
+    if ((err as Error).name === 'AbortError') {
+      throw new Error(`RapidAPI request timed out after ${FETCH_TIMEOUT_MS / 1000}s: ${path}`)
+    }
+    throw err
+  }
 }
 
 // ── Price extraction ──────────────────────────────────────────────────────────
@@ -298,11 +317,16 @@ export async function POST(request: NextRequest) {
           let hasMore = true
 
           while (hasMore) {
-            const res = await rapidApiFetch(
-              `/episodes/${encodeURIComponent(episodeId!)}/cards?per_page=${EPISODE_PAGE_SIZE}&page=${page}`,
-            )
+            const apiPath = `/episodes/${encodeURIComponent(episodeId!)}/cards?per_page=${EPISODE_PAGE_SIZE}&page=${page}`
+            emit({ type: 'fetching', message: `Calling API: ${apiPath}`, page })
+
+            const res = await rapidApiFetch(apiPath)
+            emit({ type: 'fetched', httpStatus: res.status, page, ok: res.ok })
+
             if (!res.ok) {
-              emit({ type: 'error', message: `RapidAPI HTTP ${res.status} on page ${page}` })
+              // Read body for more info
+              const errBody = await res.text().catch(() => '')
+              emit({ type: 'error', message: `RapidAPI HTTP ${res.status}: ${errBody.slice(0, 200)}` })
               controller.close(); return
             }
 
