@@ -37,6 +37,17 @@ function normalizeNumber(num: string | null | undefined): string {
 // ── RapidAPI types ────────────────────────────────────────────────────────────
 
 // tcggo.com actual API response structure (confirmed from live API response)
+
+// Graded prices are returned as a nested object:
+//   { psa: { psa10: 64, psa9: 29 }, bgs: { bgs95: 120 }, cgc: { cgc10: 80 } }
+interface TcggoGradedObject {
+  psa?: Record<string, number>
+  bgs?: Record<string, number>
+  cgc?: Record<string, number>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: Record<string, number> | any
+}
+
 interface TcggoCardmarketPrices {
   currency?:            string
   lowest_near_mint?:    number     // main price
@@ -44,11 +55,11 @@ interface TcggoCardmarketPrices {
   lowest_near_mint_FR?: number
   avg_sell_price?:      number
   trend_price?:         number
-  avg30?:               number
-  graded?: Array<{      // graded card prices
-    grade:  string      // e.g. "PSA 10", "BGS 9.5"
-    price?: number
-  }>
+  avg30?:               number          // legacy field name
+  '30d_average'?:       number          // actual field returned by tcggo.com API
+  '7d_average'?:        number
+  // tcggo.com returns graded as a nested object, not an array
+  graded?: TcggoGradedObject | Array<{ grade: string; price?: number }>
 }
 
 interface TcggoTcgplayerPrices {
@@ -74,8 +85,9 @@ interface TcggoCard {
   card_number?: number | string  // NOTE: field is "card_number" not "number"
   episode?:     { id: number; name: string }
   prices?: {
-    cardmarket?: TcggoCardmarketPrices
-    tcgplayer?:  TcggoTcgplayerPrices
+    cardmarket?:  TcggoCardmarketPrices
+    tcgplayer?:   TcggoTcgplayerPrices   // fallback (some endpoints use this)
+    tcg_player?:  TcggoTcgplayerPrices   // actual field name from tcggo.com API
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   [key: string]: any
@@ -90,6 +102,8 @@ interface TcggoResponse {
   total?:     number
   totalCount?:number
   count?:     number
+  // tcggo.com actual pagination wrapper
+  paging?:    { total?: number; count?: number; page?: number; per_page?: number }
 }
 
 interface TcggoProduct {
@@ -145,21 +159,37 @@ async function rapidApiFetch(path: string): Promise<Response> {
 
 // ── Price extraction ──────────────────────────────────────────────────────────
 
-/** Extract a specific grade price from a graded array. Grade string is partial-matched. */
-function findGradePrice(graded: Array<{ grade: string; price?: number }> | undefined, gradeKey: string): number | null {
-  if (!graded?.length) return null
-  const row = graded.find(g => g.grade?.toLowerCase().includes(gradeKey.toLowerCase()))
+/**
+ * Extract a grade price from the tcggo.com graded structure.
+ * The API returns graded as a nested object: { psa: { psa10: 64, psa9: 29 }, bgs: {...} }
+ * Falls back to the legacy array format for backwards compatibility.
+ */
+function extractGradedPrice(
+  graded: TcggoGradedObject | Array<{ grade: string; price?: number }> | undefined,
+  service: string,   // "psa" | "bgs" | "cgc"
+  key:     string,   // "psa10" | "psa9" | "bgs95" | "bgs9" | "cgc10"
+): number | null {
+  if (!graded) return null
+  // Object format: { psa: { psa10: 64 }, ... }
+  if (!Array.isArray(graded)) {
+    return (graded as TcggoGradedObject)[service]?.[key] ?? null
+  }
+  // Legacy array format: [{ grade: "PSA 10", price: 64 }]
+  const label = `${service} ${key.replace(service, '').replace(/(\d)(\d)$/, '$1.$2')}`.trim()
+  const row = (graded as Array<{ grade: string; price?: number }>)
+    .find(g => g.grade?.toLowerCase().includes(label.toLowerCase()))
   return row?.price ?? null
 }
 
 function extractCardPriceUpsert(cardUuid: string, apiCard: TcggoCard): Record<string, unknown> {
-  const t  = apiCard.prices?.tcgplayer  ?? {}
+  // tcggo.com API uses "tcg_player" (underscore) not "tcgplayer"
+  const t  = apiCard.prices?.tcg_player ?? apiCard.prices?.tcgplayer ?? {}
   const cm = apiCard.prices?.cardmarket ?? {}
 
   // TCGPlayer prices
-  const tcgp_normal       = t.normal?.market             ?? null
-  const tcgp_reverse_holo = t.reverseHolofoil?.market    ?? null
-  const tcgp_holo         = t.holofoil?.market           ?? null
+  const tcgp_normal       = t.normal?.market                ?? null
+  const tcgp_reverse_holo = t.reverseHolofoil?.market       ?? null
+  const tcgp_holo         = t.holofoil?.market              ?? null
   const tcgp_1st_edition  = t['1stEditionHolofoil']?.market ?? null
   const tcgp_market       =
     t.market_price ??
@@ -168,20 +198,21 @@ function extractCardPriceUpsert(cardUuid: string, apiCard: TcggoCard): Record<st
     t.normal?.market ??
     null
 
-  // Graded prices — from tcgplayer.graded array OR cardmarket.graded array
+  // Graded prices — tcggo.com returns { psa: { psa10: N, psa9: N }, bgs: {...}, cgc: {...} }
+  // tcg_player graded may also be present; prefer cardmarket graded as it's more reliable
   const tcgpGraded = t.graded
   const cmGraded   = cm.graded
-  const tcgp_psa10 = findGradePrice(tcgpGraded, 'psa 10')  ?? findGradePrice(cmGraded, 'psa 10')  ?? null
-  const tcgp_psa9  = findGradePrice(tcgpGraded, 'psa 9')   ?? findGradePrice(cmGraded, 'psa 9')   ?? null
-  const tcgp_bgs95 = findGradePrice(tcgpGraded, 'bgs 9.5') ?? findGradePrice(cmGraded, 'bgs 9.5') ?? null
-  const tcgp_bgs9  = findGradePrice(tcgpGraded, 'bgs 9')   ?? findGradePrice(cmGraded, 'bgs 9')   ?? null
-  const tcgp_cgc10 = findGradePrice(tcgpGraded, 'cgc 10')  ?? findGradePrice(cmGraded, 'cgc 10')  ?? null
+  const tcgp_psa10 = extractGradedPrice(cmGraded, 'psa', 'psa10') ?? extractGradedPrice(tcgpGraded, 'psa', 'psa10') ?? null
+  const tcgp_psa9  = extractGradedPrice(cmGraded, 'psa', 'psa9')  ?? extractGradedPrice(tcgpGraded, 'psa', 'psa9')  ?? null
+  const tcgp_bgs95 = extractGradedPrice(cmGraded, 'bgs', 'bgs95') ?? extractGradedPrice(tcgpGraded, 'bgs', 'bgs95') ?? null
+  const tcgp_bgs9  = extractGradedPrice(cmGraded, 'bgs', 'bgs9')  ?? extractGradedPrice(tcgpGraded, 'bgs', 'bgs9')  ?? null
+  const tcgp_cgc10 = extractGradedPrice(cmGraded, 'cgc', 'cgc10') ?? extractGradedPrice(tcgpGraded, 'cgc', 'cgc10') ?? null
 
-  // CardMarket prices — actual field is lowest_near_mint (EUR)
+  // CardMarket prices — tcggo.com returns "30d_average" not "avg30"
   const cm_avg_sell = cm.lowest_near_mint ?? cm.avg_sell_price ?? null
   const cm_low      = cm.lowest_near_mint ?? null
   const cm_trend    = cm.trend_price      ?? null
-  const cm_avg_30d  = cm.avg30            ?? null
+  const cm_avg_30d  = cm['30d_average']   ?? cm.avg30          ?? null
 
   return {
     card_id:           cardUuid,
@@ -349,8 +380,9 @@ export async function POST(request: NextRequest) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const json = await res.json() as TcggoResponse & Record<string, any>
             const apiCards: TcggoCard[] = json.data ?? json.cards ?? json.results ?? []
-            // Some API responses omit the total count — fall back to 0 (handled below)
-            totalCards = json.total ?? json.totalCount ?? json.count ?? 0
+            // tcggo.com wraps pagination in a "paging" object; check that first
+            totalCards = json.total ?? json.totalCount ?? json.count
+                      ?? json.paging?.total ?? json.paging?.count ?? 0
 
             if (page === 1) {
               const firstCard   = apiCards[0]
@@ -365,7 +397,14 @@ export async function POST(request: NextRequest) {
                 type:      'api_shape',
                 topKeys:   Object.keys(json),
                 cardKeys:  firstCardKeys,
-                rawCounts: { 'apiCards.length': apiCards.length, total: json.total, totalCount: json.totalCount, count: json.count },
+                rawCounts: {
+                  'apiCards.length': apiCards.length,
+                  total:             json.total,
+                  totalCount:        json.totalCount,
+                  count:             json.count,
+                  'paging.total':    json.paging?.total,
+                  'paging.count':    json.paging?.count,
+                },
               })
             }
 
