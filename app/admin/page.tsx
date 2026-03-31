@@ -23,6 +23,14 @@ const ADMIN_TOOLS: AdminTool[] = [
     badge: 'Storage',
   },
   {
+    href: '/admin/product-images',
+    icon: '📦',
+    title: 'Product Image Upload',
+    description:
+      'Drag sealed product images from Collectr directly into the uploader. Images are stored in Supabase and displayed on the products page.',
+    badge: 'Storage',
+  },
+  {
     href: '/admin/set-symbols',
     icon: '🔷',
     title: 'Set Symbol Upload',

@@ -105,6 +105,18 @@ export default function ProductCard({
       {/* Header strip with product type colour */}
       <div className={cn('h-1 w-full', typeStyle.bg.replace('/15', '/60'))} />
 
+      {/* Product image (if available) */}
+      {product.image_url && (
+        <div className="w-full bg-elevated flex items-center justify-center overflow-hidden" style={{ maxHeight: '160px' }}>
+          <img
+            src={product.image_url}
+            alt={product.name}
+            className="w-full h-40 object-contain"
+            loading="lazy"
+          />
+        </div>
+      )}
+
       <div className="p-4 flex flex-col gap-3 flex-1">
         {/* Product type badge + set name */}
         <div className="flex items-start justify-between gap-2">

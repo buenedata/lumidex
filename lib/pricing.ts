@@ -107,6 +107,7 @@ export interface SetProductPrice {
   set_id:       string
   name:         string
   product_type: string | null
+  image_url:    string | null
   tcgp_market:  number | null
   tcgp_low:     number | null
   tcgp_high:    number | null
@@ -210,7 +211,7 @@ export async function getSealedProductsForSet(
 ): Promise<SetProductPrice[]> {
   const { data, error } = await supabaseAdmin
     .from('set_products')
-    .select('id, set_id, name, product_type, tcgp_market, tcgp_low, tcgp_high, tcgp_url, cm_avg_sell, cm_trend, cm_url, fetched_at')
+    .select('id, set_id, name, product_type, image_url, tcgp_market, tcgp_low, tcgp_high, tcgp_url, cm_avg_sell, cm_trend, cm_url, fetched_at')
     .eq('set_id', setId)
     .order('product_type')
 
@@ -270,7 +271,7 @@ export async function getSealedProductsForAllSeries(): Promise<SeriesProductGrou
   // Step 1: fetch all products
   const { data: products, error: prodErr } = await supabaseAdmin
     .from('set_products')
-    .select('id, set_id, name, product_type, tcgp_market, tcgp_low, tcgp_high, tcgp_url, cm_avg_sell, cm_trend, cm_url, fetched_at')
+    .select('id, set_id, name, product_type, image_url, tcgp_market, tcgp_low, tcgp_high, tcgp_url, cm_avg_sell, cm_trend, cm_url, fetched_at')
     .order('product_type')
 
   if (prodErr) {
