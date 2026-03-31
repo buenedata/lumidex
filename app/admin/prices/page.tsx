@@ -196,8 +196,6 @@ export default function AdminPricesPage() {
       const body: Record<string, string> = { setId }
       if (apiSetIdInput.trim()) body.apiSetId = apiSetIdInput.trim()
 
-      console.log('[prices/sync] Sending POST body:', JSON.stringify(body))
-
       const res = await fetch('/api/prices/sync', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -205,21 +203,14 @@ export default function AdminPricesPage() {
         signal:  controller.signal,
       })
 
-      console.log('[prices/sync] fetch() resolved — status:', res.status, 'ok:', res.ok, 'hasBody:', !!res.body)
-
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
 
       const reader  = res.body.getReader()
       const decoder = new TextDecoder()
       let   buffer  = ''
 
-      let firstRead = true
       while (true) {
         const { value, done } = await reader.read()
-        if (firstRead) {
-          console.log('[prices/sync] First reader.read() resolved — done:', done, 'bytes:', value?.byteLength ?? 0)
-          firstRead = false
-        }
         if (done) break
 
         buffer += decoder.decode(value, { stream: true })
@@ -288,7 +279,7 @@ export default function AdminPricesPage() {
         message: e instanceof Error ? e.message : 'Sync failed',
       }))
     }
-  }, [loadStats])
+  }, [loadStats, apiSetIdInput])
 
   // ── Render ─────────────────────────────────────────────────────────────────
   if (isLoading || !user || profile?.role !== 'admin') {

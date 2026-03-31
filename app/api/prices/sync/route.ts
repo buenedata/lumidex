@@ -254,15 +254,24 @@ export async function POST(request: NextRequest) {
   }
 
   // 3. Stream SSE
-  const stream = new ReadableStream({
-    async start(controller) {
-      console.log('[prices/sync] ReadableStream start() entered — setId:', setId, 'episodeId:', episodeId ?? '(none)')
-      const emit = (payload: unknown) => {
-        try { controller.enqueue(sseData(payload)) } catch { /* disconnected */ }
-      }
-      const startTime = Date.now()
+  // Use TransformStream + fire-and-forget IIFE so the async work is in-flight
+  // BEFORE we return the Response.  With ReadableStream({ async start() }), Vercel
+  // can terminate the serverless function before the async start() begins, producing
+  // a 200 with an empty body.  The IIFE pattern guarantees the writer is already
+  // active when the client starts reading.
+  const { readable, writable } = new TransformStream()
+  const writer = writable.getWriter()
 
-      try {
+  const emit = (payload: unknown) => {
+    try { void writer.write(sseData(payload)) } catch { /* disconnected */ }
+  }
+
+  // ⬇ fire-and-forget: MUST be called before `return new Response(readable, ...)`
+  ;(async () => {
+    console.log('[prices/sync] Sync worker started — setId:', setId, 'episodeId:', episodeId ?? '(none)')
+    const startTime = Date.now()
+
+    try {
         // ── Step 1: Load DB cards ───────────────────────────────────────────
         const { data: dbCards, error: dbErr } = await supabaseAdmin
           .from('cards')
@@ -271,11 +280,11 @@ export async function POST(request: NextRequest) {
 
         if (dbErr || !dbCards) {
           emit({ type: 'error', message: `DB lookup failed: ${dbErr?.message}` })
-          controller.close(); return
+          await writer.close().catch(() => {}); return
         }
         if (dbCards.length === 0) {
           emit({ type: 'error', message: `No cards in DB for set "${setId}". Import card data first.` })
-          controller.close(); return
+          await writer.close().catch(() => {}); return
         }
 
         // Build lookup maps
@@ -334,7 +343,7 @@ export async function POST(request: NextRequest) {
               // Read body for more info
               const errBody = await res.text().catch(() => '')
               emit({ type: 'error', message: `RapidAPI HTTP ${res.status}: ${errBody.slice(0, 200)}` })
-              controller.close(); return
+              await writer.close().catch(() => {}); return
             }
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -414,7 +423,7 @@ export async function POST(request: NextRequest) {
               'Either re-import card data so cards get their tcgid populated, ' +
               'or enter the tcggo.com episode_id for this set in the "API Set ID" field.',
           })
-          controller.close(); return
+          await writer.close().catch(() => {}); return
         }
 
         // ── Step 3: Upsert card prices ────────────────────────────────────────
@@ -492,17 +501,16 @@ export async function POST(request: NextRequest) {
       } catch (err) {
         emit({ type: 'error', message: err instanceof Error ? err.message : 'Unexpected error' })
       } finally {
-        controller.close()
+        await writer.close().catch(() => {})
       }
-    },
-  })
+  })()
 
-  return new Response(stream, {
+  return new Response(readable, {
     headers: {
       'Content-Type':      'text/event-stream',
       'Cache-Control':     'no-cache',
       'Connection':        'keep-alive',
-      'X-Accel-Buffering': 'no',   // prevent nginx/Vercel proxy buffering
+      'X-Accel-Buffering': 'no',
     },
   })
 }
