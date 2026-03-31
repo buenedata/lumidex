@@ -63,12 +63,14 @@ export default function AdminPricesPage() {
 
   const [selectedSetId,   setSelectedSetId]   = useState<string | null>(null)
   const [selectedSetName, setSelectedSetName] = useState<string | null>(null)
-  const [apiSetIdInput,   setApiSetIdInput]   = useState('')   // RapidAPI set ID override
+  const [apiSetIdInput,   setApiSetIdInput]   = useState('')
   const [apiSuggestions,  setApiSuggestions]  = useState<{ id: string; name: string; series?: string }[]>([])
   const [allApiSets,      setAllApiSets]      = useState<{ id: string; name: string; series?: string }[]>([])
   const [allSetsSearch,   setAllSetsSearch]   = useState('')
   const [discoverLoading, setDiscoverLoading] = useState(false)
   const [discoverErr,     setDiscoverErr]     = useState<string | null>(null)
+  const [probeResult,     setProbeResult]     = useState<Record<string, unknown> | null>(null)
+  const [probeLoading,    setProbeLoading]    = useState(false)
   const [stats,           setStats]           = useState<SetStats | null>(null)
   const [statsLoading,    setStatsLoading]    = useState(false)
   const [syncState,       setSyncState]       = useState<SyncState>({
@@ -135,10 +137,6 @@ export default function AdminPricesPage() {
       setDiscoverLoading(false)
     }
   }, [])
-
-  // Probe: fetch 3 cards (no filter) to inspect raw API response structure
-  const [probeResult, setProbeResult] = useState<Record<string, unknown> | null>(null)
-  const [probeLoading, setProbeLoading] = useState(false)
 
   const probeApi = useCallback(async () => {
     setProbeLoading(true)
