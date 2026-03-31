@@ -43,12 +43,14 @@ export async function GET(request: NextRequest) {
             .single()
 
           if (!existingProfile) {
-            // New OAuth user — derive a username from provider metadata.
-            // Discord supplies: user_metadata.custom_claims.global_name, user_metadata.full_name, user_metadata.user_name
+            // New user (email/password or OAuth) — derive a username.
+            // Email/password signup stores the chosen username in user_metadata.username.
+            // Discord supplies: user_metadata.custom_claims.global_name, user_metadata.user_name
             // Google supplies:  user_metadata.full_name, user_metadata.name
             const meta = user.user_metadata ?? {}
 
             const rawName: string =
+              meta.username ||                    // email/password signup (signUpWithEmail stores this)
               meta.custom_claims?.global_name ||  // Discord display name
               meta.user_name ||                   // Discord username handle
               meta.preferred_username ||          // generic OAuth field
@@ -66,7 +68,7 @@ export async function GET(request: NextRequest) {
 
             await supabaseAdmin
               .from('users')
-              .insert([{ id: user.id, username, avatar_url: avatarUrl }])
+              .insert([{ id: user.id, username, email: user.email ?? null, avatar_url: avatarUrl }])
             // Errors are intentionally swallowed here — if the insert fails
             // (e.g. duplicate from a race condition) we still let the user in.
           }

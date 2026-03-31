@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
 import { signOut } from '@/lib/auth'
@@ -12,9 +13,18 @@ export default function Navbar() {
   // Check if current user is admin based on database role
   const isAdmin = profile?.role === 'admin'
 
+  const [searchQuery, setSearchQuery] = useState('')
+
   const handleSignOut = async () => {
     await signOut()
     router.push('/login')
+  }
+
+  const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && searchQuery.trim()) {
+      router.push(`/browse?name=${encodeURIComponent(searchQuery.trim())}`)
+      setSearchQuery('')
+    }
   }
 
   return (
@@ -45,6 +55,9 @@ export default function Navbar() {
             <input
               type="text"
               placeholder="Search cards..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              onKeyDown={handleSearch}
               className="w-full h-9 bg-elevated border border-subtle rounded-lg pl-9 pr-3 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
             />
           </div>

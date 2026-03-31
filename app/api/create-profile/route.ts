@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
   try {
-    const { userId, username, avatarUrl } = await request.json()
+    const { userId, username, avatarUrl, email } = await request.json()
 
     if (!userId || !username) {
       return NextResponse.json(
@@ -22,7 +22,8 @@ export async function POST(request: Request) {
         {
           id: userId,
           username,
-          avatar_url: avatarUrl
+          email: email ?? null,
+          avatar_url: avatarUrl,
         }
       ])
       .select()

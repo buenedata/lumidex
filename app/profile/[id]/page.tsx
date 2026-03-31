@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
+import { checkAndUnlockAchievements } from '@/lib/achievements'
 import SetCard from '@/components/SetCard'
 import AchievementBadge from '@/components/AchievementBadge'
 import { Button } from '@/components/ui/Button'
@@ -215,6 +216,43 @@ export default function ProfilePage() {
         achievementCount: achievementsData?.length || 0,
       })
 
+      // ── Retroactive achievement unlock (own profile only) ─────────────────
+      // checkAndUnlockAchievements is normally called when cards are added,
+      // but won't have fired for cards added before the system was introduced.
+      // Running it on every own-profile load is cheap and ensures correctness.
+      if (currentUser?.id === userId) {
+        try {
+          const newlyUnlocked = await checkAndUnlockAchievements(userId)
+          if (newlyUnlocked.length > 0) {
+            // Re-fetch the full achievements list so the UI includes the new ones
+            const { data: refreshed } = await supabase
+              .from('user_achievements')
+              .select(`
+                achievement_id,
+                unlocked_at,
+                achievements (
+                  id,
+                  name,
+                  description,
+                  icon
+                )
+              `)
+              .eq('user_id', userId)
+
+            if (refreshed) {
+              const refreshedList = refreshed
+                .map(ua => ua.achievements)
+                .filter(Boolean)
+                .flat() as Achievement[]
+              setUserAchievements(refreshedList)
+              setStats(prev => ({ ...prev, achievementCount: refreshed.length }))
+            }
+          }
+        } catch (err) {
+          console.warn('[profile] achievement check failed:', err)
+        }
+      }
+
       // ── Portfolio value: card variants + sealed products ──────────────────────
       try {
         const priceSource = userData?.price_source ?? 'tcgplayer'
@@ -229,12 +267,17 @@ export default function ProfilePage() {
         ]
 
         let cardValueUsd = 0
+        // Track whether the card_prices table actually has any rows for these cards.
+        // If there are cards but price data is completely absent we want to show
+        // "—" instead of the misleading "$0.00".
+        let hasPriceData = cardIds.length === 0  // trivially true when no cards
         if (cardIds.length > 0) {
           const { data: prices } = await supabase
             .from('card_prices')
             .select('card_id, tcgp_normal, tcgp_reverse_holo, tcgp_holo, tcgp_1st_edition, tcgp_market, cm_trend')
             .in('card_id', cardIds)
 
+          hasPriceData = prices !== null && prices.length > 0
           const priceMap = new Map(prices?.map(p => [p.card_id, p]) ?? [])
 
           for (const v of cardsData ?? []) {
@@ -284,7 +327,9 @@ export default function ProfilePage() {
           }
         }
 
-        setCollectionValueUsd(cardValueUsd + sealedValueUsd)
+        // Only show a real dollar value if we actually have price data.
+        // An empty card_prices table should display "—" not "$0.00".
+        setCollectionValueUsd(hasPriceData ? cardValueUsd + sealedValueUsd : null)
       } catch (err) {
         console.warn('[profile] portfolio value computation failed:', err)
         setCollectionValueUsd(null)

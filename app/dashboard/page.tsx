@@ -147,7 +147,7 @@ export default function DashboardPage() {
             <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
               <span className="text-xs text-muted uppercase tracking-wider">Cards Owned</span>
               <span className="text-2xl font-bold text-primary">
-                {userCards?.size ?? 0}
+                {Array.from(userCards?.values() ?? []).reduce((sum, uc) => sum + (uc.quantity ?? 0), 0)}
               </span>
             </div>
             <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
