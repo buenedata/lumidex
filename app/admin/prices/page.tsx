@@ -136,6 +136,24 @@ export default function AdminPricesPage() {
     }
   }, [])
 
+  // Probe: fetch 3 cards (no filter) to inspect raw API response structure
+  const [probeResult, setProbeResult] = useState<Record<string, unknown> | null>(null)
+  const [probeLoading, setProbeLoading] = useState(false)
+
+  const probeApi = useCallback(async () => {
+    setProbeLoading(true)
+    setProbeResult(null)
+    try {
+      const res = await fetch('/api/prices/discover?probe=cards')
+      const json = await res.json()
+      setProbeResult(json)
+    } catch (e) {
+      setProbeResult({ error: String(e) })
+    } finally {
+      setProbeLoading(false)
+    }
+  }, [])
+
   // Fetch ALL sets from the API (for browsing when name search fails)
   const browseAllSets = useCallback(async () => {
     setDiscoverLoading(true)
@@ -312,15 +330,15 @@ export default function AdminPricesPage() {
               </button>
             </div>
 
-            {/* RapidAPI Set ID — lookup + override */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label className="text-xs font-medium text-gray-400">
-                  RapidAPI Set ID
-                  <span className="text-gray-600 font-normal ml-1">
-                    — our DB uses <code className="font-mono text-gray-500">{selectedSetId}</code>; the API may use a different ID
-                  </span>
-                </label>
+            {/* tcggo.com Episode ID — lookup + override */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-gray-400">
+                tcggo.com Episode ID
+                <span className="text-gray-600 font-normal ml-1">
+                  — tcggo.com calls sets &quot;episodes&quot; and IDs them as integers (e.g. 396)
+                </span>
+              </label>
                 <button
                   onClick={() => selectedSetName && discoverApiSetId(selectedSetName)}
                   disabled={discoverLoading}
@@ -334,7 +352,7 @@ export default function AdminPricesPage() {
               <div className="flex items-center gap-2">
                 <input
                   type="text"
-                  placeholder="Auto-detect from cards, or type API set ID here"
+                  placeholder="Episode ID (integer) — e.g. 396 for Ascended Heroes"
                   value={apiSetIdInput}
                   onChange={e => { setApiSetIdInput(e.target.value); setApiSuggestions([]) }}
                   className="flex-1 h-9 bg-gray-800 border border-gray-700 rounded-lg px-3 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-indigo-500 font-mono"
@@ -400,7 +418,7 @@ export default function AdminPricesPage() {
               {apiSuggestions.length > 0 && (
                 <div className="border border-gray-700 rounded-lg overflow-hidden">
                   <div className="px-3 py-1.5 bg-gray-800 text-xs text-gray-500 border-b border-gray-700">
-                    Click a set to use its API ID
+                    Click an episode to use its integer ID
                   </div>
                   {apiSuggestions.map(s => (
                     <button

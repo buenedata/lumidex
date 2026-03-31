@@ -4,110 +4,109 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
+// tcggo.com API via RapidAPI — The RapidAPI version doesn't use /{game}/ prefix;
+// that prefix is for the main tcggo.com API which is multi-game. The RapidAPI
+// wrapper is poker-specific: https://pokemon-tcg-api.p.rapidapi.com/{endpoint}
 const RAPIDAPI_HOST = 'pokemon-tcg-api.p.rapidapi.com'
 const RAPIDAPI_BASE = `https://${RAPIDAPI_HOST}`
-const PAGE_SIZE     = 250   // maximum cards per page
-const BATCH_SIZE    = 50    // upsert batch size to stay within Supabase payload limits
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// tcggo.com API pagination limits:
+// - per_page max 100 when filtering by episode_id
+// - per_page max 20 otherwise
+const EPISODE_PAGE_SIZE = 100
+const BATCH_SIZE        = 50    // Supabase upsert batch size
+
+// ── SSE helper ────────────────────────────────────────────────────────────────
 
 function sseData(payload: unknown): Uint8Array {
   return new TextEncoder().encode(`data: ${JSON.stringify(payload)}\n\n`)
 }
 
-/**
- * Strips leading zeros and the "/total" suffix from a card number.
- * "012/165" → "12",  "TG01" → "TG01",  "001" → "1"
- * Returns "" for null/undefined inputs (card is skipped in matching).
- */
+// ── Number normalisation ──────────────────────────────────────────────────────
+
 function normalizeNumber(num: string | null | undefined): string {
   if (!num) return ''
   const raw = num.split('/')[0]
-  // Preserve non-numeric prefixes like "TG", "GG", "SWSH"
-  const onlyDigits = /^\d+$/.test(raw)
-  return onlyDigits ? String(parseInt(raw, 10)) : raw
+  return /^\d+$/.test(raw) ? String(parseInt(raw, 10)) : raw
 }
 
 // ── RapidAPI types ────────────────────────────────────────────────────────────
 
-interface TcgpPriceEntry {
-  low?:    number
-  mid?:    number
-  high?:   number
-  market?: number
+// tcggo.com actual API response structure (confirmed from live API response)
+interface TcggoCardmarketPrices {
+  currency?:            string
+  lowest_near_mint?:    number     // main price
+  lowest_near_mint_DE?: number
+  lowest_near_mint_FR?: number
+  avg_sell_price?:      number
+  trend_price?:         number
+  avg30?:               number
+  graded?: Array<{      // graded card prices
+    grade:  string      // e.g. "PSA 10", "BGS 9.5"
+    price?: number
+  }>
 }
 
-interface TcgpPrices {
-  normal?:                 TcgpPriceEntry
-  reverseHolofoil?:        TcgpPriceEntry
-  holofoil?:               TcgpPriceEntry
-  '1stEditionHolofoil'?:   TcgpPriceEntry
-  '1stEditionNormal'?:     TcgpPriceEntry
-  // Graded variants — key names logged on first sync for verification
-  gradedPsa10?:            TcgpPriceEntry
-  gradedPsa9?:             TcgpPriceEntry
-  gradedBgs9_5?:           TcgpPriceEntry
-  gradedBgs9?:             TcgpPriceEntry
-  gradedCgc10?:            TcgpPriceEntry
-  // Alternate key formats that some API versions use
-  'PSA 10'?:               TcgpPriceEntry
-  'PSA 9'?:                TcgpPriceEntry
-  'BGS 9.5'?:              TcgpPriceEntry
-  'BGS 9'?:                TcgpPriceEntry
-  'CGC 10'?:               TcgpPriceEntry
+interface TcggoTcgplayerPrices {
+  market_price?: number
+  low_price?:    number
+  mid_price?:    number
+  high_price?:   number
+  // variant-level prices (if available)
+  normal?:             { market?: number }
+  reverseHolofoil?:    { market?: number }
+  holofoil?:           { market?: number }
+  '1stEditionHolofoil'?: { market?: number }
+  graded?: Array<{
+    grade:  string
+    price?: number
+  }>
 }
 
-interface RapidApiCard {
-  id:      string
-  number:  string
+interface TcggoCard {
+  id:           number | string
+  tcgid?:       string        // pokemontcg.io ID e.g. "sv3-223", "me2pt5-1"
+  name?:        string
+  card_number?: number | string  // NOTE: field is "card_number" not "number"
+  episode?:     { id: number; name: string }
+  prices?: {
+    cardmarket?: TcggoCardmarketPrices
+    tcgplayer?:  TcggoTcgplayerPrices
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any
+}
+
+interface TcggoResponse {
+  data?:      TcggoCard[]
+  cards?:     TcggoCard[]
+  results?:   TcggoCard[]
+  page?:      number
+  per_page?:  number
+  total?:     number
+  totalCount?:number
+  count?:     number
+}
+
+interface TcggoProduct {
+  id:       number | string
+  tcgid?:   string
+  name?:    string
+  category?:string
+  episode?: { id: number; name: string }
   tcgplayer?: {
-    updatedAt?: string
-    prices?:    TcgpPrices
+    market_price?: number
+    low_price?:    number
+    high_price?:   number
+    url?:          string
   }
   cardmarket?: {
-    updatedAt?: string
-    prices?: {
-      averageSellPrice?: number
-      lowPrice?:         number
-      trendPrice?:       number
-      avg30?:            number
-    }
+    avg_sell_price?: number
+    trend_price?:    number
+    url?:            string
   }
-}
-
-interface RapidApiResponse {
-  // pokemontcg.io standard field names
-  data?:       RapidApiCard[]
-  page?:       number
-  pageSize?:   number
-  count?:      number
-  totalCount?: number
-  // Alternative field names used by some RapidAPI wrappers
-  cards?:      RapidApiCard[]
-  results?:    RapidApiCard[]
-  total?:      number
-  per_page?:   number
-  total_pages?: number
-}
-
-interface RapidApiProduct {
-  id:       string
-  name:     string
-  set?:     { id: string }
-  category?: string
-  tcgplayer?: {
-    url?: string
-    prices?: { normal?: { market?: number; low?: number; high?: number } }
-  }
-  cardmarket?: {
-    url?: string
-    prices?: { averageSellPrice?: number; trendPrice?: number }
-  }
-}
-
-interface RapidApiProductResponse {
-  data:       RapidApiProduct[]
-  totalCount: number
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any
 }
 
 // ── RapidAPI fetch helper ─────────────────────────────────────────────────────
@@ -115,7 +114,6 @@ interface RapidApiProductResponse {
 async function rapidApiFetch(path: string): Promise<Response> {
   const key = process.env.RAPIDAPI_KEY
   if (!key) throw new Error('RAPIDAPI_KEY environment variable is not set')
-
   return fetch(`${RAPIDAPI_BASE}${path}`, {
     headers: {
       'x-rapidapi-key':  key,
@@ -126,56 +124,64 @@ async function rapidApiFetch(path: string): Promise<Response> {
   })
 }
 
-// ── Price extraction helpers ──────────────────────────────────────────────────
+// ── Price extraction ──────────────────────────────────────────────────────────
 
-/** Extract the best "market" price for graded variants, trying multiple key formats. */
-function extractGradedPrice(prices: TcgpPrices, ...keys: (keyof TcgpPrices)[]): number | null {
-  for (const key of keys) {
-    const entry = prices[key] as TcgpPriceEntry | undefined
-    if (entry?.market != null) return entry.market
-  }
-  return null
+/** Extract a specific grade price from a graded array. Grade string is partial-matched. */
+function findGradePrice(graded: Array<{ grade: string; price?: number }> | undefined, gradeKey: string): number | null {
+  if (!graded?.length) return null
+  const row = graded.find(g => g.grade?.toLowerCase().includes(gradeKey.toLowerCase()))
+  return row?.price ?? null
 }
 
-function buildCardPriceUpsert(
-  cardId:     string,
-  apiCardId:  string,
-  card:       RapidApiCard,
-): Record<string, unknown> {
-  const t = card.tcgplayer?.prices ?? {}
-  const cm = card.cardmarket?.prices
+function extractCardPriceUpsert(cardUuid: string, apiCard: TcggoCard): Record<string, unknown> {
+  const t  = apiCard.prices?.tcgplayer  ?? {}
+  const cm = apiCard.prices?.cardmarket ?? {}
 
-  // Best market price: holofoil → reverse → normal → 1st edition
-  const tcgp_market =
+  // TCGPlayer prices
+  const tcgp_normal       = t.normal?.market             ?? null
+  const tcgp_reverse_holo = t.reverseHolofoil?.market    ?? null
+  const tcgp_holo         = t.holofoil?.market           ?? null
+  const tcgp_1st_edition  = t['1stEditionHolofoil']?.market ?? null
+  const tcgp_market       =
+    t.market_price ??
     t.holofoil?.market ??
     t.reverseHolofoil?.market ??
     t.normal?.market ??
-    t['1stEditionHolofoil']?.market ??
-    t['1stEditionNormal']?.market ??
     null
 
+  // Graded prices — from tcgplayer.graded array OR cardmarket.graded array
+  const tcgpGraded = t.graded
+  const cmGraded   = cm.graded
+  const tcgp_psa10 = findGradePrice(tcgpGraded, 'psa 10')  ?? findGradePrice(cmGraded, 'psa 10')  ?? null
+  const tcgp_psa9  = findGradePrice(tcgpGraded, 'psa 9')   ?? findGradePrice(cmGraded, 'psa 9')   ?? null
+  const tcgp_bgs95 = findGradePrice(tcgpGraded, 'bgs 9.5') ?? findGradePrice(cmGraded, 'bgs 9.5') ?? null
+  const tcgp_bgs9  = findGradePrice(tcgpGraded, 'bgs 9')   ?? findGradePrice(cmGraded, 'bgs 9')   ?? null
+  const tcgp_cgc10 = findGradePrice(tcgpGraded, 'cgc 10')  ?? findGradePrice(cmGraded, 'cgc 10')  ?? null
+
+  // CardMarket prices — actual field is lowest_near_mint (EUR)
+  const cm_avg_sell = cm.lowest_near_mint ?? cm.avg_sell_price ?? null
+  const cm_low      = cm.lowest_near_mint ?? null
+  const cm_trend    = cm.trend_price      ?? null
+  const cm_avg_30d  = cm.avg30            ?? null
+
   return {
-    card_id:           cardId,
-    api_card_id:       apiCardId,
-    tcgp_normal:       t.normal?.market           ?? null,
-    tcgp_reverse_holo: t.reverseHolofoil?.market  ?? null,
-    tcgp_holo:         t.holofoil?.market         ?? null,
-    tcgp_1st_edition:  t['1stEditionHolofoil']?.market ?? t['1stEditionNormal']?.market ?? null,
+    card_id:           cardUuid,
+    api_card_id:       apiCard.tcgid ?? String(apiCard.id),
+    tcgp_normal,
+    tcgp_reverse_holo,
+    tcgp_holo,
+    tcgp_1st_edition,
     tcgp_market,
-    // Graded — try both camelCase and spaced key formats
-    tcgp_psa10:  extractGradedPrice(t, 'gradedPsa10', 'PSA 10'),
-    tcgp_psa9:   extractGradedPrice(t, 'gradedPsa9',  'PSA 9'),
-    tcgp_bgs95:  extractGradedPrice(t, 'gradedBgs9_5','BGS 9.5'),
-    tcgp_bgs9:   extractGradedPrice(t, 'gradedBgs9',  'BGS 9'),
-    tcgp_cgc10:  extractGradedPrice(t, 'gradedCgc10', 'CGC 10'),
-    // CardMarket
-    cm_avg_sell:     cm?.averageSellPrice ?? null,
-    cm_low:          cm?.lowPrice         ?? null,
-    cm_trend:        cm?.trendPrice       ?? null,
-    cm_avg_30d:      cm?.avg30            ?? null,
-    tcgp_updated_at: card.tcgplayer?.updatedAt ?? null,
-    cm_updated_at:   card.cardmarket?.updatedAt ?? null,
-    fetched_at:      new Date().toISOString(),
+    tcgp_psa10,
+    tcgp_psa9,
+    tcgp_bgs95,
+    tcgp_bgs9,
+    tcgp_cgc10,
+    cm_avg_sell,
+    cm_low,
+    cm_trend,
+    cm_avg_30d,
+    fetched_at: new Date().toISOString(),
   }
 }
 
@@ -192,7 +198,7 @@ function normalizeProductType(category: string | undefined): string {
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
-  // 1. Auth guard — admin only
+  // 1. Auth guard
   try {
     await requireAdmin()
   } catch (err) {
@@ -203,62 +209,53 @@ export async function POST(request: NextRequest) {
   }
 
   // 2. Parse body
+  // apiSetId: the tcggo.com episode_id (integer string) for this set.
+  //           If omitted, the route attempts to use cards' tcgid (api_id) for direct lookup.
   let body: { setId?: string; apiSetId?: string }
-  try {
-    body = await request.json()
-  } catch {
+  try { body = await request.json() } catch {
     return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
+      status: 400, headers: { 'Content-Type': 'application/json' },
     })
   }
 
-  const setId = body.setId?.trim()
+  const setId          = body.setId?.trim()
+  const episodeId      = body.apiSetId?.trim() // tcggo.com episode_id (integer)
+  const episodeIsInt   = episodeId ? /^\d+$/.test(episodeId) : false
+
   if (!setId) {
     return new Response(JSON.stringify({ error: 'setId is required' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
+      status: 400, headers: { 'Content-Type': 'application/json' },
     })
   }
 
-  // apiSetId is the pokemontcg.io / RapidAPI set ID (e.g. "sv9pt5").
-  // Our internal DB set_id (e.g. "sv14") may differ from pokemontcg.io's IDs.
-  // Priority: explicit override > derived from cards.api_id > fallback to setId
-  const apiSetIdOverride = body.apiSetId?.trim() || null
-
-  // 3. Stream SSE response
+  // 3. Stream SSE
   const stream = new ReadableStream({
     async start(controller) {
       const emit = (payload: unknown) => {
-        try { controller.enqueue(sseData(payload)) } catch { /* client disconnected */ }
+        try { controller.enqueue(sseData(payload)) } catch { /* disconnected */ }
       }
       const startTime = Date.now()
 
       try {
-        // ── Step 1: Load DB cards for this set ──────────────────────────────
+        // ── Step 1: Load DB cards ───────────────────────────────────────────
         const { data: dbCards, error: dbErr } = await supabaseAdmin
           .from('cards')
           .select('id, number, api_id')
           .eq('set_id', setId)
 
         if (dbErr || !dbCards) {
-          emit({ type: 'error', message: `DB card lookup failed: ${dbErr?.message}` })
-          controller.close()
-          return
+          emit({ type: 'error', message: `DB lookup failed: ${dbErr?.message}` })
+          controller.close(); return
         }
-
         if (dbCards.length === 0) {
-          emit({ type: 'error', message: `No cards found in DB for set "${setId}". Import card data first.` })
-          controller.close()
-          return
+          emit({ type: 'error', message: `No cards in DB for set "${setId}". Import card data first.` })
+          controller.close(); return
         }
 
         // Build lookup maps
-        // Primary:  api_id (exact match)  → card UUID
-        // Fallback: normalized number     → card UUID  (safe within a single set)
-        const apiIdMap  = new Map<string, string>()   // "sv1-25" → uuid
-        const numberMap = new Map<string, string>()   // "25"     → uuid
-        const missingApiId = new Set<string>()        // uuids that need api_id backfilled
+        const apiIdMap   = new Map<string, string>()   // tcgid (e.g. sv14-1) → DB uuid
+        const numberMap  = new Map<string, string>()   // normalized card number → DB uuid
+        const missingApiId = new Set<string>()
 
         for (const card of dbCards) {
           const uuid = card.id as string
@@ -270,256 +267,186 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Derive the pokemontcg.io set ID from existing card api_id values
-        // api_id format: "{tcgSetId}-{number}", e.g. "sv9pt5-25" → tcgSetId = "sv9pt5"
-        let tcgApiSetId: string = apiSetIdOverride ?? setId
-        if (!apiSetIdOverride) {
-          const cardWithApiId = dbCards.find(c => c.api_id && String(c.api_id).includes('-'))
-          if (cardWithApiId) {
-            const parts = String(cardWithApiId.api_id).split('-')
-            if (parts.length >= 2) {
-              // Everything except the last segment is the set ID
-              // Handles both "sv9pt5-25" and "swsh1-1" correctly
-              const derived = parts.slice(0, -1).join('-')
-              tcgApiSetId = derived
-              console.log(`[prices/sync] Derived tcgApiSetId="${derived}" from card api_id="${cardWithApiId.api_id}"`)
-            }
-          } else {
-            console.warn(`[prices/sync] No cards with api_id found for set ${setId} — using setId as API filter (may fail if IDs don't match pokemontcg.io)`)
-          }
-        }
+        const cardsWithTcgId = dbCards.filter(c => c.api_id)
+        const useEpisodeMode = episodeIsInt
+        const useTcgIdMode   = cardsWithTcgId.length > 0
 
         emit({
-          type: 'start',
+          type:           'start',
           setId,
-          tcgApiSetId,
-          dbCardCount: dbCards.length,
-          message: `Fetching prices for ${dbCards.length} cards (API set ID: ${tcgApiSetId})…`,
+          episodeId:      episodeId ?? null,
+          mode:           useEpisodeMode ? 'episode_id' : useTcgIdMode ? 'tcgid_batch' : 'number_match_fallback',
+          dbCardCount:    dbCards.length,
+          cardsWithTcgId: cardsWithTcgId.length,
+          message:        useEpisodeMode
+            ? `Fetching via episode_id=${episodeId}…`
+            : useTcgIdMode
+              ? `Fetching ${cardsWithTcgId.length} cards via tcgid batch lookup…`
+              : `No tcgids — will attempt set_id filter fallback`,
         })
 
-        // ── Step 2: Paginate RapidAPI cards ─────────────────────────────────
-        let page = 1
-        let totalApiCards = 0
         let matched   = 0
         let unmatched = 0
         const priceUpserts: Record<string, unknown>[] = []
-        const apiIdBackfills: { uuid: string; apiCardId: string }[] = []
+        const apiIdBackfills: { uuid: string; tcgid: string }[] = []
 
-        // Log all price keys seen on the first card — helps verify graded key names
-        let gradedKeysLogged = false
+        // ── Step 2a: Episode-ID mode ─────────────────────────────────────────
+        if (useEpisodeMode) {
+          let page = 1
+          let totalCards = 0
+          let hasMore = true
 
-        // tcggo.com API uses set= or set_id= (NOT the pokemontcg.io q=set.id: Lucene syntax)
-        // Try set= first, then set_id= as fallback
-        let cardQueryFilter = `set=${encodeURIComponent(tcgApiSetId)}`
-
-        let hasMore = true
-        while (hasMore) {
-          const res = await rapidApiFetch(
-            `/cards?${cardQueryFilter}&per_page=${PAGE_SIZE}&page=${page}`,
-          )
-
-          if (!res.ok) {
-            emit({ type: 'error', message: `RapidAPI HTTP ${res.status} on page ${page}` })
-            controller.close()
-            return
-          }
-
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const json = await res.json() as RapidApiResponse & Record<string, any>
-
-          // Support multiple response shapes
-          const apiCards: RapidApiCard[] = json.data ?? json.cards ?? json.results ?? []
-          totalApiCards = json.totalCount ?? json.total ?? json.count ?? 0
-
-          // Probe the response shape on the first page and emit for debugging
-          if (page === 1) {
-            const topKeys = Object.keys(json)
-            const firstItem = apiCards[0]
-            const cardKeys = firstItem ? Object.keys(firstItem) : []
-            console.log(`[prices/sync] Response top-level keys:`, topKeys)
-            console.log(`[prices/sync] Cards returned: ${apiCards.length}, totalApiCards: ${totalApiCards}`)
-            console.log(`[prices/sync] First card keys:`, cardKeys)
-            emit({
-              type:        'api_shape',
-              topKeys,
-              cardKeys,
-              rawCounts: {
-                'apiCards.length': apiCards.length,
-                data:       json.data?.length,
-                cards:      json.cards?.length,
-                results:    json.results?.length,
-                totalCount: json.totalCount,
-                total:      json.total,
-                count:      json.count,
-              },
-            })
-
-            // If q=set.id: returned 0 cards, try the set_id= param format
-            if (apiCards.length === 0 && cardQueryFilter.startsWith('q=')) {
-              console.log(`[prices/sync] q=set.id: returned 0 cards — retrying with set_id= param`)
-              cardQueryFilter = `set_id=${encodeURIComponent(tcgApiSetId)}`
-              emit({ type: 'debug', message: `set= returned 0 — retrying with set_id=` })
-
-              const retryRes = await rapidApiFetch(
-                `/cards?${cardQueryFilter}&per_page=${PAGE_SIZE}&page=${page}`,
-              )
-              if (retryRes.ok) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const retryJson = await retryRes.json() as RapidApiResponse & Record<string, any>
-                const retryCards: RapidApiCard[] = retryJson.data ?? retryJson.cards ?? retryJson.results ?? []
-                totalApiCards = retryJson.totalCount ?? retryJson.total ?? retryJson.count ?? 0
-                emit({
-                  type: 'api_shape',
-                  topKeys:  Object.keys(retryJson),
-                  cardKeys: retryCards[0] ? Object.keys(retryCards[0]) : [],
-                  rawCounts: {
-                    'retry apiCards.length': retryCards.length,
-                    totalCount: retryJson.totalCount,
-                    total:      retryJson.total,
-                    count:      retryJson.count,
-                  },
-                })
-                // If the retry worked, use those cards instead
-                if (retryCards.length > 0) {
-                  // Process retry cards by appending to the outer scope
-                  for (const apiCard of retryCards) {
-                    if (!apiCard.id) { unmatched++; continue }
-                    const normNum = normalizeNumber(apiCard.number ?? '')
-                    const cardUuid = apiIdMap.get(apiCard.id) ?? numberMap.get(normNum)
-                    if (!cardUuid) { unmatched++; continue }
-                    matched++
-                    priceUpserts.push(buildCardPriceUpsert(cardUuid, apiCard.id, apiCard))
-                    if (missingApiId.has(cardUuid)) apiIdBackfills.push({ uuid: cardUuid, apiCardId: apiCard.id })
-                  }
-                  hasMore = page * PAGE_SIZE < totalApiCards
-                  page++
-                  emit({ type: 'progress', page: page - 1, fetched: retryCards.length, matched, unmatched, totalApiCards })
-                  continue
-                }
-              }
+          while (hasMore) {
+            const res = await rapidApiFetch(
+              `/cards?episode_id=${encodeURIComponent(episodeId!)}&per_page=${EPISODE_PAGE_SIZE}&page=${page}`,
+            )
+            if (!res.ok) {
+              emit({ type: 'error', message: `RapidAPI HTTP ${res.status} on page ${page}` })
+              controller.close(); return
             }
-          } // end if (page === 1)
 
-          // Log price keys on first card of first page
-          if (!gradedKeysLogged && apiCards.length > 0) {
-            const samplePriceKeys = Object.keys(apiCards[0].tcgplayer?.prices ?? {})
-            console.log(`[prices/sync] TCGPlayer price keys for ${setId}:`, samplePriceKeys)
-            emit({ type: 'debug', priceKeys: samplePriceKeys, sample: apiCards[0].id })
-            gradedKeysLogged = true
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const json = await res.json() as TcggoResponse & Record<string, any>
+            const apiCards: TcggoCard[] = json.data ?? json.cards ?? json.results ?? []
+            totalCards = json.total ?? json.totalCount ?? json.count ?? 0
+
+            if (page === 1) {
+              const firstCardKeys = apiCards[0] ? Object.keys(apiCards[0]) : []
+              console.log(`[prices/sync] Episode mode response keys:`, Object.keys(json))
+              console.log(`[prices/sync] First card keys:`, firstCardKeys)
+              emit({
+                type:      'api_shape',
+                topKeys:   Object.keys(json),
+                cardKeys:  firstCardKeys,
+                rawCounts: { 'apiCards.length': apiCards.length, total: json.total, totalCount: json.totalCount },
+              })
+            }
+
+            for (const apiCard of apiCards) {
+              const tcgid   = apiCard.tcgid ?? null
+              // API field is card_number (integer), not number
+              const normNum = normalizeNumber(String(apiCard.card_number ?? ''))
+              const uuid    = (tcgid ? apiIdMap.get(tcgid) : null) ?? numberMap.get(normNum)
+
+              if (!uuid) { unmatched++; continue }
+              matched++
+              priceUpserts.push(extractCardPriceUpsert(uuid, apiCard))
+              if (tcgid && missingApiId.has(uuid)) apiIdBackfills.push({ uuid, tcgid })
+            }
+
+            emit({ type: 'progress', page, fetched: apiCards.length, matched, unmatched, totalCards })
+            hasMore = page * EPISODE_PAGE_SIZE < totalCards
+            page++
           }
+        }
+        // ── Step 2b: tcgid batch lookup mode ─────────────────────────────────
+        else if (useTcgIdMode) {
+          const tcgids = cardsWithTcgId.map(c => c.api_id as string)
+          const BATCH  = 20  // API max per batch
 
-          for (const apiCard of apiCards) {
-            // Guard: skip cards with no number (shouldn't happen but API can return partial data)
-            if (!apiCard.id) { unmatched++; continue }
-            const normNum = normalizeNumber(apiCard.number ?? '')
-            const cardUuid =
-              apiIdMap.get(apiCard.id) ??          // exact match via stored api_id
-              numberMap.get(normNum)               // fallback: normalized number within set
+          for (let i = 0; i < tcgids.length; i += BATCH) {
+            const chunk = tcgids.slice(i, i + BATCH)
+            const res   = await rapidApiFetch(`/cards?tcgids=${chunk.map(encodeURIComponent).join(',')}&per_page=${BATCH}`)
 
-            if (!cardUuid) {
-              unmatched++
-              console.warn(`[prices/sync] No DB card for API card ${apiCard.id} (set ${setId}, number ${apiCard.number})`)
+            if (!res.ok) {
+              emit({ type: 'warning', message: `Batch ${Math.ceil(i / BATCH) + 1}: HTTP ${res.status}` })
               continue
             }
 
-            matched++
-            priceUpserts.push(buildCardPriceUpsert(cardUuid, apiCard.id, apiCard))
+            const json: TcggoResponse = await res.json()
+            const apiCards: TcggoCard[] = json.data ?? json.cards ?? json.results ?? []
 
-            // Track api_id backfills needed
-            if (missingApiId.has(cardUuid)) {
-              apiIdBackfills.push({ uuid: cardUuid, apiCardId: apiCard.id })
+            if (i === 0) {
+              const firstCardKeys = apiCards[0] ? Object.keys(apiCards[0]) : []
+              console.log(`[prices/sync] tcgid batch first card keys:`, firstCardKeys)
+              emit({ type: 'api_shape', topKeys: Object.keys(json), cardKeys: firstCardKeys, rawCounts: { 'batch.length': apiCards.length } })
             }
+
+            for (const apiCard of apiCards) {
+              const tcgid   = apiCard.tcgid ?? null
+              const normNum = normalizeNumber(String(apiCard.card_number ?? ''))
+              const uuid    = (tcgid ? apiIdMap.get(tcgid) : null) ?? numberMap.get(normNum)
+              if (!uuid) { unmatched++; continue }
+              matched++
+              priceUpserts.push(extractCardPriceUpsert(uuid, apiCard))
+            }
+
+            emit({ type: 'progress', page: Math.ceil(i / BATCH) + 1, fetched: apiCards.length, matched, unmatched, totalCards: tcgids.length })
           }
-
+        }
+        // ── Step 2c: No tcgid / no episode_id ────────────────────────────────
+        else {
           emit({
-            type: 'progress',
-            page,
-            fetched: apiCards.length,
-            matched,
-            unmatched,
-            totalApiCards,
+            type: 'error',
+            message: 'No cards have tcgid (api_id) and no episode_id provided. ' +
+              'Either re-import card data so cards get their tcgid populated, ' +
+              'or enter the tcggo.com episode_id for this set in the "API Set ID" field.',
           })
-
-          hasMore = page * PAGE_SIZE < totalApiCards
-          page++
+          controller.close(); return
         }
 
-        // ── Step 3: Upsert card prices in batches ────────────────────────────
+        // ── Step 3: Upsert card prices ────────────────────────────────────────
         let upsertedCount = 0
         for (let i = 0; i < priceUpserts.length; i += BATCH_SIZE) {
           const batch = priceUpserts.slice(i, i + BATCH_SIZE)
-          const { error: upsertErr } = await supabaseAdmin
+          const { error: uErr } = await supabaseAdmin
             .from('card_prices')
             .upsert(batch, { onConflict: 'card_id' })
-
-          if (upsertErr) {
-            console.error('[prices/sync] upsert error:', upsertErr)
-            emit({ type: 'warning', message: `Batch ${Math.floor(i / BATCH_SIZE) + 1} upsert failed: ${upsertErr.message}` })
+          if (uErr) {
+            emit({ type: 'warning', message: `Upsert batch failed: ${uErr.message}` })
           } else {
             upsertedCount += batch.length
           }
         }
 
-        // ── Step 4: Backfill api_id on cards that were missing it ────────────
-        if (apiIdBackfills.length > 0) {
-          for (const { uuid, apiCardId } of apiIdBackfills) {
-            await supabaseAdmin
-              .from('cards')
-              .update({ api_id: apiCardId })
-              .eq('id', uuid)
-          }
-          console.log(`[prices/sync] Backfilled api_id for ${apiIdBackfills.length} cards`)
-          emit({ type: 'backfill', count: apiIdBackfills.length })
+        // ── Step 4: Backfill tcgid → api_id ──────────────────────────────────
+        for (const { uuid, tcgid } of apiIdBackfills) {
+          await supabaseAdmin.from('cards').update({ api_id: tcgid }).eq('id', uuid)
         }
+        if (apiIdBackfills.length > 0) emit({ type: 'backfill', count: apiIdBackfills.length })
 
-        // ── Step 5: Products (conditional) ──────────────────────────────────
+        // ── Step 5: Products ─────────────────────────────────────────────────
         let productCount = 0
         try {
-          // tcggo.com products use /products/search endpoint with set_id= filter
-          const prodRes = await rapidApiFetch(
-            `/products/search?set_id=${encodeURIComponent(tcgApiSetId)}&per_page=100`,
-          )
+          const prodPath = useEpisodeMode
+            ? `/products/search?episode_id=${encodeURIComponent(episodeId!)}&per_page=100`
+            : setId
+              ? `/products/search?name=${encodeURIComponent('')}&episode_id=&per_page=0`
+              : null
 
-          if (prodRes.ok) {
-            const prodJson = await prodRes.json() as RapidApiProductResponse
-            const products = prodJson.data ?? []
-
-            if (products.length > 0) {
-              const productRows = products.map((p) => ({
-                set_id:         setId,
-                api_product_id: p.id,
-                name:           p.name,
-                product_type:   normalizeProductType(p.category),
-                tcgp_market:    p.tcgplayer?.prices?.normal?.market ?? null,
-                tcgp_low:       p.tcgplayer?.prices?.normal?.low    ?? null,
-                tcgp_high:      p.tcgplayer?.prices?.normal?.high   ?? null,
-                tcgp_url:       p.tcgplayer?.url ?? null,
-                cm_avg_sell:    p.cardmarket?.prices?.averageSellPrice ?? null,
-                cm_trend:       p.cardmarket?.prices?.trendPrice       ?? null,
-                cm_url:         p.cardmarket?.url ?? null,
-                fetched_at:     new Date().toISOString(),
-              }))
-
-              const { error: prodErr } = await supabaseAdmin
-                .from('set_products')
-                .upsert(productRows, { onConflict: 'api_product_id' })
-
-              if (prodErr) {
-                console.error('[prices/sync] product upsert error:', prodErr)
-              } else {
-                productCount = products.length
-                emit({ type: 'products', count: productCount })
+          if (prodPath && useEpisodeMode) {
+            const prodRes = await rapidApiFetch(prodPath)
+            if (prodRes.ok) {
+              const prodJson       = await prodRes.json() as { data?: TcggoProduct[]; results?: TcggoProduct[] }
+              const products: TcggoProduct[] = prodJson.data ?? prodJson.results ?? []
+              if (products.length > 0) {
+                const productRows = products.map(p => ({
+                  set_id:         setId,
+                  api_product_id: String(p.id),
+                  name:           p.name ?? 'Unknown Product',
+                  product_type:   normalizeProductType(p.category),
+                  tcgp_market:    p.tcgplayer?.market_price ?? null,
+                  tcgp_low:       p.tcgplayer?.low_price    ?? null,
+                  tcgp_high:      p.tcgplayer?.high_price   ?? null,
+                  tcgp_url:       p.tcgplayer?.url          ?? null,
+                  cm_avg_sell:    p.cardmarket?.avg_sell_price ?? null,
+                  cm_trend:       p.cardmarket?.trend_price    ?? null,
+                  cm_url:         p.cardmarket?.url ?? null,
+                  fetched_at:     new Date().toISOString(),
+                }))
+                const { error: pErr } = await supabaseAdmin
+                  .from('set_products')
+                  .upsert(productRows, { onConflict: 'api_product_id' })
+                if (!pErr) {
+                  productCount = products.length
+                  emit({ type: 'products', count: productCount })
+                }
               }
             }
           }
-          // Non-ok response (e.g. 404) means products endpoint doesn't exist — skip silently
-        } catch (prodFetchErr) {
-          // Network error on products endpoint — not fatal
-          console.warn('[prices/sync] products fetch skipped:', prodFetchErr)
-        }
+        } catch { /* products not critical */ }
 
         // ── Done ─────────────────────────────────────────────────────────────
-        const elapsed = Date.now() - startTime
         emit({
           type:          'complete',
           setId,
@@ -528,14 +455,11 @@ export async function POST(request: NextRequest) {
           upsertedCount,
           productCount,
           backfillCount: apiIdBackfills.length,
-          elapsed,
+          elapsed:       Date.now() - startTime,
         })
 
       } catch (err) {
-        emit({
-          type:    'error',
-          message: err instanceof Error ? err.message : 'Unexpected error during price sync',
-        })
+        emit({ type: 'error', message: err instanceof Error ? err.message : 'Unexpected error' })
       } finally {
         controller.close()
       }
