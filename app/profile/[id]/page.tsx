@@ -14,6 +14,8 @@ import FirstTimeSetupModal from '@/components/profile/FirstTimeSetupModal'
 import FriendButton from '@/components/profile/FriendButton'
 import FriendsList from '@/components/profile/FriendsList'
 import FriendRequests from '@/components/profile/FriendRequests'
+import OutgoingRequests from '@/components/profile/OutgoingRequests'
+import AddFriendModal from '@/components/profile/AddFriendModal'
 import { type SettingsValues } from '@/components/profile/SettingsForm'
 import { User, Achievement, PokemonSet, SetProgress } from '@/types'
 import type { FriendEntry } from '@/components/profile/FriendsList'
@@ -93,12 +95,14 @@ export default function ProfilePage() {
   // Friends state
   const [acceptedFriends, setAcceptedFriends]     = useState<FriendEntry[]>([])
   const [pendingIncoming, setPendingIncoming]     = useState<FriendEntry[]>([])
+  const [pendingOutgoing, setPendingOutgoing]     = useState<FriendEntry[]>([])
   const [currentUserFriendship, setCurrentUserFriendship] = useState<FriendshipRow | null>(null)
   const [friendsLoading, setFriendsLoading]       = useState(false)
 
   // Modal state
-  const [showSetupModal, setShowSetupModal]       = useState(false)
-  const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [showSetupModal, setShowSetupModal]         = useState(false)
+  const [showSettingsModal, setShowSettingsModal]   = useState(false)
+  const [showAddFriendModal, setShowAddFriendModal] = useState(false)
 
   const isOwnProfile = currentUser?.id === userId
 
@@ -306,6 +310,7 @@ export default function ProfilePage() {
             const data = await res.json()
             setAcceptedFriends(data.accepted ?? [])
             setPendingIncoming(data.pending_incoming ?? [])
+            setPendingOutgoing(data.pending_outgoing ?? [])
           }
         } else {
           // Another user's profile: run both fetches in parallel
@@ -623,9 +628,14 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            {/* ── Friend Requests (own profile only) ────────────────────────────── */}
+            {/* ── Friend Requests — incoming (own profile only) ─────────────────── */}
             {isOwnProfile && pendingIncoming.length > 0 && (
               <FriendRequests initialRequests={pendingIncoming} />
+            )}
+
+            {/* ── Outgoing Requests (own profile only) ──────────────────────────── */}
+            {isOwnProfile && pendingOutgoing.length > 0 && (
+              <OutgoingRequests initialRequests={pendingOutgoing} />
             )}
 
             {/* ── Achievements Section ──────────────────────────────────────────── */}
@@ -687,7 +697,11 @@ export default function ProfilePage() {
                   ))}
                 </div>
               ) : (
-                <FriendsList friends={acceptedFriends} />
+                <FriendsList
+                  friends={acceptedFriends}
+                  isOwnProfile={isOwnProfile}
+                  onFindFriends={() => setShowAddFriendModal(true)}
+                />
               )}
             </section>
 
@@ -764,6 +778,15 @@ export default function ProfilePage() {
           userId={userId}
           initialValues={userToSettings(profileUser)}
           onSaved={handleSettingsSaved}
+        />
+      )}
+
+      {/* ── Add Friend Modal ────────────────────────────────────────────────────── */}
+      {isOwnProfile && currentUser && (
+        <AddFriendModal
+          isOpen={showAddFriendModal}
+          onClose={() => setShowAddFriendModal(false)}
+          currentUserId={currentUser.id}
         />
       )}
     </div>
