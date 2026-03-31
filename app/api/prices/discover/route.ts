@@ -7,12 +7,11 @@ const RAPIDAPI_BASE = `https://${RAPIDAPI_HOST}`
 /**
  * GET /api/prices/discover
  *
- * Multi-mode discovery endpoint for exploring the RapidAPI (tcggo.com).
+ * Multi-mode discovery endpoint for exploring the tcggo.com / RapidAPI.
  *
- * ?probe=cards           — fetch 3 cards (no filter) to inspect API response structure
- * ?probe=card&id={id}    — fetch a single card by ID
- * ?name={setName}        — search for sets matching name (tries multiple filter params)
- * (no params)            — fetch all sets from /sets endpoint
+ * ?probe=cards           — fetch 3 cards to inspect API response structure
+ * ?name={setName}        — search for episodes matching name
+ * (no params)            — browse all episodes (limited to 100)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -26,26 +25,25 @@ export async function GET(request: NextRequest) {
 
   const key = process.env.RAPIDAPI_KEY
   if (!key) {
-    return NextResponse.json({ error: 'RAPIDAPI_KEY not set' }, { status: 500 })
+    return NextResponse.json({ error: 'RAPIDAPI_KEY not set', sets: [] })
   }
 
-  const headers = {
+  const makeHeaders = () => ({
     'x-rapidapi-key':  key,
     'x-rapidapi-host': RAPIDAPI_HOST,
     'Content-Type':    'application/json',
-  }
+  })
 
-  const fetchApi = async (path: string) =>
-    fetch(`${RAPIDAPI_BASE}${path}`, { headers, cache: 'no-store' })
+  const probe = request.nextUrl.searchParams.get('probe')
+  const name  = request.nextUrl.searchParams.get('name')?.trim() ?? ''
 
-  const probe      = request.nextUrl.searchParams.get('probe')
-  const probeId    = request.nextUrl.searchParams.get('id')
-  const name       = request.nextUrl.searchParams.get('name')?.trim() ?? ''
-
-  // ── Probe: list a few cards (no filter) ──────────────────────────────────
+  // ── Probe: list a few cards to inspect API data structure ─────────────────
   if (probe === 'cards') {
     try {
-      const res = await fetchApi('/cards?per_page=3&page=1')
+      const res = await fetch(`${RAPIDAPI_BASE}/cards?per_page=3&page=1`, {
+        headers: makeHeaders(),
+        cache: 'no-store',
+      })
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const json = await res.json() as Record<string, any>
       const cards = json.data ?? json.cards ?? json.results ?? []
@@ -58,74 +56,85 @@ export async function GET(request: NextRequest) {
         firstCard:     cards[0] ?? null,
       })
     } catch (e) {
-      return NextResponse.json({ error: String(e) }, { status: 500 })
+      return NextResponse.json({ probe: 'cards', error: String(e), sets: [] })
     }
   }
 
-  // ── Probe: single card by ID ─────────────────────────────────────────────
-  if (probe === 'card' && probeId) {
-    try {
-      const res = await fetchApi(`/cards/${encodeURIComponent(probeId)}`)
-      const json = await res.json()
-      return NextResponse.json({ probe: 'card', id: probeId, httpStatus: res.status, raw: json })
-    } catch (e) {
-      return NextResponse.json({ error: String(e) }, { status: 500 })
-    }
-  }
+  // ── Episodes search (name filter) ─────────────────────────────────────────
+  if (name) {
+    const endpoints = [
+      `/episodes?name=${encodeURIComponent(name)}&per_page=20`,
+      `/episodes?search=${encodeURIComponent(name)}&per_page=20`,
+    ]
 
-  // ── Episodes (= sets in tcggo.com terminology) search / browse ───────────
-  const attempts = name
-    ? [
-        `/episodes?name=${encodeURIComponent(name)}&per_page=20`,
-        `/episodes?search=${encodeURIComponent(name)}&per_page=20`,
-        `/episodes?q=${encodeURIComponent(name)}&per_page=20`,
-      ]
-    : [`/episodes?per_page=500&page=1`]
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let bestResult: any = null
-
-  for (const path of attempts) {
-    try {
-      const res = await fetchApi(path)
-      if (!res.ok) continue
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const json = await res.json() as Record<string, any>
-      const sets: { id: string; name: string; series?: string }[] =
-        json.data ?? json.sets ?? json.results ?? []
-
-      if (sets.length > 0) {
-        bestResult = { sets, total: json.totalCount ?? json.total ?? sets.length, path }
-        break
+    for (const path of endpoints) {
+      try {
+        const res = await fetch(`${RAPIDAPI_BASE}${path}`, {
+          headers: makeHeaders(),
+          cache: 'no-store',
+        })
+        if (!res.ok) {
+          console.log(`[discover] ${path} → HTTP ${res.status}`)
+          continue
+        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const json = await res.json() as Record<string, any>
+        const episodes = json.data ?? json.episodes ?? json.results ?? []
+        if (episodes.length > 0) {
+          const lq = name.toLowerCase()
+          const filtered = episodes.filter((e: { id?: unknown; name?: string }) =>
+            e.name?.toLowerCase().includes(lq) || String(e.id).includes(lq)
+          )
+          return NextResponse.json({
+            sets:   filtered.length > 0 ? filtered : episodes,
+            query:  name,
+            path,
+            topKeys: Object.keys(json),
+          })
+        }
+      } catch (e) {
+        console.warn(`[discover] error for ${path}:`, e)
+        continue
       }
-
-      if (!bestResult) {
-        bestResult = { sets: [], total: 0, path, topKeys: Object.keys(json) }
-      }
-    } catch {
-      continue
     }
+
+    // All attempts returned 0 — report what happened
+    return NextResponse.json({
+      sets:    [],
+      query:   name,
+      message: `No episodes found for "${name}". Try "Browse all API episodes" to see what the API has.`,
+    })
   }
 
-  if (!bestResult) {
-    return NextResponse.json({ error: 'All discovery attempts failed', sets: [] })
-  }
+  // ── Browse all episodes ───────────────────────────────────────────────────
+  try {
+    const res = await fetch(`${RAPIDAPI_BASE}/episodes?per_page=100&page=1`, {
+      headers: makeHeaders(),
+      cache: 'no-store',
+    })
 
-  let sets: { id: string; name: string; series?: string }[] = bestResult.sets
-  if (name && sets.length > 0) {
-    const lowerName = name.toLowerCase()
-    const filtered = sets.filter(s =>
-      s.name?.toLowerCase().includes(lowerName) ||
-      s.id?.toLowerCase().includes(lowerName)
-    )
-    if (filtered.length > 0) sets = filtered
-  }
+    if (!res.ok) {
+      return NextResponse.json({
+        sets:    [],
+        error:   `API returned HTTP ${res.status} for /episodes endpoint. This endpoint may not exist on this API.`,
+        topKeys: [],
+      })
+    }
 
-  return NextResponse.json({
-    sets,
-    query:   name || '(all)',
-    path:    bestResult.path,
-    topKeys: bestResult.topKeys,
-  })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const json = await res.json() as Record<string, any>
+    const episodes = json.data ?? json.episodes ?? json.results ?? []
+
+    return NextResponse.json({
+      sets:      episodes,
+      total:     json.total ?? json.totalCount ?? episodes.length,
+      topKeys:   Object.keys(json),
+      firstItem: episodes[0] ?? null,
+    })
+  } catch (e) {
+    return NextResponse.json({
+      sets:  [],
+      error: `Browse failed: ${String(e)}`,
+    })
+  }
 }

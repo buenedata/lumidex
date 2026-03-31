@@ -291,6 +291,7 @@ export async function POST(request: NextRequest) {
         const apiIdBackfills: { uuid: string; tcgid: string }[] = []
 
         // ── Step 2a: Episode-ID mode ─────────────────────────────────────────
+        // Correct endpoint: GET /episodes/{episodeId}/cards (path param, not query)
         if (useEpisodeMode) {
           let page = 1
           let totalCards = 0
@@ -298,7 +299,7 @@ export async function POST(request: NextRequest) {
 
           while (hasMore) {
             const res = await rapidApiFetch(
-              `/cards?episode_id=${encodeURIComponent(episodeId!)}&per_page=${EPISODE_PAGE_SIZE}&page=${page}`,
+              `/episodes/${encodeURIComponent(episodeId!)}/cards?per_page=${EPISODE_PAGE_SIZE}&page=${page}`,
             )
             if (!res.ok) {
               emit({ type: 'error', message: `RapidAPI HTTP ${res.status} on page ${page}` })
@@ -408,13 +409,12 @@ export async function POST(request: NextRequest) {
         // ── Step 5: Products ─────────────────────────────────────────────────
         let productCount = 0
         try {
+          // Products via episode path: GET /episodes/{id}/products
           const prodPath = useEpisodeMode
-            ? `/products/search?episode_id=${encodeURIComponent(episodeId!)}&per_page=100`
-            : setId
-              ? `/products/search?name=${encodeURIComponent('')}&episode_id=&per_page=0`
-              : null
+            ? `/episodes/${encodeURIComponent(episodeId!)}/products?per_page=100`
+            : null
 
-          if (prodPath && useEpisodeMode) {
+          if (prodPath) {
             const prodRes = await rapidApiFetch(prodPath)
             if (prodRes.ok) {
               const prodJson       = await prodRes.json() as { data?: TcggoProduct[]; results?: TcggoProduct[] }
