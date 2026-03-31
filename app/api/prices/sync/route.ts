@@ -217,10 +217,14 @@ function normalizeProductType(category: string | undefined): string {
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  console.log('[prices/sync] POST handler invoked')
+
   // 1. Auth guard
   try {
     await requireAdmin()
+    console.log('[prices/sync] Auth OK')
   } catch (err) {
+    console.log('[prices/sync] Auth FAILED:', err instanceof Error ? err.message : err)
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : 'Unauthorized' }),
       { status: 401, headers: { 'Content-Type': 'application/json' } },
@@ -241,6 +245,8 @@ export async function POST(request: NextRequest) {
   const episodeId      = body.apiSetId?.trim() // tcggo.com episode_id (integer)
   const episodeIsInt   = episodeId ? /^\d+$/.test(episodeId) : false
 
+  console.log('[prices/sync] Body received — setId:', setId, '| apiSetId (episodeId):', episodeId ?? '(none — stale closure?)')
+
   if (!setId) {
     return new Response(JSON.stringify({ error: 'setId is required' }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
@@ -250,6 +256,7 @@ export async function POST(request: NextRequest) {
   // 3. Stream SSE
   const stream = new ReadableStream({
     async start(controller) {
+      console.log('[prices/sync] ReadableStream start() entered — setId:', setId, 'episodeId:', episodeId ?? '(none)')
       const emit = (payload: unknown) => {
         try { controller.enqueue(sseData(payload)) } catch { /* disconnected */ }
       }
@@ -492,9 +499,10 @@ export async function POST(request: NextRequest) {
 
   return new Response(stream, {
     headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection:      'keep-alive',
+      'Content-Type':      'text/event-stream',
+      'Cache-Control':     'no-cache',
+      'Connection':        'keep-alive',
+      'X-Accel-Buffering': 'no',   // prevent nginx/Vercel proxy buffering
     },
   })
 }
