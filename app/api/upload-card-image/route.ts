@@ -20,7 +20,8 @@ const ALLOWED_SOURCE_DOMAINS = [
   'public.getcollectr.com',
   'limitlesstcg.com',
   'www.limitlesstcg.com',
-  'bulbapedia.bulbagarden.net'
+  'bulbapedia.bulbagarden.net',
+  'archives.bulbagarden.net'
 ]
 
 /**
