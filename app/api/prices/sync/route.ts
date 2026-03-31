@@ -380,9 +380,12 @@ export async function POST(request: NextRequest) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const json = await res.json() as TcggoResponse & Record<string, any>
             const apiCards: TcggoCard[] = json.data ?? json.cards ?? json.results ?? []
-            // tcggo.com wraps pagination in a "paging" object; check that first
-            totalCards = json.total ?? json.totalCount ?? json.count
-                      ?? json.paging?.total ?? json.paging?.count ?? 0
+            // tcggo.com wraps pagination in a "paging" object — log it to find the right field
+            if (page === 1) {
+              console.log('[prices/sync] paging object:', JSON.stringify(json.paging ?? null))
+            }
+            // Use explicit total fields only; do NOT use paging.count (= per-page count, not grand total)
+            totalCards = json.total ?? json.totalCount ?? json.count ?? 0
 
             if (page === 1) {
               const firstCard   = apiCards[0]
@@ -402,8 +405,7 @@ export async function POST(request: NextRequest) {
                   total:             json.total,
                   totalCount:        json.totalCount,
                   count:             json.count,
-                  'paging.total':    json.paging?.total,
-                  'paging.count':    json.paging?.count,
+                  paging:            JSON.stringify(json.paging ?? null),
                 },
               })
             }
