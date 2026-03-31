@@ -126,10 +126,12 @@ export default function AdminPricesPage() {
       if (sets.length === 0) {
         setDiscoverErr(`No sets found matching "${setName}" in the API. Try the full API set list below.`)
       } else {
-        setApiSuggestions(sets.map((s: { id: string; name: string; series?: string }) => ({
-          id:     s.id,
-          name:   s.name,
-          series: s.series,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setApiSuggestions(sets.map((s: any) => ({
+          id:     String(s.id ?? ''),
+          name:   String(s.name ?? ''),
+          // series can be a nested object {id, name, slug} — extract just the name
+          series: s.series ? (typeof s.series === 'object' ? String(s.series.name ?? '') : String(s.series)) : undefined,
         })))
       }
     } catch (e) {
@@ -167,7 +169,13 @@ export default function AdminPricesPage() {
       if (sets.length === 0) {
         setDiscoverErr('API returned no sets at all. Check your RAPIDAPI_KEY and the API endpoint.')
       } else {
-        setAllApiSets(sets)
+        // Normalise every field to a string — tcggo.com may return series as {id, name, slug}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setAllApiSets(sets.map((s: any) => ({
+          id:     String(s.id ?? ''),
+          name:   String(s.name ?? ''),
+          series: s.series ? (typeof s.series === 'object' ? String(s.series.name ?? '') : String(s.series)) : undefined,
+        })))
       }
     } catch (e) {
       setDiscoverErr(e instanceof Error ? e.message : 'Browse failed')
