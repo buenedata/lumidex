@@ -353,9 +353,14 @@ export async function POST(request: NextRequest) {
             totalCards = json.total ?? json.totalCount ?? json.count ?? 0
 
             if (page === 1) {
-              const firstCardKeys = apiCards[0] ? Object.keys(apiCards[0]) : []
+              const firstCard   = apiCards[0]
+              const firstCardKeys = firstCard ? Object.keys(firstCard) : []
+              // Log the full price shape of the first card so we can see the actual API structure
               console.log(`[prices/sync] Episode mode response keys:`, Object.keys(json))
               console.log(`[prices/sync] First card keys:`, firstCardKeys)
+              console.log(`[prices/sync] First card prices field:`, JSON.stringify(firstCard?.prices ?? null))
+              console.log(`[prices/sync] First card tcgplayer (top-level):`, JSON.stringify((firstCard as Record<string,unknown>)?.tcgplayer ?? null))
+              console.log(`[prices/sync] First card cardmarket (top-level):`, JSON.stringify((firstCard as Record<string,unknown>)?.cardmarket ?? null))
               emit({
                 type:      'api_shape',
                 topKeys:   Object.keys(json),
