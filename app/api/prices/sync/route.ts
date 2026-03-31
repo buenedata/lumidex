@@ -349,6 +349,7 @@ export async function POST(request: NextRequest) {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const json = await res.json() as TcggoResponse & Record<string, any>
             const apiCards: TcggoCard[] = json.data ?? json.cards ?? json.results ?? []
+            // Some API responses omit the total count — fall back to 0 (handled below)
             totalCards = json.total ?? json.totalCount ?? json.count ?? 0
 
             if (page === 1) {
@@ -359,7 +360,7 @@ export async function POST(request: NextRequest) {
                 type:      'api_shape',
                 topKeys:   Object.keys(json),
                 cardKeys:  firstCardKeys,
-                rawCounts: { 'apiCards.length': apiCards.length, total: json.total, totalCount: json.totalCount },
+                rawCounts: { 'apiCards.length': apiCards.length, total: json.total, totalCount: json.totalCount, count: json.count },
               })
             }
 
@@ -375,8 +376,15 @@ export async function POST(request: NextRequest) {
               if (tcgid && missingApiId.has(uuid)) apiIdBackfills.push({ uuid, tcgid })
             }
 
-            emit({ type: 'progress', page, fetched: apiCards.length, matched, unmatched, totalCards })
-            hasMore = page * EPISODE_PAGE_SIZE < totalCards
+            emit({ type: 'progress', page, fetched: apiCards.length, matched, unmatched, totalApiCards: totalCards })
+
+            // If the API returned a total count, use it; otherwise keep paginating
+            // as long as we received a full page (guards against APIs that omit totals).
+            if (totalCards > 0) {
+              hasMore = page * EPISODE_PAGE_SIZE < totalCards
+            } else {
+              hasMore = apiCards.length === EPISODE_PAGE_SIZE
+            }
             page++
           }
         }
