@@ -89,34 +89,61 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // ── Fetch ALL episodes (used for both name-search and browse-all) ─────────
-  let allEpisodes: { id?: unknown; name?: string; series?: unknown }[] = []
+  // ── Fetch ALL episodes with pagination ───────────────────────────────────
+  // API returns: { data: [...], paging: { current, total, per_page }, results: N }
+  // where paging.total = total number of pages and results = total episode count.
+  type Episode = { id?: unknown; name?: string; series?: unknown }
+  let allEpisodes: Episode[] = []
   let topKeys: string[] = []
 
+  const episodeHeaders = {
+    'x-rapidapi-key':  key,
+    'x-rapidapi-host': EPISODES_HOST,
+    'Content-Type':    'application/json',
+  }
+
   try {
-    const res = await fetch(EPISODES_URL, {
-      headers: {
-        'x-rapidapi-key':  key,
-        'x-rapidapi-host': EPISODES_HOST,
-        'Content-Type':    'application/json',
-      },
+    // Page 1 — also tells us how many pages there are
+    const firstRes = await fetch(`${EPISODES_URL}?page=1`, {
+      headers: episodeHeaders,
       cache: 'no-store',
     })
-
-    if (!res.ok) {
+    if (!firstRes.ok) {
       return NextResponse.json({
         sets:  [],
-        error: `API returned HTTP ${res.status} for ${EPISODES_URL}`,
+        error: `API returned HTTP ${firstRes.status} for ${EPISODES_URL}`,
       })
     }
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const json = await res.json() as Record<string, any>
-    topKeys     = Object.keys(json)
-    allEpisodes = json.data ?? json.episodes ?? json.results ?? json ?? []
+    const firstJson = await firstRes.json() as Record<string, any>
+    topKeys = Object.keys(firstJson)
 
-    // If the API returned a plain array at root level, handle that too
-    if (!Array.isArray(allEpisodes)) allEpisodes = []
+    const page1Episodes: Episode[] = firstJson.data ?? []
+    const totalPages: number = firstJson.paging?.total ?? 1
+
+    allEpisodes = [...page1Episodes]
+
+    // Fetch remaining pages in parallel
+    if (totalPages > 1) {
+      const pageNums = Array.from({ length: totalPages - 1 }, (_, i) => i + 2)
+      const pageResults = await Promise.all(
+        pageNums.map(async (page) => {
+          try {
+            const res = await fetch(`${EPISODES_URL}?page=${page}`, {
+              headers: episodeHeaders,
+              cache: 'no-store',
+            })
+            if (!res.ok) return [] as Episode[]
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const json = await res.json() as Record<string, any>
+            return (json.data ?? []) as Episode[]
+          } catch {
+            return [] as Episode[]
+          }
+        })
+      )
+      for (const pageData of pageResults) allEpisodes.push(...pageData)
+    }
   } catch (e) {
     return NextResponse.json({
       sets:  [],
