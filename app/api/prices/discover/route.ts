@@ -35,6 +35,33 @@ export async function GET(request: NextRequest) {
   const probe = request.nextUrl.searchParams.get('probe')
   const name  = request.nextUrl.searchParams.get('name')?.trim() ?? ''
 
+  // ── Probe: raw episodes response to inspect pagination structure ──────────
+  if (probe === 'episodes') {
+    try {
+      const res  = await fetch(EPISODES_URL, {
+        headers: {
+          'x-rapidapi-key':  key,
+          'x-rapidapi-host': EPISODES_HOST,
+          'Content-Type':    'application/json',
+        },
+        cache: 'no-store',
+      })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const json = await res.json() as Record<string, any>
+      const episodes = json.data ?? json.episodes ?? json.results ?? (Array.isArray(json) ? json : [])
+      return NextResponse.json({
+        probe:       'episodes',
+        httpStatus:  res.status,
+        topKeys:     Object.keys(json),
+        episodeCount: episodes.length,
+        firstEpisode: episodes[0] ?? null,
+        rawMeta:      { total: json.total, totalCount: json.totalCount, meta: json.meta, pagination: json.pagination, per_page: json.per_page, current_page: json.current_page, last_page: json.last_page },
+      })
+    } catch (e) {
+      return NextResponse.json({ probe: 'episodes', error: String(e) })
+    }
+  }
+
   // ── Probe: list a few cards to inspect API data structure ─────────────────
   if (probe === 'cards') {
     try {
