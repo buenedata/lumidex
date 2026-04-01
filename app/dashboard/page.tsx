@@ -14,7 +14,6 @@ export default function DashboardPage() {
   const {
     userSets,
     pokemonSets,
-    userCards,
     userCardCountBySet,
     fetchPokemonSets,
     fetchUserSets,
@@ -147,7 +146,7 @@ export default function DashboardPage() {
             <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
               <span className="text-xs text-muted uppercase tracking-wider">Cards Owned</span>
               <span className="text-2xl font-bold text-primary">
-                {Array.from(userCards?.values() ?? []).reduce((sum, uc) => sum + (uc.quantity ?? 0), 0)}
+                {Array.from(userCardCountBySet.values()).reduce((sum, n) => sum + n, 0).toLocaleString()}
               </span>
             </div>
             <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">

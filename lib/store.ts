@@ -259,30 +259,43 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
 // Initialize auth state
 supabase.auth.onAuthStateChange((event, session) => {
   const { setUser, setProfile, setLoading } = useAuthStore.getState()
-  
+
   if (session?.user) {
     setUser(session.user)
-    
-    // Fetch user profile — keep isLoading=true until the profile is resolved
-    // so that role-based guards never see (isLoading=false, profile=null)
-    Promise.resolve(
-      supabase
-        .from('users')
-        .select('*')
-        .eq('id', session.user.id)
-        .single()
-    )
-      .then(({ data }) => {
-        if (data) setProfile(data)
-      })
-      .finally(() => {
-        setLoading(false)
-      })
-    
-    // Initialize collection data
-    const { fetchUserSets, fetchUserCards } = useCollectionStore.getState()
-    fetchUserSets()
-    fetchUserCards()
+
+    // TOKEN_REFRESHED fires every time the tab regains focus — we must NOT
+    // re-fetch collection data in that case or every tab-switch causes a
+    // full page re-render.  Only load data on the initial sign-in events.
+    const isInitialLoad =
+      event === 'SIGNED_IN' || event === 'INITIAL_SESSION'
+
+    if (isInitialLoad) {
+      // Fetch user profile — keep isLoading=true until the profile is
+      // resolved so that role-based guards never see
+      // (isLoading=false, profile=null).
+      Promise.resolve(
+        supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single()
+      )
+        .then(({ data }) => {
+          if (data) setProfile(data)
+        })
+        .finally(() => {
+          setLoading(false)
+        })
+
+      // Initialize collection data
+      const { fetchUserSets, fetchUserCards } = useCollectionStore.getState()
+      fetchUserSets()
+      fetchUserCards()
+    } else {
+      // For TOKEN_REFRESHED / USER_UPDATED we only need to park the new
+      // user object; isLoading is already false at this point.
+      setLoading(false)
+    }
   } else {
     setUser(null)
     setProfile(null)

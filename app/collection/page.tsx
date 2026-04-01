@@ -1,122 +1,82 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useAuthStore } from '@/lib/store'
+import { useAuthStore, useCollectionStore } from '@/lib/store'
 import { useRouter } from 'next/navigation'
 import SetCard from '@/components/SetCard'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { PokemonSet, SetProgress } from '@/types'
-import { getSets } from '@/lib/db'
-import { getUserSets, getUserCardVariantsBySet } from '@/lib/userCards'
+import { SetProgress } from '@/types'
 import { cn } from '@/lib/utils'
 
 export default function CollectionPage() {
-  const { user } = useAuthStore()
+  const { user, isLoading: authLoading } = useAuthStore()
+  const {
+    userSets,
+    pokemonSets,
+    userCardCountBySet,
+    fetchUserSets,
+    fetchUserCards,
+    fetchPokemonSets,
+  } = useCollectionStore()
   const router = useRouter()
 
-  // State management
-  const [userSets, setUserSets] = useState<PokemonSet[]>([])
-  const [setProgress, setSetProgress] = useState<Record<string, SetProgress>>({})
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
 
   useEffect(() => {
-    if (!user) {
+    if (!authLoading && !user) {
       router.push('/login')
-      return
     }
+  }, [user, authLoading, router])
 
-    loadUserCollection()
-  }, [user, router])
-
-  const loadUserCollection = async () => {
+  // Ensure store data is populated when navigating directly to /collection.
+  // onAuthStateChange already calls these on login, but if the store is
+  // empty (e.g. hard refresh) we request a fresh load here.
+  useEffect(() => {
     if (!user) return
+    if (pokemonSets.size === 0) fetchPokemonSets()
+    if (userSets.length === 0) fetchUserSets()
+    if (userCardCountBySet.size === 0) fetchUserCards()
+  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
-    try {
-      setIsLoading(true)
-      setError(null)
-
-      // 1. Fetch user's sets from database
-      const userSetData = await getUserSets(user.id)
-
-      if (userSetData.length === 0) {
-        setUserSets([])
-        setIsLoading(false)
-        return
-      }
-
-      // 2. Get set details from database
-      const allSets = await getSets() as PokemonSet[]
-      const userSetIds = userSetData.map(us => us.set_id)
-      const filteredSets = allSets.filter(set => userSetIds.includes(set.id))
-
-      setUserSets(filteredSets)
-
-      // 3. Calculate progress for each set
-      const progressData: Record<string, SetProgress> = {}
-
-      for (const set of filteredSets) {
-        try {
-          // Get user's owned cards for this set via set_id join.
-          // This avoids passing Pokemon TCG API string IDs (e.g. "sv4-1")
-          // into the uuid card_id column, which caused: invalid input syntax
-          // for type uuid: "sv4-1"
-          const userCardVariants = await getUserCardVariantsBySet(user.id, set.id)
-
-          // quantity > 0 is already enforced in getUserCardVariantsBySet
-          const ownedCardIds = new Set(userCardVariants.map(variant => variant.card_id))
-
-          const ownedCards = ownedCardIds.size
-          const totalCards = set.total ?? 0
-          const percentage = totalCards > 0 ? Math.round((ownedCards / totalCards) * 100) : 0
-
-          progressData[set.id] = {
-            owned_cards: ownedCards,
-            total_cards: totalCards,
-            percentage
-          }
-        } catch (err) {
-          console.error(`Error calculating progress for set ${set.id}:`, err)
-          // Set default progress on error
-          progressData[set.id] = {
-            owned_cards: 0,
-            total_cards: set.total ?? 0,
-            percentage: 0
-          }
-        }
-      }
-
-      setSetProgress(progressData)
-    } catch (err) {
-      console.error('Error loading user collection:', err)
-      setError('Failed to load your collection. Please try again.')
-    } finally {
-      setIsLoading(false)
-    }
+  // ── Derive set progress from the store ──────────────────────────────────
+  const buildProgress = (setId: string): SetProgress => {
+    const set = pokemonSets.get(setId)
+    const totalCards = set?.total ?? 0
+    const ownedCards = userCardCountBySet.get(setId) ?? 0
+    const percentage = totalCards > 0 ? Math.round((ownedCards / totalCards) * 100) : 0
+    return { owned_cards: ownedCards, total_cards: totalCards, percentage }
   }
 
-  const handleBrowseSets = () => {
-    router.push('/sets')
-  }
+  // ── Derived stats ────────────────────────────────────────────────────────
+  const userSetIds = new Set(userSets.map(us => us.set_id))
+  const userPokemonSets = Array.from(pokemonSets.values()).filter(set =>
+    userSetIds.has(set.id)
+  )
 
-  // Derived stats
-  const totalOwnedCards = Object.values(setProgress).reduce((sum, p) => sum + p.owned_cards, 0)
+  const totalOwnedCards = Array.from(userCardCountBySet.values()).reduce(
+    (sum, n) => sum + n,
+    0
+  )
+
   const avgCompletion =
-    userSets.length > 0
+    userPokemonSets.length > 0
       ? Math.round(
-          Object.values(setProgress).reduce((sum, p) => sum + p.percentage, 0) /
-            (Object.keys(setProgress).length || 1)
+          userPokemonSets.reduce((sum, set) => {
+            const p = buildProgress(set.id)
+            return sum + p.percentage
+          }, 0) / userPokemonSets.length
         )
       : 0
 
-  // Filtered sets for search
-  const filteredSets = userSets.filter(set =>
+  // ── Search filter ────────────────────────────────────────────────────────
+  const filteredSets = userPokemonSets.filter(set =>
     set.name.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  // ── Loading State ─────────────────────────────────────────────────────────
+  // ── Loading State ────────────────────────────────────────────────────────
+  const isLoading = authLoading || (!!user && pokemonSets.size === 0 && userSets.length === 0)
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-base">
@@ -155,24 +115,7 @@ export default function CollectionPage() {
     )
   }
 
-  // ── Error State ───────────────────────────────────────────────────────────
-  if (error) {
-    return (
-      <div className="min-h-screen bg-base">
-        <div className="max-w-screen-2xl mx-auto px-6 py-8">
-          <div className="flex flex-col items-center justify-center py-24 gap-4">
-            <div className="w-14 h-14 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-2xl">
-              ⚠️
-            </div>
-            <p className="text-lg text-primary font-semibold">{error}</p>
-            <Button variant="primary" onClick={loadUserCollection}>
-              Try Again
-            </Button>
-          </div>
-        </div>
-      </div>
-    )
-  }
+  if (!user) return null
 
   return (
     <div className="min-h-screen bg-base">
@@ -187,19 +130,19 @@ export default function CollectionPage() {
             My Collection
           </h1>
           <p className="text-secondary text-sm">
-            {userSets.length > 0
-              ? `Tracking ${userSets.length} set${userSets.length !== 1 ? 's' : ''} in your collection`
+            {userPokemonSets.length > 0
+              ? `Tracking ${userPokemonSets.length} set${userPokemonSets.length !== 1 ? 's' : ''} in your collection`
               : 'Start building your Pokémon card collection'}
           </p>
         </div>
 
-        {userSets.length > 0 && (
+        {userPokemonSets.length > 0 && (
           <>
             {/* ── Summary Stats ────────────────────────────────────────── */}
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
               <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
                 <span className="text-xs text-muted uppercase tracking-wider">Sets Tracked</span>
-                <span className="text-2xl font-bold text-primary">{userSets.length}</span>
+                <span className="text-2xl font-bold text-primary">{userPokemonSets.length}</span>
               </div>
               <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
                 <span className="text-xs text-muted uppercase tracking-wider">Cards Owned</span>
@@ -207,7 +150,7 @@ export default function CollectionPage() {
               </div>
               <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1 col-span-2 md:col-span-1">
                 <span className="text-xs text-muted uppercase tracking-wider">Avg. Completion</span>
-                <span className="text-2xl font-bold text-accent font-bold">{avgCompletion}%</span>
+                <span className="text-2xl font-bold text-accent">{avgCompletion}%</span>
               </div>
             </div>
 
@@ -234,7 +177,7 @@ export default function CollectionPage() {
         )}
 
         {/* ── Empty State ──────────────────────────────────────────────── */}
-        {userSets.length === 0 ? (
+        {userPokemonSets.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
             <div className="w-16 h-16 rounded-2xl bg-accent-dim flex items-center justify-center text-3xl">
               📦
@@ -248,7 +191,7 @@ export default function CollectionPage() {
                 Start collecting cards to build your collection. Browse all available Pokémon sets to get started.
               </p>
             </div>
-            <Button variant="primary" size="lg" onClick={handleBrowseSets}>
+            <Button variant="primary" size="lg" onClick={() => router.push('/sets')}>
               Browse Sets
             </Button>
           </div>
@@ -270,7 +213,7 @@ export default function CollectionPage() {
               <SetCard
                 key={set.id}
                 set={set}
-                progress={setProgress[set.id]}
+                progress={buildProgress(set.id)}
               />
             ))}
           </div>
