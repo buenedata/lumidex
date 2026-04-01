@@ -895,7 +895,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                 )}
 
                 {/* Hover overlay */}
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-opacity z-10" />
+                <div className="absolute inset-0 z-10" />
               </div>
 
               {/* ── Variant dots row — below image, normal flow ── */}
