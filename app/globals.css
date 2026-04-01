@@ -248,4 +248,8 @@
     border-color: rgba(203, 213, 225, 0.70) !important;
     box-shadow: 0 0 22px 4px rgba(203, 213, 225, 0.45), 0 0 8px 1px rgba(203, 213, 225, 0.30) !important;
   }
+  .card-type-trainer:hover {
+    border-color: rgba(203, 213, 225, 0.70) !important;
+    box-shadow: 0 0 22px 4px rgba(203, 213, 225, 0.45), 0 0 8px 1px rgba(203, 213, 225, 0.30) !important;
+  }
 }

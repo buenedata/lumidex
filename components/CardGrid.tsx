@@ -164,7 +164,7 @@ function CardGlareImage({ src, alt }: { src: string | null | undefined; alt?: st
 function getTypeGlowClass(type: string | null | undefined): string {
   if (!type) return 'card-type-colorless'
   const key = type.toLowerCase().replace(/\s+/g, '')
-  const known = ['grass','fire','water','lightning','psychic','fighting','darkness','metal','dragon','fairy','colorless']
+  const known = ['grass','fire','water','lightning','psychic','fighting','darkness','metal','dragon','fairy','colorless','trainer']
   return known.includes(key) ? `card-type-${key}` : ''
 }
 
