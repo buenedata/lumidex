@@ -76,6 +76,11 @@ interface CardGridProps {
   priceSource?: PriceSource
   /** Called once the batch variant fetch completes with the deduplicated legend variants. */
   onVariantsLegendChange?: (variants: QuickAddVariant[]) => void
+  /**
+   * When true, cards are never greyed out regardless of the user's grey_out_unowned setting.
+   * Used on the browse/search page where collection status should not affect card appearance.
+   */
+  disableGreyOut?: boolean
 }
 
 // ── Standalone component — zero React state, RAF-gated DOM writes for buttery 3D tilt ──
@@ -175,10 +180,12 @@ function getVariantMarketPrice(variantName: string, row: CardPriceRow): number |
   return row.tcgp_normal
 }
 
-export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', priceSource = 'tcgplayer', onVariantsLegendChange }: CardGridProps) {
+export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', priceSource = 'tcgplayer', onVariantsLegendChange, disableGreyOut = false }: CardGridProps) {
   const { updateCardQuantity, userCards: storeUserCards, fetchUserCards } = useCollectionStore()
   const { user, isLoading, profile } = useAuthStore()
-  const greyOutUnowned: boolean = profile?.grey_out_unowned ?? false
+  // disableGreyOut overrides the user's setting — used on pages like browse where
+  // collection status should not affect card appearance (only set pages grey out).
+  const greyOutUnowned: boolean = !disableGreyOut && (profile?.grey_out_unowned ?? false)
 
   // Use userId from props if provided, otherwise get from auth store
   const userId = propsUserId || user?.id
@@ -235,6 +242,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   // Friends tab state
   const [friendsCache, setFriendsCache]                 = useState<Map<string, FriendCardOwner[]>>(new Map())
   const [isLoadingFriends, setIsLoadingFriends]         = useState(false)
+  // Per-variant input text while the user is typing a quantity directly
+  const [variantInputValues, setVariantInputValues]     = useState<Map<string, string>>(new Map())
   // Ensures we only auto-open the initialCardId modal once
   const autoOpenedRef = useRef(false)
   // Used to distinguish single-click (open modal) from double-click (add default variant)
@@ -529,6 +538,68 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
     } catch (error) {
       console.error('Failed to update variant quantity:', error)
+    }
+  }
+
+  // Set variant quantity directly (used when user types a value into the input)
+  const setVariantQuantityDirect = async (cardId: string, variantId: string, newQuantity: number) => {
+    if (!userId) return
+    const clamped = Math.max(0, Math.floor(newQuantity))
+
+    try {
+      const response = await fetch('/api/user-card-variants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, cardId, variantId, quantity: clamped })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ API Error (direct set):', { status: response.status, errorText })
+        return
+      }
+
+      const result = await response.json()
+      const resultQty: number = result.quantity ?? clamped
+
+      // Update quick variants in state
+      setCardQuickVariants(prev => {
+        const newMap = new Map(prev)
+        const variants = newMap.get(cardId)
+        if (variants) {
+          newMap.set(cardId, variants.map(v => v.id === variantId ? { ...v, quantity: resultQty } : v))
+        }
+        return newMap
+      })
+
+      // Update full variants if loaded
+      setCardVariants(prev => {
+        const newMap = new Map(prev)
+        const variants = newMap.get(cardId)
+        if (variants) {
+          newMap.set(cardId, variants.map(v => v.id === variantId ? { ...v, quantity: resultQty } : v))
+        }
+        return newMap
+      })
+
+      // Update legacy system
+      const quickVariants = cardQuickVariants.get(cardId) || []
+      const totalQuantity = quickVariants.reduce((sum, v) => {
+        const qty = v.id === variantId ? resultQty : v.quantity
+        return sum + qty
+      }, 0)
+      const getVariantQty = (name: string) => {
+        const v = quickVariants.find(v => v.name === name)
+        if (!v) return 0
+        return v.id === variantId ? resultQty : v.quantity
+      }
+      await updateCardQuantity(cardId, totalQuantity, {
+        normal:  getVariantQty('Normal'),
+        reverse: getVariantQty('Reverse Holo'),
+        holo:    getVariantQty('Holo Rare'),
+      })
+    } catch (error) {
+      console.error('Failed to set variant quantity directly:', error)
     }
   }
 
@@ -1192,11 +1263,46 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                               −
                             </button>
 
-                            <div
-                              className={`${getQuantityButtonColor(variant, variant.quantity)} text-white font-bold rounded px-2 py-0.5 min-w-[2rem] text-center text-sm shadow-sm`}
-                            >
-                              {variant.quantity}
-                            </div>
+                            <input
+                              type="number"
+                              min={0}
+                              value={variantInputValues.has(variant.id) ? variantInputValues.get(variant.id) : variant.quantity}
+                              onFocus={() =>
+                                setVariantInputValues(prev => {
+                                  const m = new Map(prev)
+                                  m.set(variant.id, String(variant.quantity))
+                                  return m
+                                })
+                              }
+                              onChange={e =>
+                                setVariantInputValues(prev => {
+                                  const m = new Map(prev)
+                                  m.set(variant.id, e.target.value)
+                                  return m
+                                })
+                              }
+                              onBlur={() => {
+                                const raw = variantInputValues.get(variant.id) ?? ''
+                                setVariantInputValues(prev => {
+                                  const m = new Map(prev)
+                                  m.delete(variant.id)
+                                  return m
+                                })
+                                if (raw === '') return
+                                const parsed = parseInt(raw, 10)
+                                if (isNaN(parsed)) return
+                                const clamped = Math.max(0, parsed)
+                                if (clamped !== variant.quantity) {
+                                  setVariantQuantityDirect(selectedCard.id, variant.id, clamped)
+                                }
+                              }}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') {
+                                  (e.target as HTMLInputElement).blur()
+                                }
+                              }}
+                              className={`${getQuantityButtonColor(variant, variant.quantity)} text-white font-bold rounded px-1 py-0.5 min-w-[2rem] w-12 text-center text-sm shadow-sm bg-no-repeat [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none cursor-text`}
+                            />
 
                             <button
                               onClick={() => updateVariantQuantity(selectedCard.id, variant.id, 1)}
