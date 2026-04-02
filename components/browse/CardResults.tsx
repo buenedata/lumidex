@@ -4,6 +4,18 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import type { CardSearchResult } from './types'
 
+// ── Type → hover-glow CSS class (same as CardGrid) ───────────────────────────
+
+function getTypeGlowClass(type: string | null | undefined): string {
+  if (!type) return 'card-type-colorless'
+  const key = type.toLowerCase().replace(/\s+/g, '')
+  const known = [
+    'grass', 'fire', 'water', 'lightning', 'psychic', 'fighting',
+    'darkness', 'metal', 'dragon', 'fairy', 'colorless', 'trainer',
+  ]
+  return known.includes(key) ? `card-type-${key}` : 'card-type-colorless'
+}
+
 // ── Rarity badge colour helper ────────────────────────────────────────────────
 
 function rarityBadge(rarity: string): string {
@@ -93,38 +105,47 @@ export default function CardResults({ cards, query, artistName }: CardResultsPro
         </p>
       </div>
 
-      {/* Flat card grid — same density as the set detail page */}
+      {/* Flat card grid — matches the density & hover style of the set detail pages */}
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 2xl:grid-cols-12 gap-3">
         {cards.map(card => (
           <Link
             key={card.id}
             href={`/set/${card.set.id}?card=${card.id}`}
-            className="group flex flex-col"
+            className="group flex flex-col cursor-pointer"
           >
-            {/* Card image */}
-            <div className="w-full aspect-[2/3] overflow-hidden rounded-lg bg-surface border border-subtle group-hover:border-accent/40 transition-all shadow-sm group-hover:shadow-lg group-hover:shadow-accent/10 group-hover:-translate-y-0.5">
-              {card.image_url
-                ? (
-                  <img
-                    src={card.image_url}
-                    alt={card.name}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                  />
-                )
-                : (
-                  <div className="w-full h-full flex items-center justify-center text-2xl text-muted">🃏</div>
-                )
-              }
+            {/*
+             * Image container: uses the same card-type-* CSS class as CardGrid.
+             * On hover the CSS rule changes border-color and adds a coloured box-shadow
+             * matching the card's Pokémon type — exactly as on the set detail page.
+             */}
+            <div
+              className={cn(
+                'relative w-full aspect-[2/3] rounded-lg overflow-hidden border border-subtle',
+                'transition-all duration-200',
+                getTypeGlowClass(card.type),
+              )}
+            >
+              {card.image_url ? (
+                <img
+                  src={card.image_url}
+                  alt={card.name}
+                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200 pointer-events-none"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-2xl text-muted">
+                  🎴
+                </div>
+              )}
             </div>
 
-            {/* Card info below image */}
+            {/* Card info below the image */}
             <div className="mt-1.5 px-0.5 space-y-0.5 min-w-0">
               <p className="text-xs font-medium text-primary truncate leading-tight">
                 {card.name}
               </p>
 
-              {/* Set name (small, muted) */}
+              {/* Set name with tiny logo */}
               <p className="text-xs text-muted truncate leading-tight flex items-center gap-1">
                 {card.set.logo_url && (
                   <img
@@ -137,7 +158,7 @@ export default function CardResults({ cards, query, artistName }: CardResultsPro
                 <span className="truncate">{card.set.name}</span>
               </p>
 
-              {/* Number + rarity */}
+              {/* Number + rarity badge */}
               <div className="flex items-center gap-1 flex-wrap">
                 {card.number && (
                   <span className="text-xs text-muted">#{card.number}</span>
