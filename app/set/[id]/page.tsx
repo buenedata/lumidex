@@ -3,7 +3,7 @@ import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import { supabaseAdmin } from '@/lib/supabase'
 import { PokemonCard, PokemonSet, CollectionGoal, PriceSource } from '@/types'
 import { getMockPriceUSD } from '@/lib/mockPricing'
-import { getCardPricesForSet, getSealedProductsForSet, buildCardPriceMap, formatPrice, type SetProductPrice } from '@/lib/pricing'
+import { getCardPricesForSet, getSealedProductsForSet, buildCardPriceMap, type SetProductPrice } from '@/lib/pricing'
 import Link from 'next/link'
 import Image from 'next/image'
 import { notFound } from 'next/navigation'
@@ -296,12 +296,9 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
           }
           return `${total ?? '?'}`
         })()}
-        statMostExpensive={
-          mostExpensive
-            ? `${mostExpensive.name} · ${formatPrice(cardPricesUSD[mostExpensive.id] ?? 0, currency)}`
-            : '—'
-        }
-        statSetValue={formatPrice(setTotalValue, currency)}
+        statMostExpensiveName={mostExpensive?.name ?? undefined}
+        statMostExpensiveUSD={mostExpensive ? (cardPricesUSD[mostExpensive.id] ?? 0) : undefined}
+        statSetValueUSD={setTotalValue}
       />
     </div>
   )

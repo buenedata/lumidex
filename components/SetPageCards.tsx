@@ -40,8 +40,12 @@ interface SetPageCardsProps {
   statSeries?: string
   statReleased?: string
   statCards?: string
-  statMostExpensive?: string
-  statSetValue?: string
+  /** Name of the most-expensive card — formatted client-side with effectiveCurrency */
+  statMostExpensiveName?: string
+  /** USD price of the most-expensive card — formatted client-side with effectiveCurrency */
+  statMostExpensiveUSD?: number
+  /** Total set value in USD — formatted client-side with effectiveCurrency */
+  statSetValueUSD?: number
 }
 
 type FilterTab = 'all' | 'owned' | 'missing' | 'duplicates'
@@ -73,8 +77,9 @@ export default function SetPageCards({
   statSeries,
   statReleased,
   statCards,
-  statMostExpensive,
-  statSetValue,
+  statMostExpensiveName,
+  statMostExpensiveUSD,
+  statSetValueUSD,
 }: SetPageCardsProps) {
   const [activeFilter, setActiveFilter] = useState<FilterTab>('all')
   const [searchQuery, setSearchQuery]   = useState('')
@@ -177,11 +182,19 @@ export default function SetPageCards({
           <div className="max-w-screen-2xl mx-auto px-6 py-4">
             <div className="flex items-center gap-8 flex-wrap">
               {[
-                { label: 'Series',         value: statSeries         ?? '—' },
-                { label: 'Released',       value: statReleased       ?? '—' },
-                { label: 'Cards',          value: statCards          ?? '—' },
-                { label: 'Most Expensive', value: statMostExpensive  ?? '—' },
-                { label: 'Set Value',      value: statSetValue       ?? '—' },
+                  { label: 'Series',         value: statSeries ?? '—' },
+                  { label: 'Released',       value: statReleased ?? '—' },
+                  { label: 'Cards',          value: statCards ?? '—' },
+                  {
+                    label: 'Most Expensive',
+                    value: statMostExpensiveName != null && statMostExpensiveUSD != null
+                      ? `${statMostExpensiveName} · ${formatPrice(statMostExpensiveUSD, effectiveCurrency)}`
+                      : '—',
+                  },
+                  {
+                    label: 'Set Value',
+                    value: statSetValueUSD != null ? formatPrice(statSetValueUSD, effectiveCurrency) : '—',
+                  },
                 ...(isAuthenticated && myCollectedValue > 0
                   ? [{ label: 'My Collection', value: formatPrice(myCollectedValue, effectiveCurrency) }]
                   : []
@@ -471,6 +484,7 @@ export default function SetPageCards({
               cardPricesUSD={cardPricesUSD}
               currency={effectiveCurrency}
               priceSource={priceSource}
+              userId={userId}
               onVariantsLegendChange={setLegendVariants}
               disableGreyOut={disableGreyOut}
             />
