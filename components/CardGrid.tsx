@@ -872,32 +872,20 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                 onDoubleClick={(e) => handleCardImageDblClick(e, card)}
                 onContextMenu={(e) => { e.preventDefault(); handleCardClick(card) }}
               >
-                {card.image_url ? (
-                  <Image
-                    src={card.image_url}
-                    alt={card.name ?? ''}
-                    fill
-                    sizes="220px"
-                    className={`object-cover transition-all duration-300 pointer-events-none ${
-                      shouldGrey ? 'grayscale opacity-40' : ''
-                    }`}
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement
-                      target.style.display = 'none'
-                      const parent = target.parentElement
-                      if (parent && !parent.querySelector('.fallback-icon')) {
-                        const fallback = document.createElement('div')
-                        fallback.className = 'fallback-icon flex items-center justify-center h-full bg-gray-700 text-gray-400'
-                        fallback.innerHTML = '<span class="text-4xl">🎴</span>'
-                        parent.appendChild(fallback)
-                      }
-                    }}
-                  />
-                ) : (
-                  <div className="flex items-center justify-center h-full bg-gray-700 text-gray-400">
-                    🎴
-                  </div>
-                )}
+                <img
+                  src={card.image_url ?? '/pokemon_card_backside.png'}
+                  alt={card.name ?? ''}
+                  className={`w-full h-full object-cover transition-all duration-300 pointer-events-none ${
+                    shouldGrey ? 'grayscale opacity-40' : ''
+                  }`}
+                  loading="lazy"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement
+                    if (!target.src.endsWith('/pokemon_card_backside.png')) {
+                      target.src = '/pokemon_card_backside.png'
+                    }
+                  }}
+                />
 
                 {/* Hover overlay */}
                 <div className="absolute inset-0 z-10" />
