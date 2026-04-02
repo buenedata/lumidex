@@ -8,6 +8,7 @@ import { SetSelector } from '../../../components/admin/SetSelector'
 import { CardImageGrid, type CardGridItem } from '../../../components/admin/CardImageGrid'
 import { CardImageUploadModal } from '../../../components/admin/CardImageUploadModal'
 import { BulkImageImport } from '../../../components/admin/BulkImageImport'
+import { RecompressImages } from '../../../components/admin/RecompressImages'
 
 export default function CardImagesPage() {
   const { user, profile, isLoading } = useAuthStore()
@@ -175,6 +176,22 @@ export default function CardImagesPage() {
           onNextCard={handleNextCard}
           hasNextCard={hasNextCard}
         />
+
+        {/* Step 4 — Recompress existing images (always visible) */}
+        <section className="mb-8">
+          <h2 className="text-lg font-semibold mb-3 text-gray-200">
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-yellow-500 text-black text-xs font-bold mr-2">
+              4
+            </span>
+            Recompress existing storage
+            <span className="ml-2 text-gray-400 font-normal text-base">
+              — shrink all images already in a bucket to WebP
+            </span>
+          </h2>
+          <div className="p-4 bg-gray-900 border border-gray-800 rounded-xl">
+            <RecompressImages defaultBucket="card-images" />
+          </div>
+        </section>
 
         {/* Instructions (collapsed when a set is active) */}
         {!selectedSetId && (

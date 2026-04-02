@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin'
 import { supabaseAdmin } from '@/lib/supabase'
+import { compressImageToWebP, COMPRESSED_CONTENT_TYPE } from '@/lib/imageCompress'
 
 /** Standardised filename for a product image: "{productId}.jpg" */
 function generateProductImageFilename(productId: string): string {
@@ -144,12 +145,24 @@ async function uploadAndRecord(
   contentType: string,
   productId: string,
 ): Promise<NextResponse> {
+  // Compress to WebP before uploading to minimise storage usage
+  let uploadBuffer: Buffer | ArrayBuffer
+  let uploadContentType: string
+  try {
+    uploadBuffer = await compressImageToWebP(buffer)
+    uploadContentType = COMPRESSED_CONTENT_TYPE
+  } catch {
+    // Fallback: upload original bytes if compression unexpectedly fails
+    uploadBuffer = buffer
+    uploadContentType = contentType
+  }
+
   // Upload to Supabase storage (service-role — bypasses RLS)
   const { error: uploadError } = await supabaseAdmin.storage
     .from('product-images')
-    .upload(filename, buffer, {
+    .upload(filename, uploadBuffer, {
       upsert: true,
-      contentType,
+      contentType: uploadContentType,
     })
 
   if (uploadError) {

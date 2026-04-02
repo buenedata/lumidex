@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin'
 import { supabaseAdmin } from '@/lib/supabase'
+import { compressImageToWebP, COMPRESSED_CONTENT_TYPE } from '@/lib/imageCompress'
 
 /** Mirror of the client-side helper so server doesn't import from lib/imageUpload */
 function generateImageFilename(setId: string, number: string): string {
@@ -147,12 +148,24 @@ async function uploadAndRecord(
   contentType: string,
   cardId: string,
 ): Promise<NextResponse> {
-  // 4. Upload to Supabase storage (service-role — bypasses RLS)
+  // 4. Compress to WebP before uploading to minimise storage usage
+  let uploadBuffer: Buffer | ArrayBuffer
+  let uploadContentType: string
+  try {
+    uploadBuffer = await compressImageToWebP(buffer)
+    uploadContentType = COMPRESSED_CONTENT_TYPE
+  } catch {
+    // Fallback: upload original bytes if compression unexpectedly fails
+    uploadBuffer = buffer
+    uploadContentType = contentType
+  }
+
+  // 5. Upload to Supabase storage (service-role — bypasses RLS)
   const { error: uploadError } = await supabaseAdmin.storage
     .from('card-images')
-    .upload(filename, buffer, {
+    .upload(filename, uploadBuffer, {
       upsert: true,
-      contentType,
+      contentType: uploadContentType,
     })
 
   if (uploadError) {
@@ -163,14 +176,14 @@ async function uploadAndRecord(
     )
   }
 
-  // 5. Resolve public URL — append a version timestamp so the new upload
+  // 6. Resolve public URL — append a version timestamp so the new upload
   //    bypasses any CDN / browser cache that may have the old file content.
   const { data: urlData } = supabaseAdmin.storage
     .from('card-images')
     .getPublicUrl(filename)
   const imageUrl = `${urlData.publicUrl}?v=${Date.now()}`
 
-  // 6. Update cards table (service-role — bypasses RLS)
+  // 7. Update cards table (service-role — bypasses RLS)
   const { error: dbError } = await supabaseAdmin
     .from('cards')
     .update({ image: imageUrl })

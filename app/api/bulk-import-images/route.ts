@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import { requireAdmin } from '@/lib/admin'
 import { supabaseAdmin } from '@/lib/supabase'
 import { generateImageFilename } from '@/lib/imageUpload'
+import { compressImageToWebP, COMPRESSED_CONTENT_TYPE } from '@/lib/imageCompress'
 
 const STORAGE_BUCKET = 'card-images'
 const CONCURRENCY = 3
@@ -316,8 +317,19 @@ export async function POST(request: NextRequest) {
               throw new Error(`Image download failed (HTTP ${imgRes.status})`)
             }
 
-            const contentType = imgRes.headers.get('content-type') ?? 'image/png'
             const imageBuffer = await imgRes.arrayBuffer()
+
+            // Compress to WebP before uploading to minimise storage usage
+            let uploadBuffer: Buffer | ArrayBuffer
+            let uploadContentType: string
+            try {
+              uploadBuffer = await compressImageToWebP(imageBuffer)
+              uploadContentType = COMPRESSED_CONTENT_TYPE
+            } catch {
+              // Fallback: store original bytes if compression fails
+              uploadBuffer = imageBuffer
+              uploadContentType = imgRes.headers.get('content-type') ?? 'image/png'
+            }
 
             // Always use the standardised .jpg filename for consistency with
             // the rest of the codebase — the content-type header is correct.
@@ -325,7 +337,7 @@ export async function POST(request: NextRequest) {
 
             const { error: uploadErr } = await supabaseAdmin.storage
               .from(STORAGE_BUCKET)
-              .upload(filename, imageBuffer, { contentType, upsert: true })
+              .upload(filename, uploadBuffer, { contentType: uploadContentType, upsert: true })
 
             if (uploadErr) {
               throw new Error(`Storage upload failed: ${uploadErr.message}`)

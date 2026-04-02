@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin'
 import { supabaseAdmin } from '@/lib/supabase'
+import { compressImageToWebP, COMPRESSED_CONTENT_TYPE } from '@/lib/imageCompress'
 
 /** Standardised filename for a set logo: "{setId}-logo.jpg" */
 function generateSetLogoFilename(setId: string): string {
@@ -44,15 +45,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Image must be smaller than 5 MB' }, { status: 400 })
   }
 
-  // 4. Upload to set-images bucket (service role bypasses RLS)
+  // 4. Compress to WebP then upload to set-images bucket (service role bypasses RLS)
   const filename   = generateSetLogoFilename(setId)
   const fileBuffer = await file.arrayBuffer()
 
+  let uploadBuffer: Buffer | ArrayBuffer
+  let uploadContentType: string
+  try {
+    uploadBuffer = await compressImageToWebP(fileBuffer)
+    uploadContentType = COMPRESSED_CONTENT_TYPE
+  } catch {
+    // Fallback: upload original bytes if compression unexpectedly fails
+    uploadBuffer = fileBuffer
+    uploadContentType = file.type
+  }
+
   const { error: uploadError } = await supabaseAdmin.storage
     .from('set-images')
-    .upload(filename, fileBuffer, {
+    .upload(filename, uploadBuffer, {
       upsert: true,
-      contentType: file.type,
+      contentType: uploadContentType,
     })
 
   if (uploadError) {
