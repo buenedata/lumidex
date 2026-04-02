@@ -142,13 +142,13 @@ function CardGlareImage({ src, alt }: { src: string | null | undefined; alt?: st
         // NOTE: no transformStyle:'preserve-3d' — we only tilt the card surface itself,
         //       not its children, so the tilt stays visually contained.
       >
-        {src ? (
-          <Image src={src} alt={alt ?? ''} fill sizes="389px" className="object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-muted">
-            <span className="text-6xl">🎴</span>
-          </div>
-        )}
+        <Image
+          src={src || '/pokemon_card_backside.png'}
+          alt={alt ?? 'Pokemon card'}
+          fill
+          sizes="389px"
+          className="object-cover"
+        />
         {/* Holographic glare overlay */}
         <div
           ref={glareRef}

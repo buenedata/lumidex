@@ -51,10 +51,10 @@ export function CardImage({
       `}
       loading="lazy"
       onError={(e) => {
-        // Fallback to placeholder if image fails to load
+        // Fallback to card backside if image fails to load
         const target = e.target as HTMLImageElement
-        if (target.src !== '/placeholder-card.jpg') {
-          target.src = '/placeholder-card.jpg'
+        if (!target.src.endsWith('/pokemon_card_backside.png')) {
+          target.src = '/pokemon_card_backside.png'
         }
       }}
     />

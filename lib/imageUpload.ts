@@ -151,7 +151,7 @@ export function getCardImageWithFallback(card: PokemonCard): string {
   
   // Backward compatibility with old fields
   if (card.image_large || card.image_small) {
-    return card.image_large || card.image_small || '/placeholder-card.jpg'
+    return card.image_large || card.image_small || '/pokemon_card_backside.png'
   }
   
   // Generate URL based on card info
@@ -159,5 +159,5 @@ export function getCardImageWithFallback(card: PokemonCard): string {
     return getCardImageUrl(card.set_id, card.number)
   }
   
-  return '/placeholder-card.jpg'
+  return '/pokemon_card_backside.png'
 }
