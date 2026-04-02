@@ -20,17 +20,20 @@ if (!supabasePublishableKey) {
 export const supabase = createBrowserClient(supabaseUrl, supabasePublishableKey)
 
 // Server-side admin client with service role key — bypasses RLS.
-// @supabase/supabase-js v2.99+ with the new sb_secret_/sb_publishable_ key
-// format requires explicit global headers, otherwise the SDK transforms the
-// key in a way that PostgREST rejects as "Unregistered API key".
+// With the new sb_secret_/sb_publishable_ Supabase key format the internal
+// auth module can overwrite the Authorization header with an invalid value.
+// Using a custom fetch wrapper guarantees apikey + Authorization headers
+// always carry the raw key, regardless of what the SDK auth module does.
 const supabaseServiceKey = process.env.SUPABASE_SECRET_KEY
 const _activeKey = supabaseServiceKey ?? supabasePublishableKey
 export const supabaseAdmin = createClient(supabaseUrl, _activeKey, {
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   global: {
-    headers: {
-      apikey: _activeKey,
-      Authorization: `Bearer ${_activeKey}`,
+    fetch: (url: RequestInfo | URL, init: RequestInit = {}) => {
+      const headers = new Headers(init.headers)
+      headers.set('apikey', _activeKey)
+      headers.set('Authorization', `Bearer ${_activeKey}`)
+      return fetch(url, { ...init, headers })
     },
   },
 }) as ReturnType<typeof createClient>
