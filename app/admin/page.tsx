@@ -80,6 +80,15 @@ const ADMIN_TOOLS: AdminTool[] = [
       '(PSA 10, BGS 9.5, etc.) where available.',
     badge: 'Prices',
   },
+  {
+    href: '/admin/recompress',
+    icon: '🗜️',
+    title: 'Recompress Images',
+    description:
+      'Re-encode all images in a storage bucket to WebP at 82 % quality / 500 px max width. ' +
+      'Reduces Supabase storage usage by ~85–90 % vs raw PNG. Run on card-images first.',
+    badge: 'Storage',
+  },
 ]
 
 export default function AdminHubPage() {
