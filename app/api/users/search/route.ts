@@ -34,7 +34,9 @@ export async function GET(request: NextRequest) {
   }
 
   // Search users by username or display_name (exclude self)
-  const { data: users, error } = await supabaseAdmin
+  // Using serverClient (cookie-based session) so it satisfies the RLS
+  // "auth.role() = 'authenticated'" policy on the users table.
+  const { data: users, error } = await serverClient
     .from('users')
     .select('id, username, display_name, avatar_url')
     .neq('id', user.id)
@@ -53,7 +55,7 @@ export async function GET(request: NextRequest) {
   // Batch-load all friendship rows between current user and the matched users
   const matchedIds = users.map(u => u.id)
 
-  const { data: friendships } = await supabaseAdmin
+  const { data: friendships } = await serverClient
     .from('friendships')
     .select('id, requester_id, addressee_id, status')
     .or(

@@ -29,6 +29,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable}`}>
+      <head>
+        {/* impact.com site verification — uses non-standard `value` attr, cast to bypass TS */}
+        <meta name='impact-site-verification' {...({ value: '4d64ba63-a21a-464e-bf64-ebd720efc235' } as any)} />
+      </head>
       <body className="bg-base min-h-dvh flex flex-col">
         <Navbar />
         <main className="flex-1">
