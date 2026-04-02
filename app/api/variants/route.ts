@@ -345,7 +345,7 @@ export async function POST(request: NextRequest) {
 
       if (variantsError) {
         console.error('[variants POST batch] global variants:', variantsError)
-        return NextResponse.json({ error: 'Failed to fetch global variants' }, { status: 500 })
+        return NextResponse.json({ error: 'Failed to fetch global variants', detail: variantsError.message, code: variantsError.code }, { status: 500 })
       }
 
       if (!variants || variants.length === 0) {
