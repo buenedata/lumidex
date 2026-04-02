@@ -3,7 +3,7 @@
 interface DashboardStatsProps {
   totalCards: number
   setsTracked: number
-  avgCompletion: number
+  completedSets: number
   setsAvailable: number
 }
 
@@ -74,11 +74,11 @@ const GlobeIcon = () => (
 export default function DashboardStats({
   totalCards,
   setsTracked,
-  avgCompletion,
+  completedSets,
   setsAvailable,
 }: DashboardStatsProps) {
-  const completionColour = avgCompletion >= 50 ? 'text-price' : 'text-amber-400'
-  const completionBorder = avgCompletion >= 50 ? 'border-l-2 border-l-price' : 'border-l-2 border-l-amber-400'
+  const completedColour = completedSets >= 1 ? 'text-price' : 'text-purple-400'
+  const completedBorder = completedSets >= 1 ? 'border-l-2 border-l-price' : 'border-l-2 border-l-purple-400'
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
@@ -97,10 +97,10 @@ export default function DashboardStats({
         icon={<BoxIcon />}
       />
       <StatCard
-        label="Avg Completion"
-        value={`${avgCompletion}%`}
-        textClass={completionColour}
-        borderClass={completionBorder}
+        label="Sets Complete"
+        value={completedSets}
+        textClass={completedColour}
+        borderClass={completedBorder}
         icon={<ChartIcon />}
       />
       <StatCard

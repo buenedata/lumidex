@@ -7,7 +7,7 @@ import { useAuthStore } from '@/lib/store'
 interface DashboardHeroProps {
   totalCards: number
   setsTracked: number
-  avgCompletion: number
+  completedSets: number
 }
 
 function getGreeting(): string {
@@ -32,7 +32,7 @@ function getTrainerRank(totalCards: number): TrainerRank {
   return                         { label: 'New Trainer',     emoji: '🌱', colour: 'text-price',      bgColour: 'bg-price/10      border-price/30'      }
 }
 
-export default function DashboardHero({ totalCards, setsTracked, avgCompletion }: DashboardHeroProps) {
+export default function DashboardHero({ totalCards, setsTracked, completedSets }: DashboardHeroProps) {
   const { user, profile } = useAuthStore()
 
   const displayName = profile?.display_name
@@ -118,8 +118,8 @@ export default function DashboardHero({ totalCards, setsTracked, avgCompletion }
                   &nbsp;{setsTracked === 1 ? 'set' : 'sets'}
                 </span>
                 <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-surface border border-subtle text-secondary">
-                  <span className="text-price font-bold">{avgCompletion}%</span>
-                  &nbsp;avg completion
+                  <span className="text-price font-bold">{completedSets}</span>
+                  &nbsp;{completedSets === 1 ? 'set complete' : 'sets complete'}
                 </span>
               </>
             )}

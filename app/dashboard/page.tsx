@@ -19,6 +19,7 @@ export default function DashboardPage() {
   const { user, isLoading } = useAuthStore()
   const {
     userSets,
+    userCards,
     pokemonSets,
     userCardCountBySet,
     fetchPokemonSets,
@@ -28,6 +29,7 @@ export default function DashboardPage() {
 
   const [showAddSet, setShowAddSet]   = useState(false)
   const [searchTerm, setSearchTerm]   = useState('')
+  const [setsExpanded, setSetsExpanded] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -92,17 +94,14 @@ export default function DashboardPage() {
       set.name.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const totalCards     = Array.from(userCardCountBySet.values()).reduce((s, n) => s + n, 0)
+  // Sum all variant quantities for "Cards Owned" — matches the profile's "Cards Collected"
+  const totalCards     = Array.from(userCards.values()).reduce((s, uc) => s + uc.quantity, 0)
   const setsTracked    = userPokemonSets.length
-  const avgCompletion  = userPokemonSets.length > 0
-    ? Math.round(
-        userPokemonSets.reduce((sum, set) => {
-          const setTotal = set.total ?? 0
-          const owned    = userCardCountBySet.get(set.id) ?? 0
-          return sum + (setTotal > 0 ? (owned / setTotal) * 100 : 0)
-        }, 0) / userPokemonSets.length
-      )
-    : 0
+  const completedSets  = userPokemonSets.filter(set => {
+    const owned = userCardCountBySet.get(set.id) ?? 0
+    const total = set.total ?? 0
+    return total > 0 && owned >= total
+  }).length
 
   const calculateSetProgress = (setId: string): SetProgress => {
     const setTotal   = pokemonSets.get(setId)?.total ?? 0
@@ -139,7 +138,7 @@ export default function DashboardPage() {
         <DashboardHero
           totalCards={totalCards}
           setsTracked={setsTracked}
-          avgCompletion={avgCompletion}
+          completedSets={completedSets}
         />
 
         {/* ── Quick Actions ────────────────────────────────────────────── */}
@@ -155,46 +154,77 @@ export default function DashboardPage() {
             <DashboardStats
               totalCards={totalCards}
               setsTracked={setsTracked}
-              avgCompletion={avgCompletion}
+              completedSets={completedSets}
               setsAvailable={pokemonSets.size}
             />
 
             {/* Sets grid   Spotlight sidebar */}
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6 items-start">
 
-              {/* ── Your Sets ──────────────────────────────────────────── */}
+              {/* ── Your Sets (collapsible) ────────────────────────────── */}
               <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h2
-                    className="text-lg font-semibold text-primary"
-                    style={{ fontFamily: 'var(--font-space-grotesk)' }}
-                  >
-                    Your Sets
-                  </h2>
-                  <Button variant="outline" size="sm" onClick={() => setShowAddSet(true)}>
-                    + Add Set
-                  </Button>
-                </div>
+                {/* Header row — always visible */}
+                <button
+                  type="button"
+                  onClick={() => setSetsExpanded(prev => !prev)}
+                  className="w-full flex items-center justify-between mb-4 group"
+                >
+                  <div className="flex items-center gap-2">
+                    <h2
+                      className="text-lg font-semibold text-primary"
+                      style={{ fontFamily: 'var(--font-space-grotesk)' }}
+                    >
+                      Your Sets
+                    </h2>
+                    {/* summary pills */}
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-surface border border-subtle text-secondary font-medium">
+                      {setsTracked} {setsTracked === 1 ? 'set' : 'sets'}
+                    </span>
+                    {completedSets > 0 && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-price/10 border border-price/30 text-price font-medium">
+                        {completedSets} complete
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={e => { e.stopPropagation(); setShowAddSet(true) }}
+                    >
+                      + Add Set
+                    </Button>
+                    {/* chevron */}
+                    <span className={`text-muted transition-transform duration-200 ${setsExpanded ? 'rotate-180' : ''}`}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </span>
+                  </div>
+                </button>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-                  {userPokemonSets.map(set => (
-                    <div key={set.id} className="relative">
-                      {/* "NEW" chip for recently added sets */}
-                      {isNewSet(set.id) && (
-                        <div className="absolute top-2 left-2 z-30">
-                          <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-accent text-white shadow-lg shadow-accent/30 tracking-wide">
-                            NEW
-                          </span>
-                        </div>
-                      )}
-                      <SetCard
-                        set={set}
-                        progress={calculateSetProgress(set.id)}
-                        onRemove={() => handleRemoveSet(set.id)}
-                      />
-                    </div>
-                  ))}
-                </div>
+                {/* Collapsible grid */}
+                {setsExpanded && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                    {userPokemonSets.map(set => (
+                      <div key={set.id} className="relative">
+                        {/* "NEW" chip for recently added sets */}
+                        {isNewSet(set.id) && (
+                          <div className="absolute top-2 left-2 z-30">
+                            <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-accent text-white shadow-lg shadow-accent/30 tracking-wide">
+                              NEW
+                            </span>
+                          </div>
+                        )}
+                        <SetCard
+                          set={set}
+                          progress={calculateSetProgress(set.id)}
+                          onRemove={() => handleRemoveSet(set.id)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* ── Collection Spotlight ───────────────────────────────── */}
