@@ -6,8 +6,14 @@ import { useRouter } from 'next/navigation'
 import SetCard from '@/components/SetCard'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { PokemonSet, SetProgress } from '@/types'
-import { cn } from '@/lib/utils'
+import { SetProgress } from '@/types'
+
+// ── Dashboard section components ────────────────────────────────────────────
+import DashboardHero from '@/components/dashboard/DashboardHero'
+import DashboardStats from '@/components/dashboard/DashboardStats'
+import QuickActions from '@/components/dashboard/QuickActions'
+import ComingSoonFeatures from '@/components/dashboard/ComingSoonFeatures'
+import CollectionSpotlight from '@/components/dashboard/CollectionSpotlight'
 
 export default function DashboardPage() {
   const { user, isLoading } = useAuthStore()
@@ -16,13 +22,12 @@ export default function DashboardPage() {
     pokemonSets,
     userCardCountBySet,
     fetchPokemonSets,
-    fetchUserSets,
     addUserSet,
-    removeUserSet
+    removeUserSet,
   } = useCollectionStore()
 
-  const [showAddSet, setShowAddSet] = useState(false)
-  const [searchTerm, setSearchTerm] = useState('')
+  const [showAddSet, setShowAddSet]   = useState(false)
+  const [searchTerm, setSearchTerm]   = useState('')
   const router = useRouter()
 
   useEffect(() => {
@@ -35,64 +40,84 @@ export default function DashboardPage() {
     fetchPokemonSets()
   }, [fetchPokemonSets])
 
-  // ── Loading State ───────────────────────────────────────────────────────
+  // ── Loading skeleton ─────────────────────────────────────────────────────
   if (isLoading) {
     return (
       <div className="min-h-screen bg-base">
-        <div className="max-w-screen-2xl mx-auto px-6 py-8">
-          <div className="mb-8">
-            <div className="skeleton h-9 w-64 rounded-lg mb-2" />
-            <div className="skeleton h-5 w-80 rounded-lg" />
+        <div className="max-w-screen-2xl mx-auto px-6 py-8 space-y-6">
+          {/* Hero skeleton */}
+          <div className="skeleton h-32 rounded-2xl" />
+          {/* Quick actions skeleton */}
+          <div className="flex gap-2 overflow-hidden">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="skeleton h-10 w-28 rounded-xl shrink-0" />
+            ))}
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          {/* Stats skeleton */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="bg-surface border border-subtle rounded-xl p-4">
-                <div className="skeleton h-3 w-20 rounded mb-2" />
-                <div className="skeleton h-7 w-12 rounded" />
-              </div>
+              <div key={i} className="skeleton h-20 rounded-xl" />
             ))}
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="bg-surface border border-subtle rounded-xl overflow-hidden">
-                <div className="skeleton h-32 w-full" />
-                <div className="p-3 space-y-2">
-                  <div className="skeleton h-4 w-3/4 rounded" />
-                  <div className="skeleton h-3 w-1/2 rounded" />
+          {/* Sets + spotlight skeleton */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="bg-surface border border-subtle rounded-xl overflow-hidden">
+                  <div className="skeleton h-32 w-full" />
+                  <div className="p-3 space-y-2">
+                    <div className="skeleton h-4 w-3/4 rounded" />
+                    <div className="skeleton h-3 w-1/2 rounded" />
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            <div className="skeleton h-96 rounded-2xl" />
           </div>
         </div>
       </div>
     )
   }
 
-  if (!user) {
-    return null
-  }
+  if (!user) return null
 
-  const userSetIds = new Set(userSets.map(us => us.set_id))
+  // ── Derived data ─────────────────────────────────────────────────────────
+  const userSetIds      = new Set(userSets.map(us => us.set_id))
   const userPokemonSets = Array.from(pokemonSets.values()).filter(set =>
     userSetIds.has(set.id)
   )
-
-  const availableSets = Array.from(pokemonSets.values()).filter(
+  const availableSets   = Array.from(pokemonSets.values()).filter(
     set =>
       !userSetIds.has(set.id) &&
       set.name.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const calculateSetProgress = (setId: string): SetProgress => {
-    const totalCards = pokemonSets.get(setId)?.total ?? 0
-    const ownedCards = userCardCountBySet.get(setId) ?? 0
-    const percentage = totalCards > 0 ? Math.round((ownedCards / totalCards) * 100) : 0
+  const totalCards     = Array.from(userCardCountBySet.values()).reduce((s, n) => s + n, 0)
+  const setsTracked    = userPokemonSets.length
+  const avgCompletion  = userPokemonSets.length > 0
+    ? Math.round(
+        userPokemonSets.reduce((sum, set) => {
+          const setTotal = set.total ?? 0
+          const owned    = userCardCountBySet.get(set.id) ?? 0
+          return sum + (setTotal > 0 ? (owned / setTotal) * 100 : 0)
+        }, 0) / userPokemonSets.length
+      )
+    : 0
 
-    return {
-      owned_cards: ownedCards,
-      total_cards: totalCards,
-      percentage
-    }
+  const calculateSetProgress = (setId: string): SetProgress => {
+    const setTotal   = pokemonSets.get(setId)?.total ?? 0
+    const ownedCards = userCardCountBySet.get(setId) ?? 0
+    const percentage = setTotal > 0 ? Math.round((ownedCards / setTotal) * 100) : 0
+    return { owned_cards: ownedCards, total_cards: setTotal, percentage }
+  }
+
+  /** Returns true when a set was added to the user's collection within the last 7 days. */
+  const isNewSet = (setId: string): boolean => {
+    const userSet = userSets.find(us => us.set_id === setId)
+    if (!userSet?.created_at) return false
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    return new Date(userSet.created_at) > sevenDaysAgo
   }
 
   const handleAddSet = async (setId: string) => {
@@ -105,118 +130,114 @@ export default function DashboardPage() {
     await removeUserSet(setId)
   }
 
-  const username = (user as any).user_metadata?.username
-    || (user as any).email?.split('@')[0]
-    || 'Trainer'
-
+  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-base">
       <main className="max-w-screen-2xl mx-auto px-6 py-8">
 
-        {/* ── Welcome Header ──────────────────────────────────────────── */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-          <div>
-            <h1
-              className="text-3xl font-bold text-primary"
-              style={{ fontFamily: 'var(--font-space-grotesk)' }}
-            >
-              Welcome back, {username}
-            </h1>
-            <p className="text-secondary text-sm mt-1">
-              Track your Pokémon card collection across different sets
-            </p>
-          </div>
-          <div className="flex items-center gap-3 shrink-0">
-            <Button variant="secondary" onClick={() => router.push('/collection')}>
-              My Collection
-            </Button>
-            <Button variant="primary" onClick={() => router.push('/sets')}>
-              Browse Sets
-            </Button>
-          </div>
-        </div>
+        {/* ── Hero Banner ─────────────────────────────────────────────── */}
+        <DashboardHero
+          totalCards={totalCards}
+          setsTracked={setsTracked}
+          avgCompletion={avgCompletion}
+        />
 
-        {/* ── Stats Row ───────────────────────────────────────────────── */}
-        {userPokemonSets.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
-              <span className="text-xs text-muted uppercase tracking-wider">Sets Tracked</span>
-              <span className="text-2xl font-bold text-primary">{userPokemonSets.length}</span>
-            </div>
-            <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
-              <span className="text-xs text-muted uppercase tracking-wider">Cards Owned</span>
-              <span className="text-2xl font-bold text-primary">
-                {Array.from(userCardCountBySet.values()).reduce((sum, n) => sum + n, 0).toLocaleString()}
-              </span>
-            </div>
-            <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
-              <span className="text-xs text-muted uppercase tracking-wider">Sets Available</span>
-              <span className="text-2xl font-bold text-primary">{pokemonSets.size}</span>
-            </div>
-            <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
-              <span className="text-xs text-muted uppercase tracking-wider">Completion</span>
-              <span className="text-2xl font-bold text-accent">0%</span>
-            </div>
-          </div>
-        )}
+        {/* ── Quick Actions ────────────────────────────────────────────── */}
+        <QuickActions
+          userId={user.id}
+          onAddSet={() => setShowAddSet(true)}
+        />
 
-        {/* ── Empty State ─────────────────────────────────────────────── */}
-        {userPokemonSets.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-accent-dim flex items-center justify-center text-3xl">
+        {/* ── Stats + Sets content ─────────────────────────────────────── */}
+        {userPokemonSets.length > 0 ? (
+          <>
+            {/* Stats row */}
+            <DashboardStats
+              totalCards={totalCards}
+              setsTracked={setsTracked}
+              avgCompletion={avgCompletion}
+              setsAvailable={pokemonSets.size}
+            />
+
+            {/* Sets grid   Spotlight sidebar */}
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6 items-start">
+
+              {/* ── Your Sets ──────────────────────────────────────────── */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h2
+                    className="text-lg font-semibold text-primary"
+                    style={{ fontFamily: 'var(--font-space-grotesk)' }}
+                  >
+                    Your Sets
+                  </h2>
+                  <Button variant="outline" size="sm" onClick={() => setShowAddSet(true)}>
+                    + Add Set
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                  {userPokemonSets.map(set => (
+                    <div key={set.id} className="relative">
+                      {/* "NEW" chip for recently added sets */}
+                      {isNewSet(set.id) && (
+                        <div className="absolute top-2 left-2 z-30">
+                          <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-accent text-white shadow-lg shadow-accent/30 tracking-wide">
+                            NEW
+                          </span>
+                        </div>
+                      )}
+                      <SetCard
+                        set={set}
+                        progress={calculateSetProgress(set.id)}
+                        onRemove={() => handleRemoveSet(set.id)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ── Collection Spotlight ───────────────────────────────── */}
+              <div className="lg:sticky lg:top-20">
+                <CollectionSpotlight
+                  sets={userPokemonSets}
+                  getProgress={calculateSetProgress}
+                />
+              </div>
+            </div>
+          </>
+        ) : (
+          /* ── Empty State ───────────────────────────────────────────── */
+          <div className="flex flex-col items-center justify-center py-16 gap-5 text-center">
+            <div className="w-20 h-20 rounded-2xl bg-accent-dim flex items-center justify-center text-4xl shadow-lg shadow-accent/10">
               📦
             </div>
             <div>
               <h2
-                className="text-xl font-semibold text-primary mb-1"
+                className="text-2xl font-semibold text-primary mb-2"
                 style={{ fontFamily: 'var(--font-space-grotesk)' }}
               >
-                Start your collection
+                Your adventure begins here
               </h2>
-              <p className="text-secondary text-sm max-w-xs mx-auto">
-                Browse all Pokémon sets and start tracking your cards
+              <p className="text-secondary text-sm max-w-sm mx-auto leading-relaxed">
+                Add your first Pokémon set to start tracking your collection and level up your Trainer Rank.
               </p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap justify-center gap-3">
               <Button variant="primary" size="lg" onClick={() => router.push('/sets')}>
                 Browse Sets
               </Button>
-            </div>
-          </div>
-        ) : (
-          <>
-            {/* ── Section heading ──────────────────────────────────── */}
-            <div className="flex items-center justify-between mb-4">
-              <h2
-                className="text-lg font-semibold text-primary"
-                style={{ fontFamily: 'var(--font-space-grotesk)' }}
-              >
-                Your Sets
-              </h2>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowAddSet(true)}
-              >
-                + Add Set
+              <Button variant="secondary" size="lg" onClick={() => setShowAddSet(true)}>
+                + Add a Set
               </Button>
             </div>
-
-            {/* ── Sets Grid ────────────────────────────────────────── */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-              {userPokemonSets.map(set => (
-                <SetCard
-                  key={set.id}
-                  set={set}
-                  progress={calculateSetProgress(set.id)}
-                  onRemove={() => handleRemoveSet(set.id)}
-                />
-              ))}
-            </div>
-          </>
+          </div>
         )}
 
-        {/* ── Add Set Modal ───────────────────────────────────────────── */}
+        {/* ── Coming Soon Features ─────────────────────────────────────── */}
+        <ComingSoonFeatures />
+
+        {/* ── Add Set Modal ─────────────────────────────────────────────── */}
         {showAddSet && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             {/* Backdrop */}
@@ -240,7 +261,8 @@ export default function DashboardPage() {
                   className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-primary hover:bg-surface transition-all"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
               </div>
@@ -294,6 +316,7 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+
       </main>
     </div>
   )
