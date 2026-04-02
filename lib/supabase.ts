@@ -24,9 +24,12 @@ export const supabase = createBrowserClient(supabaseUrl, supabasePublishableKey)
 // auth module can overwrite the Authorization header with an invalid value.
 // Using a custom fetch wrapper guarantees apikey + Authorization headers
 // always carry the raw key, regardless of what the SDK auth module does.
+// NOTE: do NOT cast the return type — createClient<any> is the correct type
+// for untyped usage; over-casting causes `.from().insert()` to be 'never'.
 const supabaseServiceKey = process.env.SUPABASE_SECRET_KEY
 const _activeKey = supabaseServiceKey ?? supabasePublishableKey
-export const supabaseAdmin = createClient(supabaseUrl, _activeKey, {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const supabaseAdmin = createClient<any>(supabaseUrl, _activeKey, {
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   global: {
     fetch: (url: RequestInfo | URL, init: RequestInit = {}) => {
@@ -36,7 +39,7 @@ export const supabaseAdmin = createClient(supabaseUrl, _activeKey, {
       return fetch(url, { ...init, headers })
     },
   },
-}) as ReturnType<typeof createClient>
+})
 
 // Database types
 export type Database = {
