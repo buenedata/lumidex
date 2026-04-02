@@ -16,35 +16,6 @@ function getTypeGlowClass(type: string | null | undefined): string {
   return known.includes(key) ? `card-type-${key}` : 'card-type-colorless'
 }
 
-// ── Rarity badge colour helper ────────────────────────────────────────────────
-
-function rarityBadge(rarity: string): string {
-  const r = rarity.toLowerCase()
-  if (r.includes('hyper') || r.includes('secret'))   return 'bg-yellow-400/15 text-yellow-300'
-  if (r.includes('special illustration'))             return 'bg-orange-400/15  text-orange-200'
-  if (r.includes('illustration'))                     return 'bg-orange-400/15  text-orange-300'
-  if (r.includes('ace spec'))                         return 'bg-red-400/15     text-red-300'
-  if (r.includes('ultra') || r.includes('amazing'))  return 'bg-indigo-400/15  text-indigo-300'
-  if (r.includes('double') || r.includes('holo'))    return 'bg-purple-400/15  text-purple-300'
-  if (r.includes('promo'))                            return 'bg-pink-400/15    text-pink-300'
-  if (r.includes('rare'))                             return 'bg-blue-400/15    text-blue-300'
-  if (r.includes('uncommon'))                         return 'bg-green-400/15   text-green-300'
-  return 'bg-surface text-muted'
-}
-
-function shortRarity(rarity: string): string {
-  const map: Record<string, string> = {
-    'Special Illustration Rare': 'SIR',
-    'Illustration Rare':         'IR',
-    'ACE SPEC Rare':             'ACE SPEC',
-    'Hyper Rare':                'Hyper',
-    'Double Rare':               'Double R',
-    'Radiant Rare':              'Radiant',
-    'Amazing Rare':              'Amazing',
-  }
-  return map[rarity] ?? (rarity.length > 12 ? rarity.slice(0, 10) + '…' : rarity)
-}
-
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface CardResultsProps {
@@ -159,20 +130,10 @@ export default function CardResults({ cards, query, artistName }: CardResultsPro
                 <span className="truncate">{card.set.name}</span>
               </p>
 
-              {/* Number + rarity badge */}
-              <div className="flex items-center gap-1 flex-wrap">
-                {card.number && (
-                  <span className="text-xs text-muted">#{card.number}</span>
-                )}
-                {card.rarity && (
-                  <span className={cn(
-                    'text-xs px-1 py-px rounded font-medium leading-none',
-                    rarityBadge(card.rarity),
-                  )}>
-                    {shortRarity(card.rarity)}
-                  </span>
-                )}
-              </div>
+              {/* Card number */}
+              {card.number && (
+                <p className="text-xs text-muted leading-tight">#{card.number}</p>
+              )}
             </div>
           </Link>
         ))}
