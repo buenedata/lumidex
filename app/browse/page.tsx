@@ -1,8 +1,11 @@
 import { Suspense } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import BrowseClient from '@/components/browse/BrowseClient'
-import { getSealedProductsForAllSeries } from '@/lib/pricing'
+import { getSealedProductsForAllSeries, EUR_TO_USD } from '@/lib/pricing'
+import { supabaseAdmin } from '@/lib/supabase'
+import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import type { SeriesProductGroup } from '@/lib/pricing'
+import type { PriceSource } from '@/types'
 import type {
   SearchMode,
   CardSearchResult,
@@ -135,7 +138,6 @@ async function fetchDiscoveryData(): Promise<DiscoveryData> {
     total:        (s as Record<string, unknown>)['setTotal'] as number | null ?? null,
   }))
 
-  // Aggregate top artists from a card sample
   const map = new Map<string, { images: string[]; count: number }>()
   for (const card of (artistCardsResult.data ?? [])) {
     if (!card.artist) continue
@@ -201,6 +203,35 @@ function toCardResults(data: any[]): CardSearchResult[] {
   })
 }
 
+/** Batch-fetch best market prices for an array of card UUIDs. */
+async function fetchCardPrices(
+  cardIds: string[],
+  ps: PriceSource,
+): Promise<Record<string, number>> {
+  if (cardIds.length === 0) return {}
+  try {
+    const { data } = await supabaseAdmin
+      .from('card_prices')
+      .select('card_id, tcgp_market, cm_avg_sell, cm_trend')
+      .in('card_id', cardIds)
+
+    const result: Record<string, number> = {}
+    for (const row of data ?? []) {
+      let price: number | null = null
+      if (ps === 'tcgplayer') {
+        price = row.tcgp_market ?? null
+      } else {
+        const eur = row.cm_avg_sell ?? row.cm_trend ?? null
+        price = eur != null ? eur * EUR_TO_USD : null
+      }
+      if (price != null) result[row.card_id] = price
+    }
+    return result
+  } catch {
+    return {}
+  }
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default async function BrowsePage({ searchParams }: BrowsePageProps) {
   const params = await searchParams
@@ -218,6 +249,24 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
 
   const hasQuery     = !!(rawQuery || artistQuery)
   const isArtistView = !!artistQuery
+
+  // ── User preferences (non-fatal) ─────────────────────────────────────────
+  let currency:    string      = 'USD'
+  let priceSource: PriceSource = 'tcgplayer'
+
+  try {
+    const serverSupabase = await createSupabaseServerClient()
+    const { data: { user } } = await serverSupabase.auth.getUser()
+    if (user) {
+      const { data: profile } = await supabaseAdmin
+        .from('users')
+        .select('preferred_currency, price_source')
+        .eq('id', user.id)
+        .maybeSingle()
+      if (profile?.preferred_currency) currency    = profile.preferred_currency
+      if (profile?.price_source)       priceSource = profile.price_source as PriceSource
+    }
+  } catch { /* non-fatal — guest view still works */ }
 
   // ── Parallel data fetching ────────────────────────────────────────────────
   let initialCards:    CardSearchResult[] = []
@@ -259,6 +308,12 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
       : Promise.resolve(),
   ])
 
+  // ── Batch-fetch card prices (after cards are known) ───────────────────────
+  const cardPricesUSD = await fetchCardPrices(
+    initialCards.map(c => c.id),
+    priceSource,
+  )
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--color-bg-base)' }}>
       <Suspense
@@ -278,6 +333,9 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
           allProducts={allProducts}
           discoveryData={discoveryData}
           initialFilters={filters}
+          cardPricesUSD={cardPricesUSD}
+          currency={currency}
+          priceSource={priceSource}
         />
       </Suspense>
     </div>
