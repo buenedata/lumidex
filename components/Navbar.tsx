@@ -22,7 +22,7 @@ export default function Navbar() {
 
   const handleSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && searchQuery.trim()) {
-      router.push(`/browse?name=${encodeURIComponent(searchQuery.trim())}`)
+      router.push(`/browse?q=${encodeURIComponent(searchQuery.trim())}&mode=cards`)
       setSearchQuery('')
     }
   }

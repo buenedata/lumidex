@@ -1,258 +1,285 @@
-import Link from 'next/link'
+import { Suspense } from 'react'
 import { createClient } from '@supabase/supabase-js'
-import type { RelatedCard } from '@/app/api/cards/related/route'
-import type { PokemonCard } from '@/types'
-import SetPageCards from '@/components/SetPageCards'
+import BrowseClient from '@/components/browse/BrowseClient'
+import { getSealedProductsForAllSeries } from '@/lib/pricing'
+import type { SeriesProductGroup } from '@/lib/pricing'
+import type {
+  SearchMode,
+  CardSearchResult,
+  ArtistResult,
+  BrowseProduct,
+  DiscoveryData,
+  DiscoverySet,
+  ActiveFilters,
+} from '@/components/browse/types'
 
-// Server-side Supabase client (uses anon key — cards/sets are publicly readable)
+// ── Supabase anon client — cards/sets are publicly readable ──────────────────
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
 )
 
+// Always SSR — results depend on search params
+export const dynamic = 'force-dynamic'
+
+// ── Page props ────────────────────────────────────────────────────────────────
 interface BrowsePageProps {
-  searchParams: Promise<{ name?: string; artist?: string }>
+  searchParams: Promise<{
+    q?:         string
+    /** Legacy param — kept for backward compat with old bookmark/share links */
+    name?:      string
+    mode?:      string
+    artist?:    string
+    type?:      string
+    rarity?:    string
+    supertype?: string
+  }>
 }
 
-// RelatedCard extended with type for hover-glow support
-interface BrowseCard extends RelatedCard {
-  type: string | null
-}
+// ── Data-fetching helpers ─────────────────────────────────────────────────────
 
-/**
- * Splits a raw search string into a name part and an optional card-number part.
- *
- * Examples:
- *   "pikachu"        → { name: "pikachu",     number: null }
- *   "pikachu 24"     → { name: "pikachu",     number: "24" }
- *   "pikachu ex 24"  → { name: "pikachu ex",  number: "24" }
- *   "pikachu 24/165" → { name: "pikachu",     number: "24/165" }
- *
- * A trailing token is treated as a number if it starts with a digit
- * (optionally followed by word chars or slashes, e.g. "24", "24/165", "SV01").
- */
-function parseSearchQuery(raw: string): { name: string; number: string | null } {
-  const match = /^(.+?)\s+(\d[\w/]*)$/.exec(raw.trim())
-  if (match) return { name: match[1].trim(), number: match[2] }
-  return { name: raw.trim(), number: null }
-}
+async function fetchCardResults(
+  query: string,
+  filters: ActiveFilters,
+): Promise<CardSearchResult[]> {
+  const parts    = query.trim().split(/\s+/)
+  const last     = parts[parts.length - 1]
+  const isNumber = /^\d/.test(last)
 
-async function searchCardsByArtist(artist: string): Promise<BrowseCard[]> {
-  const { data: cards, error: cardsError } = await supabase
+  let namePart:   string | null = null
+  let numberPart: string | null = null
+
+  if (isNumber && parts.length > 1) {
+    namePart   = parts.slice(0, -1).join(' ')
+    numberPart = last
+  } else if (isNumber) {
+    numberPart = last
+  } else {
+    namePart = query.trim()
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let q: any = supabase
     .from('cards')
-    .select('id, name, number, rarity, type, image, set_id')
-    .ilike('artist', `%${artist}%`)
-    .order('name', { ascending: true })
-    .order('set_id', { ascending: true })
+    .select('id, name, number, rarity, type, supertype, image, set_id, sets!inner(name, series, release_date, logo_url)')
+
+  if (namePart)          q = q.ilike('name',      `%${namePart}%`)
+  if (numberPart)        q = q.ilike('number',    `%${numberPart}%`)
+  if (filters.type)      q = q.ilike('type',      `%${filters.type}%`)
+  if (filters.rarity)    q = q.ilike('rarity',    `%${filters.rarity}%`)
+  if (filters.supertype) q = q.ilike('supertype', `%${filters.supertype}%`)
+
+  const { data } = await q.order('name').limit(200)
+  return toCardResults(data ?? [])
+}
+
+async function fetchArtistCardResults(artistQuery: string): Promise<CardSearchResult[]> {
+  const { data } = await supabase
+    .from('cards')
+    .select('id, name, number, rarity, type, supertype, image, set_id, sets!inner(name, series, release_date, logo_url)')
+    .ilike('artist', `%${artistQuery}%`)
+    .order('name')
     .limit(500)
 
-  if (cardsError || !cards || cards.length === 0) return []
-
-  const setIds = [...new Set(cards.map((c) => c.set_id).filter(Boolean) as string[])]
-
-  const { data: sets } = await supabase
-    .from('sets')
-    .select('set_id, name, logo_url, release_date')
-    .in('set_id', setIds)
-    .order('release_date', { ascending: false })
-
-  const setsMap = new Map((sets ?? []).map((s) => [s.set_id, s]))
-  const sortedSetIds = (sets ?? []).map((s) => s.set_id)
-
-  return cards
-    .map((card) => {
-      const setMeta = card.set_id ? setsMap.get(card.set_id) : undefined
-      return {
-        id: card.id,
-        name: card.name,
-        number: card.number,
-        rarity: card.rarity,
-        type: card.type ?? null,
-        image: card.image,
-        set_id: card.set_id,
-        setName: setMeta?.name ?? null,
-        setLogoUrl: setMeta?.logo_url ?? null,
-      }
-    })
-    .sort((a, b) => {
-      const ai = sortedSetIds.indexOf(a.set_id ?? '')
-      const bi = sortedSetIds.indexOf(b.set_id ?? '')
-      if (ai === -1 && bi === -1) return 0
-      if (ai === -1) return 1
-      if (bi === -1) return -1
-      return ai - bi
-    })
+  return toCardResults(data ?? [])
 }
 
-async function searchCards(name: string, number: string | null): Promise<BrowseCard[]> {
-  let q = supabase
+async function fetchArtistResults(query: string): Promise<ArtistResult[]> {
+  const { data } = await supabase
     .from('cards')
-    .select('id, name, number, rarity, type, image, set_id')
-    .ilike('name', `%${name}%`)
+    .select('artist, image')
+    .ilike('artist', `%${query}%`)
+    .not('artist', 'is', null)
+    .limit(1000)
 
-  if (number) {
-    q = q.ilike('number', `%${number}%`)
+  const map = new Map<string, { images: string[]; count: number }>()
+  for (const card of data ?? []) {
+    if (!card.artist) continue
+    const entry = map.get(card.artist)
+    if (entry) {
+      entry.count++
+      if (entry.images.length < 3 && card.image) entry.images.push(card.image)
+    } else {
+      map.set(card.artist, { images: card.image ? [card.image] : [], count: 1 })
+    }
   }
 
-  const { data: cards, error: cardsError } = await q
-    .order('name', { ascending: true })
-    .order('set_id', { ascending: true })
-    .limit(200)
-
-  if (cardsError || !cards || cards.length === 0) return []
-
-  const setIds = [...new Set(cards.map((c) => c.set_id).filter(Boolean) as string[])]
-
-  const { data: sets } = await supabase
-    .from('sets')
-    .select('set_id, name, logo_url, release_date')
-    .in('set_id', setIds)
-    .order('release_date', { ascending: false })
-
-  const setsMap = new Map((sets ?? []).map((s) => [s.set_id, s]))
-  const sortedSetIds = (sets ?? []).map((s) => s.set_id)
-
-  return cards
-    .map((card) => {
-      const setMeta = card.set_id ? setsMap.get(card.set_id) : undefined
-      return {
-        id: card.id,
-        name: card.name,
-        number: card.number,
-        rarity: card.rarity,
-        type: card.type ?? null,
-        image: card.image,
-        set_id: card.set_id,
-        setName: setMeta?.name ?? null,
-        setLogoUrl: setMeta?.logo_url ?? null,
-      }
-    })
-    .sort((a, b) => {
-      const ai = sortedSetIds.indexOf(a.set_id ?? '')
-      const bi = sortedSetIds.indexOf(b.set_id ?? '')
-      if (ai === -1 && bi === -1) return 0
-      if (ai === -1) return 1
-      if (bi === -1) return -1
-      return ai - bi
-    })
+  return Array.from(map.entries())
+    .map(([name, { images, count }]) => ({ name, card_count: count, sample_images: images }))
+    .sort((a, b) => b.card_count - a.card_count)
+    .slice(0, 20)
 }
 
-export default async function BrowsePage({ searchParams }: BrowsePageProps) {
-  const { name: rawName, artist: rawArtist } = await searchParams
-  const rawQuery = rawName?.trim() ?? ''
-  const rawArtistQuery = rawArtist?.trim() ?? ''
-  const isArtistSearch = !!rawArtistQuery && !rawQuery
+async function fetchDiscoveryData(): Promise<DiscoveryData> {
+  const [setsResult, artistCardsResult] = await Promise.all([
+    supabase
+      .from('sets')
+      .select('set_id, name, series, logo_url, release_date, "setTotal"')
+      .not('release_date', 'is', null)
+      .order('release_date', { ascending: false })
+      .limit(4),
+    supabase
+      .from('cards')
+      .select('artist, image')
+      .not('artist', 'is', null)
+      .not('image', 'is', null)
+      .limit(2000),
+  ])
 
-  if (!rawQuery && !rawArtistQuery) {
-    return (
-      <div className="min-h-screen" style={{ backgroundColor: 'var(--color-bg-base)' }}>
-        <div className="max-w-screen-xl mx-auto px-6 py-12 text-center">
-          <p className="text-muted text-lg">No search query specified.</p>
-          <Link href="/sets" className="mt-4 inline-block text-accent hover:underline text-sm">
-            ← Browse sets
-          </Link>
-        </div>
-      </div>
-    )
-  }
-
-  let relatedCards: BrowseCard[]
-  let displayName: string
-
-  if (isArtistSearch) {
-    relatedCards = await searchCardsByArtist(rawArtistQuery)
-    displayName = rawArtistQuery
-  } else {
-    const { name, number } = parseSearchQuery(rawQuery)
-    relatedCards = await searchCards(name, number)
-    displayName = rawQuery
-  }
-
-  // Convert BrowseCard → PokemonCard
-  // type is included so card-type-* CSS glow classes work on hover
-  const cards: PokemonCard[] = relatedCards.map((rc) => ({
-    id: rc.id,
-    set_id: rc.set_id ?? '',
-    name: rc.name,
-    number: rc.number,
-    rarity: rc.rarity,
-    type: rc.type,
-    image: rc.image,
-    image_url: rc.image ?? '',   // legacy compat for CardGrid
-    created_at: '',
+  const recentSets: DiscoverySet[] = (setsResult.data ?? []).map((s) => ({
+    id:           s.set_id,
+    name:         s.name,
+    series:       s.series ?? null,
+    logo_url:     s.logo_url ?? null,
+    release_date: s.release_date ?? null,
+    total:        (s as Record<string, unknown>)['setTotal'] as number | null ?? null,
   }))
 
-  const setCount = new Set(relatedCards.map((c) => c.set_id).filter(Boolean)).size
+  // Aggregate top artists from a card sample
+  const map = new Map<string, { images: string[]; count: number }>()
+  for (const card of (artistCardsResult.data ?? [])) {
+    if (!card.artist) continue
+    const entry = map.get(card.artist)
+    if (entry) {
+      entry.count++
+      if (entry.images.length < 3 && card.image) entry.images.push(card.image)
+    } else {
+      map.set(card.artist, { images: card.image ? [card.image] : [], count: 1 })
+    }
+  }
+
+  const featuredArtists = Array.from(map.entries())
+    .map(([name, { images, count }]) => ({ name, card_count: count, sample_images: images }))
+    .sort((a, b) => b.card_count - a.card_count)
+    .slice(0, 4)
+
+  return { featuredArtists, recentSets }
+}
+
+function flattenProducts(groups: SeriesProductGroup[]): BrowseProduct[] {
+  const result: BrowseProduct[] = []
+  for (const group of groups) {
+    for (const setGroup of group.sets) {
+      for (const product of setGroup.products) {
+        result.push({
+          id:           product.id,
+          set_id:       setGroup.setId,
+          set_name:     setGroup.setName,
+          series:       group.series,
+          name:         product.name,
+          product_type: product.product_type,
+          image_url:    product.image_url,
+          tcgp_market:  product.tcgp_market,
+        })
+      }
+    }
+  }
+  return result
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toCardResults(data: any[]): CardSearchResult[] {
+  return data.map((card) => {
+    const set = Array.isArray(card.sets) ? card.sets[0] : card.sets
+    return {
+      id:                 card.id,
+      name:               card.name        || '',
+      image_url:          card.image       || '',
+      number:             card.number      || '',
+      rarity:             card.rarity      || '',
+      type:               card.type        || '',
+      supertype:          card.supertype   || '',
+      default_variant_id: null,
+      set: {
+        id:           card.set_id              || '',
+        name:         set?.name               || '',
+        series:       set?.series             || '',
+        release_date: set?.release_date       || '',
+        logo_url:     set?.logo_url           || '',
+      },
+    } satisfies CardSearchResult
+  })
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+export default async function BrowsePage({ searchParams }: BrowsePageProps) {
+  const params = await searchParams
+
+  // Support legacy ?name= param that the old browse page / old Navbar used
+  const rawQuery    = params.q?.trim() ?? params.name?.trim() ?? ''
+  const artistQuery = params.artist?.trim()    ?? ''
+  const mode        = (params.mode as SearchMode) || 'cards'
+
+  const filters: ActiveFilters = {
+    type:      params.type?.trim()      ?? '',
+    rarity:    params.rarity?.trim()    ?? '',
+    supertype: params.supertype?.trim() ?? '',
+  }
+
+  const hasQuery     = !!(rawQuery || artistQuery)
+  const isArtistView = !!artistQuery
+
+  // ── Parallel data fetching ────────────────────────────────────────────────
+  let initialCards:    CardSearchResult[] = []
+  let initialArtists:  ArtistResult[]     = []
+  let initialProducts: BrowseProduct[]    = []
+  let allProducts:     BrowseProduct[]    = []
+  let discoveryData:   DiscoveryData | null = null
+
+  await Promise.all([
+    // Cards by a specific artist
+    isArtistView
+      ? fetchArtistCardResults(artistQuery).then(r  => { initialCards = r })
+      : Promise.resolve(),
+
+    // Card search results
+    !isArtistView && rawQuery && mode === 'cards'
+      ? fetchCardResults(rawQuery, filters).then(r => { initialCards = r })
+      : Promise.resolve(),
+
+    // Artist search results
+    !isArtistView && rawQuery && mode === 'artists'
+      ? fetchArtistResults(rawQuery).then(r => { initialArtists = r })
+      : Promise.resolve(),
+
+    // Products (needed for Products mode view + typeahead)
+    mode === 'products' || !hasQuery
+      ? getSealedProductsForAllSeries()
+          .then(groups => {
+            const flat = flattenProducts(groups)
+            allProducts = flat
+            if (mode === 'products') initialProducts = flat
+          })
+          .catch(() => { /* non-fatal — show empty products */ })
+      : Promise.resolve(),
+
+    // Discovery data (landing state — fetched only when there is no query)
+    !hasQuery
+      ? fetchDiscoveryData().then(r => { discoveryData = r })
+      : Promise.resolve(),
+  ])
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--color-bg-base)' }}>
-
-      {/* ── Header ── */}
-      <div className="border-b border-subtle">
-        <div className="max-w-screen-2xl mx-auto px-6 py-6">
-
-          {/* Back link */}
-          <Link
-            href="/sets"
-            className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-primary transition-colors mb-4"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Browse sets
-          </Link>
-
-          <div className="flex items-start justify-between gap-6 flex-wrap">
-            {/* Title + stats */}
-            <div>
-              <h1
-                className="text-3xl font-bold text-primary mb-1"
-                style={{ fontFamily: 'var(--font-space-grotesk)' }}
-              >
-                {isArtistSearch
-                  ? <>Cards by &ldquo;{displayName}&rdquo;</>
-                  : <>Results for &ldquo;{displayName}&rdquo;</>}
-              </h1>
-              <p className="text-secondary text-sm">
-                {cards.length === 0
-                  ? 'No cards found'
-                  : `${cards.length} card${cards.length === 1 ? '' : 's'} across ${setCount} set${setCount === 1 ? '' : 's'}`}
-              </p>
-            </div>
-
-            {/* Most Expensive placeholder */}
-            <div className="flex items-center gap-3 bg-elevated border border-subtle rounded-xl px-4 py-3 min-w-[200px]">
-              <div className="text-2xl">💰</div>
-              <div>
-                <p className="text-xs text-muted uppercase tracking-wider font-medium mb-0.5">
-                  Most Expensive
-                </p>
-                <p className="text-lg font-bold text-primary leading-none">—</p>
-                <p className="text-xs text-muted mt-0.5">Pricing coming soon</p>
-              </div>
-            </div>
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center py-40">
+            <div className="w-8 h-8 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
           </div>
-        </div>
-      </div>
-
-      {/* ── Cards (identical to set page, no search bar) ── */}
-      {cards.length === 0 ? (
-        <div className="max-w-screen-2xl mx-auto px-6 text-center py-24">
-          <p className="text-muted text-lg mb-2">No cards found for &ldquo;{displayName}&rdquo;</p>
-          <Link href="/sets" className="text-accent hover:underline text-sm">
-            ← Browse sets
-          </Link>
-        </div>
-      ) : (
-        <SetPageCards
-          cards={cards}
-          setTotal={cards.length}
-          setName={displayName}
-          showSearch={false}
-          setId=""
-          hasPromos={cards.some(c => c.rarity?.toLowerCase().includes('promo'))}
+        }
+      >
+        <BrowseClient
+          initialMode={mode}
+          committedQuery={rawQuery}
+          artistQuery={artistQuery || null}
+          initialCards={initialCards}
+          initialArtists={initialArtists}
+          initialProducts={initialProducts}
+          allProducts={allProducts}
+          discoveryData={discoveryData}
+          initialFilters={filters}
         />
-      )}
+      </Suspense>
     </div>
   )
 }
