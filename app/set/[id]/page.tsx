@@ -76,12 +76,15 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
       userId = user.id
 
       // Fetch preferred currency + price source from user profile
-      const { data: profileRow } = await supabaseAdmin
+      const { data: profileRow, error: profileError } = await supabaseAdmin
         .from('users')
         .select('preferred_currency, price_source')
         .eq('id', user.id)
         .maybeSingle()
 
+      if (profileError) {
+        console.error('[set page] Failed to read user profile preferences:', profileError)
+      }
       if (profileRow?.preferred_currency) {
         currency = profileRow.preferred_currency
       }

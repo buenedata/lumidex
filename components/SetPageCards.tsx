@@ -83,8 +83,13 @@ export default function SetPageCards({
   const [legendVariants, setLegendVariants] = useState<QuickAddVariant[]>([])
 
   const { userCards: storeUserCards } = useCollectionStore()
-  const { user } = useAuthStore()
+  const { user, profile } = useAuthStore()
   const isAuthenticated = !!user
+
+  // Prefer the client-side profile's preferred_currency (always up-to-date after
+  // login) over the server-passed prop, which may have defaulted to 'USD' if the
+  // server-side supabaseAdmin query failed silently.
+  const effectiveCurrency = (profile as any)?.preferred_currency ?? currency
 
   // ── Search filter ────────────────────────────────────────────────────────
   const filteredCards = searchQuery.trim()
@@ -178,7 +183,7 @@ export default function SetPageCards({
                 { label: 'Most Expensive', value: statMostExpensive  ?? '—' },
                 { label: 'Set Value',      value: statSetValue       ?? '—' },
                 ...(isAuthenticated && myCollectedValue > 0
-                  ? [{ label: 'My Collection', value: formatPrice(myCollectedValue, currency) }]
+                  ? [{ label: 'My Collection', value: formatPrice(myCollectedValue, effectiveCurrency) }]
                   : []
                 ),
               ].map(({ label, value }) => (
@@ -245,7 +250,7 @@ export default function SetPageCards({
                           <td className="py-2.5 pr-4 text-right">
                             {priceUSD != null ? (
                               <span className="text-success font-semibold">
-                                {formatPrice(priceUSD, currency)}
+                                {formatPrice(priceUSD, effectiveCurrency)}
                               </span>
                             ) : (
                               <span className="text-muted">—</span>
@@ -464,7 +469,7 @@ export default function SetPageCards({
               initialCardId={initialCardId}
               collectionGoal={collectionGoal}
               cardPricesUSD={cardPricesUSD}
-              currency={currency}
+              currency={effectiveCurrency}
               priceSource={priceSource}
               onVariantsLegendChange={setLegendVariants}
               disableGreyOut={disableGreyOut}

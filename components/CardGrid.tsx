@@ -183,6 +183,10 @@ function getVariantMarketPrice(variantName: string, row: CardPriceRow): number |
 export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', priceSource = 'tcgplayer', onVariantsLegendChange, disableGreyOut = false }: CardGridProps) {
   const { updateCardQuantity, userCards: storeUserCards, fetchUserCards } = useCollectionStore()
   const { user, isLoading, profile } = useAuthStore()
+  // Prefer the client-side profile's preferred_currency (always reliable after login)
+  // over the server-passed prop, which may have defaulted to 'USD' if the server-side
+  // supabaseAdmin profile query failed silently.
+  const effectiveCurrency = (profile?.preferred_currency as string | undefined) ?? currency
   // disableGreyOut overrides the user's setting — used on pages like browse where
   // collection status should not affect card appearance (only set pages grey out).
   const greyOutUnowned: boolean = !disableGreyOut && (profile?.grey_out_unowned ?? false)
@@ -961,7 +965,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                   <span className="text-xs font-medium text-secondary tabular-nums">#{card.number}</span>
                   <span className="text-sm font-semibold text-price tabular-nums">
                     {cardPricesUSD?.[card.id] != null
-                      ? formatPrice(cardPricesUSD[card.id], currency)
+                      ? formatPrice(cardPricesUSD[card.id], effectiveCurrency)
                       : ''}
                   </span>
                 </div>
@@ -1106,7 +1110,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                   {/* Price history line chart */}
                   <PriceChart
                     history={priceHistoryCache.get(`${selectedCard.id}:${priceChartRange}`) ?? []}
-                    currency={currency ?? 'USD'}
+                    currency={effectiveCurrency}
                     isLoading={isLoadingHistory && !priceHistoryCache.has(`${selectedCard.id}:${priceChartRange}`)}
                     range={priceChartRange}
                     onRangeChange={(r) => {
@@ -1161,7 +1165,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                                     <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: r.dot }} />
                                     <span className="text-secondary">{r.label}</span>
                                   </div>
-                                  <span className="font-semibold tabular-nums text-success">{formatPrice(r.price!, currency ?? 'USD')}</span>
+                                  <span className="font-semibold tabular-nums text-success">{formatPrice(r.price!, effectiveCurrency)}</span>
                                 </div>
                               ))}
                             </div>
@@ -1174,9 +1178,9 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                             <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">CardMarket</h3>
                             <div className="space-y-1.5">
                               {[
-                                { label: 'Avg Sell',   val: row.cm_avg_sell != null ? formatPrice(row.cm_avg_sell * EUR_TO_USD, currency ?? 'USD') : null },
-                                { label: 'Trend',      val: row.cm_trend    != null ? formatPrice(row.cm_trend    * EUR_TO_USD, currency ?? 'USD') : null },
-                                { label: '30-day Avg', val: row.cm_avg_30d  != null ? formatPrice(row.cm_avg_30d  * EUR_TO_USD, currency ?? 'USD') : null },
+                                { label: 'Avg Sell',   val: row.cm_avg_sell != null ? formatPrice(row.cm_avg_sell * EUR_TO_USD, effectiveCurrency) : null },
+                                { label: 'Trend',      val: row.cm_trend    != null ? formatPrice(row.cm_trend    * EUR_TO_USD, effectiveCurrency) : null },
+                                { label: '30-day Avg', val: row.cm_avg_30d  != null ? formatPrice(row.cm_avg_30d  * EUR_TO_USD, effectiveCurrency) : null },
                               ].filter(r => r.val != null).map(r => (
                                 <div key={r.label} className="flex items-center justify-between text-sm bg-elevated rounded-lg px-3 py-2 border border-subtle">
                                   <span className="text-secondary">{r.label}</span>
@@ -1204,7 +1208,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                                       />
                                     </div>
                                     <span className="text-xs font-semibold text-success tabular-nums w-16 text-right shrink-0">
-                                      {formatPrice(g.price, currency ?? 'USD')}
+                                      {formatPrice(g.price, effectiveCurrency)}
                                     </span>
                                   </div>
                                 )
@@ -1261,7 +1265,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                               {(() => {
                                 const priceRow = cardPriceCache.get(selectedCard.id)
                                 const price = priceRow ? getVariantMarketPrice(variant.name, priceRow) : null
-                                return price != null ? formatPrice(price, currency ?? 'USD') : isLoadingPrice ? '…' : '—'
+                                return price != null ? formatPrice(price, effectiveCurrency) : isLoadingPrice ? '…' : '—'
                               })()}
                             </div>
                           </div>
