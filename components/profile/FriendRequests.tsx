@@ -8,10 +8,12 @@ import type { FriendEntry } from './FriendsList'
 
 interface FriendRequestsProps {
   initialRequests: FriendEntry[]
+  /** Called after a request is successfully accepted — lets the parent re-fetch the friends list */
+  onFriendAccepted?: () => void
   className?: string
 }
 
-export default function FriendRequests({ initialRequests, className }: FriendRequestsProps) {
+export default function FriendRequests({ initialRequests, onFriendAccepted, className }: FriendRequestsProps) {
   const router = useRouter()
   const [requests, setRequests] = useState<FriendEntry[]>(initialRequests)
   const [loadingId, setLoadingId] = useState<string | null>(null)
@@ -21,14 +23,18 @@ export default function FriendRequests({ initialRequests, className }: FriendReq
   async function handleAccept(request: FriendEntry) {
     setLoadingId(request.friendship_id)
     try {
-      await fetch(`/api/friendships/${request.friendship_id}`, {
+      const res = await fetch(`/api/friendships/${request.friendship_id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'accepted' }),
       })
+      if (!res.ok) {
+        console.error('FriendRequests: accept returned', res.status)
+        return
+      }
       setRequests(prev => prev.filter(r => r.friendship_id !== request.friendship_id))
-      // Reload so the friends list updates
-      router.refresh()
+      // Notify parent to re-fetch accepted friends so the list + count update immediately
+      onFriendAccepted?.()
     } catch (err) {
       console.error('FriendRequests: accept failed', err)
     } finally {

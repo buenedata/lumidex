@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
@@ -342,51 +342,55 @@ export default function ProfilePage() {
   }, [userId, currentUser?.id])
 
   // ── Load friends data ─────────────────────────────────────────────────────────
-  useEffect(() => {
+  // Extracted to useCallback so FriendRequests can call it directly after an
+  // accept, which causes an immediate re-fetch rather than needing a full
+  // page reload (router.refresh() does not re-trigger useEffect on client pages).
+  const loadFriends = useCallback(async () => {
     if (!userId) return
-
-    const loadFriends = async () => {
-      setFriendsLoading(true)
-      try {
-        if (isOwnProfile) {
-          // Own profile: full friend list + incoming pending requests
-          const res = await fetch('/api/friendships')
-          if (res.ok) {
-            const data = await res.json()
-            setAcceptedFriends(data.accepted ?? [])
-            setPendingIncoming(data.pending_incoming ?? [])
-            setPendingOutgoing(data.pending_outgoing ?? [])
-          }
-        } else {
-          // Another user's profile: run both fetches in parallel
-          const [publicFriendsRes, friendshipStatusRes] = await Promise.all([
-            // The profile user's public friends list
-            fetch(`/api/friendships/public/${userId}`),
-            // Current viewer's specific friendship with this user (login required)
-            currentUser
-              ? fetch(`/api/friendships?user_id=${userId}`)
-              : Promise.resolve(null),
-          ])
-
-          if (publicFriendsRes.ok) {
-            const data = await publicFriendsRes.json()
-            setAcceptedFriends(data.friends ?? [])
-          }
-
-          if (friendshipStatusRes?.ok) {
-            const data = await friendshipStatusRes.json()
-            if (data.friendship) setCurrentUserFriendship(data.friendship)
-          }
+    setFriendsLoading(true)
+    try {
+      if (isOwnProfile) {
+        // Own profile: full friend list + incoming pending requests
+        const res = await fetch('/api/friendships')
+        if (res.ok) {
+          const data = await res.json()
+          setAcceptedFriends(data.accepted ?? [])
+          setPendingIncoming(data.pending_incoming ?? [])
+          setPendingOutgoing(data.pending_outgoing ?? [])
         }
-      } catch (err) {
-        console.error('loadFriends error:', err)
-      } finally {
-        setFriendsLoading(false)
-      }
-    }
+      } else {
+        // Another user's profile: run both fetches in parallel
+        const [publicFriendsRes, friendshipStatusRes] = await Promise.all([
+          // The profile user's public friends list
+          fetch(`/api/friendships/public/${userId}`),
+          // Current viewer's specific friendship with this user (login required)
+          currentUser
+            ? fetch(`/api/friendships?user_id=${userId}`)
+            : Promise.resolve(null),
+        ])
 
-    loadFriends()
+        if (publicFriendsRes.ok) {
+          const data = await publicFriendsRes.json()
+          setAcceptedFriends(data.friends ?? [])
+        }
+
+        if (friendshipStatusRes?.ok) {
+          const data = await friendshipStatusRes.json()
+          if (data.friendship) setCurrentUserFriendship(data.friendship)
+        }
+      }
+    } catch (err) {
+      console.error('loadFriends error:', err)
+    } finally {
+      setFriendsLoading(false)
+    }
+  // currentUser?.id instead of currentUser to avoid re-creating on unrelated user-object changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, isOwnProfile, currentUser?.id])
+
+  useEffect(() => {
+    loadFriends()
+  }, [loadFriends])
 
   // ── Setup wizard complete ─────────────────────────────────────────────────────
   function handleSetupComplete(
@@ -675,7 +679,10 @@ export default function ProfilePage() {
 
             {/* ── Friend Requests — incoming (own profile only) ─────────────────── */}
             {isOwnProfile && pendingIncoming.length > 0 && (
-              <FriendRequests initialRequests={pendingIncoming} />
+              <FriendRequests
+                initialRequests={pendingIncoming}
+                onFriendAccepted={loadFriends}
+              />
             )}
 
             {/* ── Outgoing Requests (own profile only) ──────────────────────────── */}
