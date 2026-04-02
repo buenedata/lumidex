@@ -404,6 +404,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
         console.log('[CardGrid] batch variants response status:', response.status)
         if (!response.ok) {
           const errBody = await response.json().catch(() => ({}))
+          console.log('[CardGrid] variants 500 debug:', JSON.stringify(errBody?.debug))
           throw new Error(
             `Failed to load batch variants (HTTP ${response.status}): ${errBody?.error ?? 'unknown'} — ${errBody?.detail ?? ''} (code: ${errBody?.code ?? '?'})`
           )

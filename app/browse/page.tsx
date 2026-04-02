@@ -216,7 +216,7 @@ async function fetchCardPrices(
       .in('card_id', cardIds)
 
     const result: Record<string, number> = {}
-    for (const row of data ?? []) {
+    for (const row of (data ?? []) as any[]) {
       let price: number | null = null
       if (ps === 'tcgplayer') {
         price = row.tcgp_market ?? null
@@ -262,7 +262,7 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
         .from('users')
         .select('preferred_currency, price_source')
         .eq('id', user.id)
-        .maybeSingle()
+        .maybeSingle() as any
       if (profile?.preferred_currency) currency    = profile.preferred_currency
       if (profile?.price_source)       priceSource = profile.price_source as PriceSource
     }
