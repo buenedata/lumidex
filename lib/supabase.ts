@@ -21,10 +21,17 @@ export const supabase = createBrowserClient(supabaseUrl, supabasePublishableKey)
 
 // Server-side admin client with service role key — bypasses RLS.
 // Does not need cookie-based auth since it uses the service role key directly.
+// auth.persistSession + autoRefreshToken MUST be false; without them the
+// @supabase/supabase-js v2.x client (especially with the new sb_secret_ key
+// format) will attempt token refresh / auth init that corrupts the API key,
+// causing "Unregistered API key" errors on production.
 const supabaseServiceKey = process.env.SUPABASE_SECRET_KEY
+const _adminOpts = {
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+}
 export const supabaseAdmin = supabaseServiceKey
-  ? createClient(supabaseUrl, supabaseServiceKey)
-  : (createClient(supabaseUrl, supabasePublishableKey) as ReturnType<typeof createClient>)
+  ? createClient(supabaseUrl, supabaseServiceKey, _adminOpts)
+  : (createClient(supabaseUrl, supabasePublishableKey, _adminOpts) as ReturnType<typeof createClient>)
 
 // Database types
 export type Database = {
