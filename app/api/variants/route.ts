@@ -335,12 +335,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'cardIds must be non-empty' }, { status: 400 })
       }
 
-      // Debug: log which key/URL supabaseAdmin is actually using at runtime
-      const _dbgUrl  = process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(0, 30)
-      const _dbgSvc  = process.env.SUPABASE_SECRET_KEY?.slice(0, 15)
-      const _dbgPub  = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.slice(0, 15)
-      console.log('[variants POST] url_prefix:', _dbgUrl, '| svc_key_prefix:', _dbgSvc ?? 'MISSING', '| pub_key_prefix:', _dbgPub)
-
       // 1. Global variant catalogue
       const { data: variants, error: variantsError } = await supabaseAdmin
         .from('variants')
@@ -351,12 +345,7 @@ export async function POST(request: NextRequest) {
 
       if (variantsError) {
         console.error('[variants POST batch] global variants:', variantsError)
-        return NextResponse.json({
-          error: 'Failed to fetch global variants',
-          detail: variantsError.message,
-          code: variantsError.code,
-          debug: { url_prefix: _dbgUrl, svc_key_prefix: _dbgSvc ?? 'MISSING', pub_key_prefix: _dbgPub },
-        }, { status: 500 })
+        return NextResponse.json({ error: 'Failed to fetch global variants' }, { status: 500 })
       }
 
       if (!variants || variants.length === 0) {

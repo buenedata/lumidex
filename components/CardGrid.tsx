@@ -316,7 +316,6 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
   // Load variants for a specific card
   const loadCardVariants = async (cardId: string, quickAddOnly = false) => {
-    console.log('[CardGrid] loadCardVariants cardId:', cardId, 'quickAddOnly:', quickAddOnly, 'userId:', userId)
     if (isLoadingVariants.has(cardId)) {
       return
     }
@@ -389,7 +388,6 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   // NOTE: depends on `cards` (stable prop), NOT `filteredCards` (derived from cardQuickVariants)
   // to prevent an infinite update loop.
   useEffect(() => {
-    console.log('[CardGrid] batch load effect — userId:', userId, 'cards.length:', cards.length)
     if (!userId || cards.length === 0) return
     
     const loadAllVariants = async () => {
@@ -401,17 +399,14 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ cardIds: cards.map(c => c.id), userId }),
         })
-        console.log('[CardGrid] batch variants response status:', response.status)
         if (!response.ok) {
           const errBody = await response.json().catch(() => ({}))
-          console.log('[CardGrid] variants 500 debug:', JSON.stringify(errBody?.debug))
           throw new Error(
-            `Failed to load batch variants (HTTP ${response.status}): ${errBody?.error ?? 'unknown'} — ${errBody?.detail ?? ''} (code: ${errBody?.code ?? '?'})`
+            `Failed to load batch variants (HTTP ${response.status}): ${errBody?.error ?? 'unknown'}`
           )
         }
         
         const batchResults: Record<string, VariantWithQuantity[]> = await response.json()
-        console.log('[CardGrid] batch results cardId count:', Object.keys(batchResults).length, 'first card variants:', Object.values(batchResults)[0]?.map((v: any) => v.name))
         
         const newQuickVariants    = new Map<string, QuickAddVariant[]>()
         const newCustomCounts     = new Map<string, number>()
