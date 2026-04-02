@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import Image from 'next/image'
+import Link from 'next/link'
 import { PokemonCard, UserCard, VariantWithQuantity, QuickAddVariant, VARIANT_COLOR_CLASSES, CollectionGoal, PriceHistoryPoint, FriendCardOwner, PriceSource } from '@/types'
 import { useCollectionStore, useAuthStore } from '@/lib/store'
 import Modal from '@/components/ui/Modal'
@@ -971,7 +972,11 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                 </div>
                 {/* Row 3: Set name — only shown on browse/search where cards span multiple sets */}
                 {card.set_name && (
-                  <div className="flex items-center gap-1 mt-0.5">
+                  <Link
+                    href={`/set/${card.set_id}`}
+                    className="flex items-center gap-1 mt-0.5 hover:text-accent transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     {card.set_logo_url && (
                       <img
                         src={card.set_logo_url}
@@ -980,7 +985,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                       />
                     )}
                     <span className="text-xs text-muted truncate leading-tight">{card.set_name}</span>
-                  </div>
+                  </Link>
                 )}
               </div>
             </div>

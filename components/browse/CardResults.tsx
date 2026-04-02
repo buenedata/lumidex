@@ -80,46 +80,55 @@ export default function CardResults({ cards, query, artistName }: CardResultsPro
           Fewer columns = larger cards = same visual weight as set page. */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-4">
         {cards.map(card => (
-          <Link
-            key={card.id}
-            href={`/set/${card.set.id}?card=${card.id}`}
-            className="group flex flex-col cursor-pointer"
-          >
+          <div key={card.id} className="group flex flex-col cursor-pointer">
             {/*
              * Image container: uses the same card-type-* CSS class as CardGrid.
              * On hover the CSS rule changes border-color and adds a coloured box-shadow
              * matching the card's Pokémon type — exactly as on the set detail page.
              */}
             {/* aspect-[5/7] = 2.5:3.5 — the exact Pokémon card image ratio */}
-            <div
-              className={cn(
-                'relative w-full aspect-[5/7] rounded-lg overflow-hidden border border-subtle',
-                'transition-all duration-200',
-                getTypeGlowClass(card.type),
-              )}
-            >
-              {card.image_url ? (
-                <img
-                  src={card.image_url}
-                  alt={card.name}
-                  className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200 pointer-events-none"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-2xl text-muted">
-                  🎴
-                </div>
-              )}
-            </div>
+            <Link href={`/set/${card.set.id}?card=${card.id}`} className="block">
+              <div
+                className={cn(
+                  'relative w-full aspect-[5/7] rounded-lg overflow-hidden border border-subtle',
+                  'transition-all duration-200',
+                  getTypeGlowClass(card.type),
+                )}
+              >
+                {card.image_url ? (
+                  <img
+                    src={card.image_url}
+                    alt={card.name}
+                    className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200 pointer-events-none"
+                    loading="lazy"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement
+                      target.src = '/pokemon_card_backside.png'
+                    }}
+                  />
+                ) : (
+                  <img
+                    src="/pokemon_card_backside.png"
+                    alt={card.name}
+                    className="w-full h-full object-contain pointer-events-none"
+                  />
+                )}
+              </div>
+            </Link>
 
             {/* Card info below the image */}
             <div className="mt-1.5 px-0.5 space-y-0.5 min-w-0">
-              <p className="text-xs font-medium text-primary truncate leading-tight">
-                {card.name}
-              </p>
+              <Link href={`/set/${card.set.id}?card=${card.id}`}>
+                <p className="text-xs font-medium text-primary truncate leading-tight hover:text-accent transition-colors">
+                  {card.name}
+                </p>
+              </Link>
 
-              {/* Set name with tiny logo */}
-              <p className="text-xs text-muted truncate leading-tight flex items-center gap-1">
+              {/* Set name with tiny logo — links to the set page */}
+              <Link
+                href={`/set/${card.set.id}`}
+                className="text-xs text-muted truncate leading-tight flex items-center gap-1 hover:text-accent transition-colors"
+              >
                 {card.set.logo_url && (
                   <img
                     src={card.set.logo_url}
@@ -129,14 +138,14 @@ export default function CardResults({ cards, query, artistName }: CardResultsPro
                   />
                 )}
                 <span className="truncate">{card.set.name}</span>
-              </p>
+              </Link>
 
               {/* Card number */}
               {card.number && (
                 <p className="text-xs text-muted leading-tight">#{card.number}</p>
               )}
             </div>
-          </Link>
+          </div>
         ))}
       </div>
     </div>
