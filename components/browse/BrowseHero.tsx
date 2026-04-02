@@ -130,7 +130,7 @@ export default function BrowseHero({ mode, committedQuery, allProducts }: Browse
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div
-      className="relative overflow-hidden border-b border-subtle"
+      className="relative border-b border-subtle"
       style={{ backgroundColor: 'var(--color-bg-surface)' }}
     >
       {/* Radial accent glow — top centre */}
