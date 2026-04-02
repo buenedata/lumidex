@@ -1,6 +1,5 @@
 'use client'
 
-import { useMemo } from 'react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import type { CardSearchResult } from './types'
@@ -22,7 +21,6 @@ function rarityBadge(rarity: string): string {
 }
 
 function shortRarity(rarity: string): string {
-  if (rarity.length <= 12) return rarity
   const map: Record<string, string> = {
     'Special Illustration Rare': 'SIR',
     'Illustration Rare':         'IR',
@@ -32,40 +30,21 @@ function shortRarity(rarity: string): string {
     'Radiant Rare':              'Radiant',
     'Amazing Rare':              'Amazing',
   }
-  return map[rarity] ?? rarity.slice(0, 10) + '…'
+  return map[rarity] ?? (rarity.length > 12 ? rarity.slice(0, 10) + '…' : rarity)
 }
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface SetGroup {
-  set:   CardSearchResult['set']
-  cards: CardSearchResult[]
-}
+// ── Props ─────────────────────────────────────────────────────────────────────
 
 interface CardResultsProps {
   cards:       CardSearchResult[]
   query:       string
-  /** When provided, renders "Cards by {artistName}" header instead of query header */
+  /** When provided, renders "Cards by {artistName}" header */
   artistName?: string
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function CardResults({ cards, query, artistName }: CardResultsProps) {
-  // Group by set, sorted newest first
-  const groups = useMemo<SetGroup[]>(() => {
-    const map = new Map<string, SetGroup>()
-    for (const card of cards) {
-      const key = card.set.id || '__unknown__'
-      if (!map.has(key)) map.set(key, { set: card.set, cards: [] })
-      map.get(key)!.cards.push(card)
-    }
-    return Array.from(map.values()).sort((a, b) =>
-      (b.set.release_date || '').localeCompare(a.set.release_date || '')
-    )
-  }, [cards])
-
-  const setCount = groups.length
 
   // ── Empty state ─────────────────────────────────────────────────────────────
   if (cards.length === 0) {
@@ -91,6 +70,8 @@ export default function CardResults({ cards, query, artistName }: CardResultsPro
     )
   }
 
+  const setCount = new Set(cards.map(c => c.set.id).filter(Boolean)).size
+
   // ── Results ─────────────────────────────────────────────────────────────────
   return (
     <div className="max-w-screen-2xl mx-auto px-6 py-6">
@@ -112,78 +93,66 @@ export default function CardResults({ cards, query, artistName }: CardResultsPro
         </p>
       </div>
 
-      {/* Set groups */}
-      <div className="space-y-10">
-        {groups.map(group => (
-          <section key={group.set.id}>
-
-            {/* Set header row */}
-            <div className="flex items-center gap-3 mb-3 pb-2 border-b border-subtle">
-              {group.set.logo_url
-                ? <img src={group.set.logo_url} alt={group.set.name} className="h-6 w-auto object-contain shrink-0" loading="lazy" />
-                : <span className="text-base shrink-0">🃏</span>
+      {/* Flat card grid — same density as the set detail page */}
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 2xl:grid-cols-12 gap-3">
+        {cards.map(card => (
+          <Link
+            key={card.id}
+            href={`/set/${card.set.id}?card=${card.id}`}
+            className="group flex flex-col"
+          >
+            {/* Card image */}
+            <div className="w-full aspect-[2/3] overflow-hidden rounded-lg bg-surface border border-subtle group-hover:border-accent/40 transition-all shadow-sm group-hover:shadow-lg group-hover:shadow-accent/10 group-hover:-translate-y-0.5">
+              {card.image_url
+                ? (
+                  <img
+                    src={card.image_url}
+                    alt={card.name}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                )
+                : (
+                  <div className="w-full h-full flex items-center justify-center text-2xl text-muted">🃏</div>
+                )
               }
-              <div className="flex-1 min-w-0">
-                <Link
-                  href={`/set/${group.set.id}`}
-                  className="text-sm font-semibold text-primary hover:text-accent transition-colors"
-                >
-                  {group.set.name}
-                </Link>
-                {group.set.series && (
-                  <span className="text-xs text-muted ml-2">{group.set.series}</span>
+            </div>
+
+            {/* Card info below image */}
+            <div className="mt-1.5 px-0.5 space-y-0.5 min-w-0">
+              <p className="text-xs font-medium text-primary truncate leading-tight">
+                {card.name}
+              </p>
+
+              {/* Set name (small, muted) */}
+              <p className="text-xs text-muted truncate leading-tight flex items-center gap-1">
+                {card.set.logo_url && (
+                  <img
+                    src={card.set.logo_url}
+                    alt=""
+                    className="h-3 w-auto object-contain shrink-0 inline-block"
+                    loading="lazy"
+                  />
+                )}
+                <span className="truncate">{card.set.name}</span>
+              </p>
+
+              {/* Number + rarity */}
+              <div className="flex items-center gap-1 flex-wrap">
+                {card.number && (
+                  <span className="text-xs text-muted">#{card.number}</span>
+                )}
+                {card.rarity && (
+                  <span className={cn(
+                    'text-xs px-1 py-px rounded font-medium leading-none',
+                    rarityBadge(card.rarity),
+                  )}>
+                    {shortRarity(card.rarity)}
+                  </span>
                 )}
               </div>
-              <span className="text-xs text-muted shrink-0">
-                {group.cards.length} card{group.cards.length !== 1 ? 's' : ''}
-              </span>
-              <Link
-                href={`/set/${group.set.id}`}
-                className="text-xs text-accent hover:underline shrink-0"
-              >
-                View set →
-              </Link>
             </div>
-
-            {/* Card grid */}
-            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-7 lg:grid-cols-9 xl:grid-cols-11 gap-3">
-              {group.cards.map(card => (
-                <Link
-                  key={card.id}
-                  href={`/set/${card.set.id}?card=${card.id}`}
-                  className="group flex flex-col items-center"
-                >
-                  {/* Card image */}
-                  <div className="w-full aspect-[2/3] overflow-hidden rounded-lg bg-surface border border-subtle group-hover:border-accent/40 transition-all shadow-sm group-hover:shadow-md group-hover:shadow-accent/10 group-hover:-translate-y-0.5">
-                    {card.image_url
-                      ? <img src={card.image_url} alt={card.name} className="w-full h-full object-cover" loading="lazy" />
-                      : <div className="w-full h-full flex items-center justify-center text-xl text-muted">🃏</div>
-                    }
-                  </div>
-
-                  {/* Card info */}
-                  <div className="w-full mt-1.5 space-y-0.5 px-0.5">
-                    <p className="text-xs font-medium text-primary truncate leading-tight">
-                      {card.name}
-                    </p>
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {card.number && (
-                        <span className="text-xs text-muted">#{card.number}</span>
-                      )}
-                      {card.rarity && (
-                        <span className={cn(
-                          'text-xs px-1 py-px rounded font-medium leading-none',
-                          rarityBadge(card.rarity),
-                        )}>
-                          {shortRarity(card.rarity)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </section>
+          </Link>
         ))}
       </div>
     </div>
