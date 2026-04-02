@@ -90,9 +90,10 @@ export default function CardResults({ cards, query, artistName }: CardResultsPro
              * On hover the CSS rule changes border-color and adds a coloured box-shadow
              * matching the card's Pokémon type — exactly as on the set detail page.
              */}
+            {/* aspect-[5/7] = 2.5:3.5 — the exact Pokémon card image ratio */}
             <div
               className={cn(
-                'relative w-full aspect-[2/3] rounded-lg overflow-hidden border border-subtle',
+                'relative w-full aspect-[5/7] rounded-lg overflow-hidden border border-subtle',
                 'transition-all duration-200',
                 getTypeGlowClass(card.type),
               )}
@@ -101,7 +102,7 @@ export default function CardResults({ cards, query, artistName }: CardResultsPro
                 <img
                   src={card.image_url}
                   alt={card.name}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200 pointer-events-none"
+                  className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-200 pointer-events-none"
                   loading="lazy"
                 />
               ) : (
