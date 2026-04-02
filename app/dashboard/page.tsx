@@ -163,45 +163,54 @@ export default function DashboardPage() {
 
               {/* ── Your Sets (collapsible) ────────────────────────────── */}
               <div>
-                {/* Header row — always visible */}
-                <button
-                  type="button"
-                  onClick={() => setSetsExpanded(prev => !prev)}
-                  className="w-full flex items-center justify-between mb-4 group"
-                >
-                  <div className="flex items-center gap-2">
-                    <h2
-                      className="text-lg font-semibold text-primary"
-                      style={{ fontFamily: 'var(--font-space-grotesk)' }}
-                    >
-                      Your Sets
-                    </h2>
-                    {/* summary pills */}
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-surface border border-subtle text-secondary font-medium">
-                      {setsTracked} {setsTracked === 1 ? 'set' : 'sets'}
-                    </span>
-                    {completedSets > 0 && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-price/10 border border-price/30 text-price font-medium">
-                        {completedSets} complete
+                {/* Accordion header — styled card so it's unmistakably clickable */}
+                <div className={`bg-surface border border-subtle rounded-xl overflow-hidden mb-4 transition-colors duration-150 ${setsExpanded ? 'border-accent/40' : 'hover:border-accent/30'}`}>
+                  <button
+                    type="button"
+                    onClick={() => setSetsExpanded(prev => !prev)}
+                    className="w-full flex items-center justify-between px-4 py-3 group"
+                  >
+                    {/* Left: title + pills */}
+                    <div className="flex items-center gap-2 min-w-0">
+                      {/* Animated chevron — left side, inside a small badge */}
+                      <span
+                        className={`shrink-0 w-6 h-6 rounded-md flex items-center justify-center bg-elevated border border-subtle text-muted transition-transform duration-200 ${setsExpanded ? 'rotate-180' : ''}`}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                        </svg>
                       </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={e => { e.stopPropagation(); setShowAddSet(true) }}
-                    >
-                      + Add Set
-                    </Button>
-                    {/* chevron */}
-                    <span className={`text-muted transition-transform duration-200 ${setsExpanded ? 'rotate-180' : ''}`}>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </span>
-                  </div>
-                </button>
+                      <h2
+                        className="text-lg font-semibold text-primary"
+                        style={{ fontFamily: 'var(--font-space-grotesk)' }}
+                      >
+                        Your Sets
+                      </h2>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-elevated border border-subtle text-secondary font-medium">
+                        {setsTracked} {setsTracked === 1 ? 'set' : 'sets'}
+                      </span>
+                      {completedSets > 0 && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-price/10 border border-price/30 text-price font-medium">
+                          ✓ {completedSets} complete
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Right: expand hint + add button */}
+                    <div className="flex items-center gap-2 shrink-0 ml-3">
+                      <span className="text-xs text-muted group-hover:text-secondary transition-colors duration-150 hidden sm:block">
+                        {setsExpanded ? 'Hide sets' : 'Show sets'}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={e => { e.stopPropagation(); setShowAddSet(true) }}
+                      >
+                        + Add Set
+                      </Button>
+                    </div>
+                  </button>
+                </div>
 
                 {/* Collapsible grid */}
                 {setsExpanded && (
