@@ -4,7 +4,6 @@ import './globals.css'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
 import ScrollToTop from '@/components/ui/ScrollToTop'
-import FeaturebaseWidget from '@/components/FeaturebaseWidget'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -37,7 +36,6 @@ export default function RootLayout({
         </main>
         <Footer />
         <ScrollToTop />
-        <FeaturebaseWidget />
       </body>
     </html>
   )
