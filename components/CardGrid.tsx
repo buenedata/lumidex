@@ -965,6 +965,19 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                       : ''}
                   </span>
                 </div>
+                {/* Row 3: Set name — only shown on browse/search where cards span multiple sets */}
+                {card.set_name && (
+                  <div className="flex items-center gap-1 mt-0.5">
+                    {card.set_logo_url && (
+                      <img
+                        src={card.set_logo_url}
+                        alt=""
+                        className="h-3 w-auto object-contain shrink-0"
+                      />
+                    )}
+                    <span className="text-xs text-muted truncate leading-tight">{card.set_name}</span>
+                  </div>
+                )}
               </div>
             </div>
           )

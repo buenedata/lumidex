@@ -108,6 +108,10 @@ export interface PokemonCard {
   image_small?: string | null;
   image_large?: string | null;
   image_url?: string; // Computed fallback for backward compatibility
+  /** Set display name — only populated on the browse/search page where cards span multiple sets */
+  set_name?: string | null;
+  /** Set logo URL — only populated on the browse/search page */
+  set_logo_url?: string | null;
 }
 
 /** A single data point in the price history chart. */

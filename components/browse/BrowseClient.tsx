@@ -3,7 +3,6 @@
 import { useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import BrowseHero      from './BrowseHero'
-import BrowseFilters   from './BrowseFilters'
 import ArtistResults   from './ArtistResults'
 import ProductResults  from './ProductResults'
 import BrowseDiscovery from './BrowseDiscovery'
@@ -11,21 +10,23 @@ import SetPageCards    from '@/components/SetPageCards'
 import type { PokemonCard, PriceSource } from '@/types'
 import type {
   SearchMode, CardSearchResult, ArtistResult,
-  BrowseProduct, DiscoveryData, ActiveFilters,
+  BrowseProduct, DiscoveryData,
 } from './types'
 
 // ── Helper: convert CardSearchResult → PokemonCard (for SetPageCards / CardGrid) ──
 function asPokemonCards(cards: CardSearchResult[]): PokemonCard[] {
   return cards.map(c => ({
-    id:         c.id,
-    set_id:     c.set.id,
-    name:       c.name,
-    number:     c.number,
-    rarity:     c.rarity,
-    type:       c.type,
-    image:      c.image_url,
-    image_url:  c.image_url,   // legacy field expected by CardGrid
-    created_at: '',
+    id:           c.id,
+    set_id:       c.set.id,
+    name:         c.name,
+    number:       c.number,
+    rarity:       c.rarity,
+    type:         c.type,
+    image:        c.image_url,
+    image_url:    c.image_url,   // legacy field expected by CardGrid
+    created_at:   '',
+    set_name:     c.set.name,
+    set_logo_url: c.set.logo_url,
   }))
 }
 
@@ -39,7 +40,6 @@ interface BrowseClientProps {
   initialProducts: BrowseProduct[]
   allProducts:     BrowseProduct[]
   discoveryData:   DiscoveryData | null
-  initialFilters:  ActiveFilters
   /** Card UUID → best market price in USD (server-fetched) */
   cardPricesUSD:   Record<string, number>
   currency:        string
@@ -56,7 +56,6 @@ export default function BrowseClient({
   initialProducts,
   allProducts,
   discoveryData,
-  initialFilters,
   cardPricesUSD,
   currency,
   priceSource,
@@ -65,12 +64,6 @@ export default function BrowseClient({
   const searchParams = useSearchParams()
 
   const mode: SearchMode = (searchParams.get('mode') as SearchMode) ?? initialMode
-
-  const filters: ActiveFilters = {
-    type:      searchParams.get('type')      ?? initialFilters.type,
-    rarity:    searchParams.get('rarity')    ?? initialFilters.rarity,
-    supertype: searchParams.get('supertype') ?? initialFilters.supertype,
-  }
 
   const hasQuery     = !!(committedQuery || artistQuery)
   const isArtistView = !!artistQuery
@@ -84,13 +77,6 @@ export default function BrowseClient({
   const handleArtistSelect = useCallback((artist: ArtistResult) => {
     router.push(`/browse?artist=${encodeURIComponent(artist.name)}`)
   }, [router])
-
-  const handleFilterChange = useCallback((key: keyof ActiveFilters, value: string) => {
-    const params = new URLSearchParams(searchParams.toString())
-    if (value) params.set(key, value)
-    else params.delete(key)
-    router.push(`/browse?${params.toString()}`)
-  }, [router, searchParams])
 
   // ── Shared SetPageCards props for both cards-mode and artist-view ──────────
   const pokemonCards = asPokemonCards(initialCards)
@@ -141,6 +127,7 @@ export default function BrowseClient({
             cardPricesUSD={cardPricesUSD}
             currency={currency}
             priceSource={priceSource}
+            disableGreyOut={true}
           />
         </>
 
@@ -149,8 +136,6 @@ export default function BrowseClient({
           {/* Cards mode */}
           {mode === 'cards' && (
             <>
-              <BrowseFilters filters={filters} onChange={handleFilterChange} />
-
               {/* Results header */}
               <div className="max-w-screen-2xl mx-auto px-6 pt-6 pb-2">
                 <h2
@@ -168,16 +153,17 @@ export default function BrowseClient({
               {/* Full CardGrid with card modal — identical to set pages */}
               {pokemonCards.length > 0 ? (
                 <SetPageCards
-                  cards={pokemonCards}
-                  setTotal={pokemonCards.length}
-                  setName={committedQuery}
-                  showSearch={false}
-                  setId=""
-                  hasPromos={hasPromos}
-                  cardPricesUSD={cardPricesUSD}
-                  currency={currency}
-                  priceSource={priceSource}
-                />
+                    cards={pokemonCards}
+                    setTotal={pokemonCards.length}
+                    setName={committedQuery}
+                    showSearch={false}
+                    setId=""
+                    hasPromos={hasPromos}
+                    cardPricesUSD={cardPricesUSD}
+                    currency={currency}
+                    priceSource={priceSource}
+                    disableGreyOut={true}
+                  />
               ) : (
                 <div className="max-w-screen-2xl mx-auto px-6 py-20 text-center">
                   <div className="text-5xl mb-4">🔍</div>

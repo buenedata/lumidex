@@ -31,6 +31,11 @@ interface SetPageCardsProps {
   priceSource?: PriceSource
   /** Sealed product prices for this set (booster packs, ETBs, etc.) */
   sealedProducts?: SetProductPrice[]
+  /**
+   * When true, cards are never greyed out regardless of the user's grey_out_unowned setting.
+   * Used on the browse/search page where collection status should not affect card appearance.
+   */
+  disableGreyOut?: boolean
   // Static stats (optional — only provided by the set detail page)
   statSeries?: string
   statReleased?: string
@@ -64,6 +69,7 @@ export default function SetPageCards({
   pricesAreLive = false,
   priceSource = 'tcgplayer',
   sealedProducts = [],
+  disableGreyOut = false,
   statSeries,
   statReleased,
   statCards,
@@ -461,6 +467,7 @@ export default function SetPageCards({
               currency={currency}
               priceSource={priceSource}
               onVariantsLegendChange={setLegendVariants}
+              disableGreyOut={disableGreyOut}
             />
         )}
       </div>

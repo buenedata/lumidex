@@ -332,7 +332,6 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
           initialProducts={initialProducts}
           allProducts={allProducts}
           discoveryData={discoveryData}
-          initialFilters={filters}
           cardPricesUSD={cardPricesUSD}
           currency={currency}
           priceSource={priceSource}
