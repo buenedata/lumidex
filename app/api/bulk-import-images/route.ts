@@ -11,8 +11,10 @@ const CONCURRENCY = 3
 
 /** Strip leading zeros and everything after the first "/" — "012/165" → "12" */
 function normalizeNumber(num: string): string {
-  const raw = num.split('/')[0].replace(/^0+/, '')
-  return raw || '0'
+  const raw = num.split('/')[0]
+  // Strip leading zeros after an optional letter prefix so that e.g.
+  // "H032" (DB) and "H32" (pkmn.gg) both normalise to "H32".
+  return raw.replace(/^([A-Za-z]*)0+(\d)/, '$1$2') || '0'
 }
 
 function sseData(payload: unknown): Uint8Array {
