@@ -69,24 +69,32 @@ async function extractCardsFromPkmnGg(pkmnGgUrl: string): Promise<PkmnCard[]> {
   const d = nextData as any
   const pageProps = d?.props?.pageProps
 
-  // pkmn.gg uses different data shapes depending on the page type:
-  //   /series/*       → pageProps.cardData          (array of cards)
-  //   /collections/*  → pageProps.collection.cards  (array of cards)
-  // We try each path in order and use the first non-empty array we find.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const cards: any[] | undefined =
-    (Array.isArray(pageProps?.cardData) && pageProps.cardData.length > 0
-      ? pageProps.cardData
-      : null) ??
-    (Array.isArray(pageProps?.collection?.cards) && pageProps.collection.cards.length > 0
-      ? pageProps.collection.cards
-      : null) ??
-    (Array.isArray(pageProps?.cards) && pageProps.cards.length > 0
-      ? pageProps.cards
-      : null) ??
-    undefined
+  // Diagnostic: log all top-level keys of pageProps so we can see what's available.
+  console.log('[bulk-import] pkmn.gg pageProps keys:', Object.keys(pageProps ?? {}))
 
-  if (!Array.isArray(cards) || cards.length === 0) {
+  // pkmn.gg uses different data shapes depending on the page type, and sets with
+  // multiple card groups (e.g. regular + secret/H-series) may store each group in
+  // a separate array.  We therefore collect cards from ALL known array properties
+  // and merge them rather than stopping at the first one found.
+  //
+  // Known paths:
+  //   /series/*      → pageProps.cardData           (regular cards)
+  //   /series/*      → pageProps.secretCards, pageProps.crystalCards,
+  //                    pageProps.holoCards, pageProps.promoCards  (secret/H cards)
+  //   /collections/* → pageProps.collection.cards
+  //   fallback       → pageProps.cards
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const candidateArrays: any[][] = [
+    pageProps?.cardData,
+    pageProps?.secretCards,
+    pageProps?.crystalCards,
+    pageProps?.holoCards,
+    pageProps?.promoCards,
+    pageProps?.collection?.cards,
+    pageProps?.cards,
+  ].filter((arr): arr is any[] => Array.isArray(arr) && arr.length > 0)
+
+  if (candidateArrays.length === 0) {
     throw new Error(
       'No card data found in the pkmn.gg page. ' +
         'Supported URL formats:\n' +
@@ -95,7 +103,22 @@ async function extractCardsFromPkmnGg(pkmnGgUrl: string): Promise<PkmnCard[]> {
     )
   }
 
-  return cards
+  // Merge all arrays and deduplicate by card number (last write wins — same
+  // card should have the same image URL in every group it appears in).
+  const merged = candidateArrays.flat()
+  console.log(
+    `[bulk-import] pkmn.gg card arrays found: ${candidateArrays.length} ` +
+    `(sizes: ${candidateArrays.map(a => a.length).join(', ')}) → ${merged.length} total before dedup`,
+  )
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const byNumber = new Map<string, any>()
+  for (const card of merged) {
+    const num = String(card.number ?? card.cardNumber ?? '')
+    if (num) byNumber.set(num, card)
+  }
+
+  return [...byNumber.values()]
     .map((card) => ({
       // Collections pages may use "cardNumber" instead of "number"
       number: String(card.number ?? card.cardNumber ?? ''),
