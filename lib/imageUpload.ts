@@ -8,12 +8,20 @@ import { supabase } from './supabase'
 import type { PokemonCard } from '../types'
 
 /**
- * Generate standardized filename for card images
- * Examples: "neo3-50.jpg", "base1-4.jpg"
+ * Generate standardized filename for card images.
+ * When cardId is supplied the filename is unique per card row, preventing
+ * collisions between two cards in the same set that share the same number
+ * (e.g. a Pokémon and an Energy both numbered "3").
+ *
+ * With cardId    → "{setId}-{cardNumber}-{cardId}.webp"  (new uploads)
+ * Without cardId → "{setId}-{cardNumber}.jpg"            (legacy fallback only)
  */
-export function generateImageFilename(setId: string, number: string): string {
+export function generateImageFilename(setId: string, number: string, cardId?: string): string {
   // Extract card number (before slash): "50/64" → "50", "4" → "4"
   const cardNumber = number.split('/')[0]
+  if (cardId) {
+    return `${setId}-${cardNumber}-${cardId}.webp`
+  }
   return `${setId}-${cardNumber}.jpg`
 }
 

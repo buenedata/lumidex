@@ -251,7 +251,7 @@ export async function POST(request: NextRequest) {
         // ── DIAGNOSTIC: Detect same-filename collisions ───────────────────────
         const filenameMap = new Map<string, DbCard[]>()
         for (const card of dbCards) {
-          const filename = generateImageFilename(card.set_id, card.number)
+          const filename = generateImageFilename(card.set_id, card.number, card.id)
           const existing = filenameMap.get(filename) ?? []
           existing.push(card)
           filenameMap.set(filename, existing)
@@ -356,9 +356,9 @@ export async function POST(request: NextRequest) {
               uploadContentType = imgRes.headers.get('content-type') ?? 'image/png'
             }
 
-            // Always use the standardised .jpg filename for consistency with
-            // the rest of the codebase — the content-type header is correct.
-            const filename = generateImageFilename(card.set_id, card.number)
+            // Use the card-ID-scoped filename to prevent collisions between
+            // cards in the same set that share the same number (e.g. #3).
+            const filename = generateImageFilename(card.set_id, card.number, card.id)
 
             const { error: uploadErr } = await supabaseAdmin.storage
               .from(STORAGE_BUCKET)

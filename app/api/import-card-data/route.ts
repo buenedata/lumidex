@@ -28,6 +28,7 @@ async function downloadAndStoreCardImage(
   imageUrl: string,
   cardNumber: string,
   setId: string,
+  cardId: string,
 ): Promise<string | null> {
   console.log('[import-card-data] downloadAndStoreCardImage called:', imageUrl)
   try {
@@ -48,8 +49,9 @@ async function downloadAndStoreCardImage(
     const imageBuffer = await imgRes.arrayBuffer()
     if (imageBuffer.byteLength === 0) return null
 
-    // Use the same standardised filename convention as the rest of the codebase
-    const filename = generateImageFilename(setId, cardNumber)
+    // Use the card-ID-scoped filename to prevent collisions between cards in the
+    // same set that share the same number (e.g. Pokémon #3 vs Energy #3).
+    const filename = generateImageFilename(setId, cardNumber, cardId)
 
     const { error: uploadErr } = await supabaseAdmin.storage
       .from(STORAGE_BUCKET)
@@ -554,25 +556,9 @@ export async function POST(request: NextRequest) {
               api_id: pkmnCard.dbId ?? null,
             }
 
-            // Optionally download and store the card image before inserting.
-            // Always use the bare pkmnCard.number for the filename (generateImageFilename
-            // splits on '/' anyway, so "100/88" and "100" both produce the same filename).
-            let imageSaved = false
-            if (importImages && externalImageUrl) {
-              console.log('[import-card-data] Attempting image download for new card', pkmnCard.number, externalImageUrl)
-              const storedUrl = await downloadAndStoreCardImage(
-                externalImageUrl,
-                pkmnCard.number,
-                setId,
-              )
-              if (storedUrl) {
-                insertPayload.image = storedUrl
-                imageSaved = true
-              } else {
-                console.error('[import-card-data] Image download/upload returned null for new card', pkmnCard.number)
-              }
-            }
-
+            // Insert the card first so we have the DB-generated id, which is then
+            // included in the storage filename to prevent collisions between cards
+            // that share the same number within a set (e.g. Pokémon #3 vs Energy #3).
             const { data: inserted, error: insertError } = await supabaseAdmin
               .from('cards')
               .insert(insertPayload)
@@ -595,23 +581,47 @@ export async function POST(request: NextRequest) {
                   error: insertError?.message ?? 'Insert returned no data',
                 } satisfies ProgressPayload,
               })
-            } else {
-              created++
-              emit({
-                type: 'progress',
-                payload: {
-                  cardId: inserted.id,
-                  number: pkmnCard.number,
-                  name: pkmnCard.name ?? '',
-                  pkmnName: pkmnCard.name,
-                  artist: pkmnCard.artist,
-                  supertype: pkmnCard.supertype,
-                  type: pkmnCard.type,
-                  status: 'created',
-                  imageSaved,
-                } satisfies ProgressPayload,
-              })
+              continue
             }
+
+            // Optionally download and store the card image now that we have inserted.id,
+            // so the storage filename is unique per card and cannot collide with another.
+            let imageSaved = false
+            if (importImages && externalImageUrl) {
+              console.log('[import-card-data] Attempting image download for new card', pkmnCard.number, externalImageUrl)
+              const storedUrl = await downloadAndStoreCardImage(
+                externalImageUrl,
+                pkmnCard.number,
+                setId,
+                inserted.id,
+              )
+              if (storedUrl) {
+                // Update the freshly-inserted row with the image URL.
+                await supabaseAdmin
+                  .from('cards')
+                  .update({ image: storedUrl })
+                  .eq('id', inserted.id)
+                imageSaved = true
+              } else {
+                console.error('[import-card-data] Image download/upload returned null for new card', pkmnCard.number)
+              }
+            }
+
+            created++
+            emit({
+              type: 'progress',
+              payload: {
+                cardId: inserted.id,
+                number: pkmnCard.number,
+                name: pkmnCard.name ?? '',
+                pkmnName: pkmnCard.name,
+                artist: pkmnCard.artist,
+                supertype: pkmnCard.supertype,
+                type: pkmnCard.type,
+                status: 'created',
+                imageSaved,
+              } satisfies ProgressPayload,
+            })
             continue
           }
 
@@ -706,6 +716,7 @@ export async function POST(request: NextRequest) {
               externalImageUrl,
               pkmnCard.number,
               setId,
+              dbCard.id,
             )
             if (storedUrl) {
               updatePayload.image = storedUrl

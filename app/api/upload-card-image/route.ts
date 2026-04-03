@@ -3,10 +3,15 @@ import { requireAdmin } from '@/lib/admin'
 import { supabaseAdmin } from '@/lib/supabase'
 import { compressImageToWebP, COMPRESSED_CONTENT_TYPE } from '@/lib/imageCompress'
 
-/** Mirror of the client-side helper so server doesn't import from lib/imageUpload */
-function generateImageFilename(setId: string, number: string): string {
+/**
+ * Mirror of the client-side helper so server doesn't import from lib/imageUpload.
+ * cardId is included in the filename to prevent storage collisions between two
+ * cards in the same set that share the same card number (e.g. Pokémon #3 and
+ * Energy #3 both in the same set would otherwise map to the same file).
+ */
+function generateImageFilename(setId: string, number: string, cardId: string): string {
   const cardNumber = number.split('/')[0]
-  return `${setId}-${cardNumber}.jpg`
+  return `${setId}-${cardNumber}-${cardId}.webp`
 }
 
 // Domains permitted for server-side URL fetching (mirrors proxy-image allow-list)
@@ -112,7 +117,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Image must be smaller than 5 MB' }, { status: 400 })
     }
 
-    const filename   = generateImageFilename(setId, cardNumber)
+    const filename   = generateImageFilename(setId, cardNumber, cardId)
     const fileBuffer = await file.arrayBuffer()
 
     return uploadAndRecord(filename, fileBuffer, file.type, cardId)
@@ -131,7 +136,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const filename = generateImageFilename(setId, cardNumber)
+    const filename = generateImageFilename(setId, cardNumber, cardId)
     return uploadAndRecord(filename, buffer, contentType, cardId)
   }
 
