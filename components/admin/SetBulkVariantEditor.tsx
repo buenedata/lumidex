@@ -73,6 +73,11 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
   const [addForm,     setAddForm]     = useState(DEFAULT_ADD_FORM)
   const [isCreating,  setIsCreating]  = useState(false)
 
+  // ─── Card-specific variant creation (selected cards only) ─────────────────
+  const [showAddCardSpecificForm, setShowAddCardSpecificForm] = useState(false)
+  const [addCardSpecificForm,     setAddCardSpecificForm]     = useState(DEFAULT_ADD_FORM)
+  const [isCreatingCardSpecific,  setIsCreatingCardSpecific]  = useState(false)
+
   // ─── Inline variant rename state (bulk config panel) ─────────────────────
   const [editingVariantId,   setEditingVariantId]   = useState<string | null>(null)
   const [editingVariantName, setEditingVariantName] = useState<string>('')
@@ -284,6 +289,51 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
       showMessage('error', err.message || 'Failed to create card-specific variants')
     } finally {
       setIsCreating(false)
+    }
+  }
+
+  // ─── Create card-specific variant for selected cards only ────────────────
+  const handleCreateCardSpecificVariant = async () => {
+    const trimmedName = addCardSpecificForm.name.trim()
+    if (!trimmedName) return
+
+    if (selectedCardIds.size === 0) {
+      showMessage('error', 'Select at least one card before adding a card-specific variant.')
+      return
+    }
+
+    setIsCreatingCardSpecific(true)
+    try {
+      const res = await fetch('/api/card-variant-availability/bulk-create-card-specific', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cardIds:     Array.from(selectedCardIds),
+          name:        trimmedName,
+          color:       addCardSpecificForm.color,
+          shortLabel:  addCardSpecificForm.shortLabel.trim(),
+          description: addCardSpecificForm.description.trim(),
+          sortOrder:   addCardSpecificForm.sortOrder,
+        }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Failed to create card-specific variants')
+      }
+
+      const result = await res.json()
+      setShowAddCardSpecificForm(false)
+      setAddCardSpecificForm(DEFAULT_ADD_FORM)
+      showMessage(
+        'success',
+        `✅ "${trimmedName}" created on ${result.createdCount} card${result.createdCount === 1 ? '' : 's'}!`
+      )
+      await refreshVariantMap()
+    } catch (err: any) {
+      showMessage('error', err.message || 'Failed to create card-specific variants')
+    } finally {
+      setIsCreatingCardSpecific(false)
     }
   }
 
@@ -753,6 +803,126 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
                     </button>
                     <button
                       onClick={() => { setShowAddForm(false); setAddForm(DEFAULT_ADD_FORM) }}
+                      className="flex-1 py-1.5 bg-gray-600 hover:bg-gray-500 text-white text-sm rounded transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Add card-specific variant button / inline form (selected cards only) */}
+              {!showAddCardSpecificForm ? (
+                <button
+                  onClick={() => {
+                    if (selectedCardIds.size === 0) {
+                      showMessage('error', 'Select at least one card before adding a card-specific variant.')
+                      return
+                    }
+                    setShowAddCardSpecificForm(true)
+                  }}
+                  className={`w-full flex items-center justify-center gap-2 px-3 py-2 mb-4 rounded-lg border border-dashed text-sm transition-colors ${
+                    selectedCardIds.size > 0
+                      ? 'border-gray-600 text-gray-400 hover:border-orange-500 hover:text-orange-400'
+                      : 'border-gray-700 text-gray-600 cursor-not-allowed'
+                  }`}
+                  title={selectedCardIds.size === 0 ? 'Select cards first' : undefined}
+                >
+                  ➕ Add card-specific variant
+                  {selectedCardIds.size > 0 && (
+                    <span className="text-xs text-gray-500">({selectedCardIds.size} card{selectedCardIds.size === 1 ? '' : 's'})</span>
+                  )}
+                </button>
+              ) : (
+                <div className="bg-gray-700 rounded-lg p-4 mb-4 space-y-3 border border-orange-700/40">
+                  <div>
+                    <h4 className="text-white text-sm font-semibold">New Card-Specific Variant</h4>
+                    <p className="text-gray-400 text-xs mt-0.5">
+                      Will be created{' '}
+                      <span className="text-orange-300 font-medium">
+                        only on {selectedCardIds.size} selected card{selectedCardIds.size === 1 ? '' : 's'}
+                      </span>
+                      . Unique to each individual card.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-gray-400 mb-1 block">Name *</label>
+                    <input
+                      type="text"
+                      value={addCardSpecificForm.name}
+                      onChange={e => setAddCardSpecificForm(prev => ({ ...prev, name: e.target.value }))}
+                      onKeyDown={e => e.key === 'Enter' && handleCreateCardSpecificVariant()}
+                      placeholder="e.g., Misprint, Alt Art"
+                      autoFocus
+                      className="w-full px-2 py-1.5 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-gray-400 mb-1 block">Color</label>
+                      <select
+                        value={addCardSpecificForm.color}
+                        onChange={e => setAddCardSpecificForm(prev => ({ ...prev, color: e.target.value as ColorOption }))}
+                        className="w-full px-2 py-1.5 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none"
+                      >
+                        <option value="blue">Blue</option>
+                        <option value="green">Green</option>
+                        <option value="purple">Purple</option>
+                        <option value="red">Red</option>
+                        <option value="pink">Pink</option>
+                        <option value="yellow">Yellow</option>
+                        <option value="gray">Gray</option>
+                        <option value="orange">Orange</option>
+                        <option value="teal">Teal</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400 mb-1 block">Short Label</label>
+                      <input
+                        type="text"
+                        value={addCardSpecificForm.shortLabel}
+                        onChange={e => setAddCardSpecificForm(prev => ({ ...prev, shortLabel: e.target.value }))}
+                        placeholder="e.g., Alt"
+                        maxLength={8}
+                        className="w-full px-2 py-1.5 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:border-orange-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-gray-400 mb-1 block">Description</label>
+                    <textarea
+                      value={addCardSpecificForm.description}
+                      onChange={e => setAddCardSpecificForm(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Optional description of this variant"
+                      rows={2}
+                      className="w-full px-2 py-1.5 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:border-orange-500 resize-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-gray-400 mb-1 block">Sort Order</label>
+                    <input
+                      type="number"
+                      value={addCardSpecificForm.sortOrder}
+                      onChange={e => setAddCardSpecificForm(prev => ({ ...prev, sortOrder: parseInt(e.target.value || '0') }))}
+                      placeholder="0"
+                      className="w-full px-2 py-1.5 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:border-orange-500"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleCreateCardSpecificVariant}
+                      disabled={isCreatingCardSpecific || !addCardSpecificForm.name.trim()}
+                      className="flex-1 py-1.5 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-sm rounded transition-colors"
+                    >
+                      {isCreatingCardSpecific ? 'Creating…' : `Create for ${selectedCardIds.size} card${selectedCardIds.size === 1 ? '' : 's'}`}
+                    </button>
+                    <button
+                      onClick={() => { setShowAddCardSpecificForm(false); setAddCardSpecificForm(DEFAULT_ADD_FORM) }}
                       className="flex-1 py-1.5 bg-gray-600 hover:bg-gray-500 text-white text-sm rounded transition-colors"
                     >
                       Cancel
