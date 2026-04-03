@@ -1,10 +1,8 @@
 'use client'
 
-export const dynamic = 'force-dynamic'
-
 import Link from 'next/link'
-import { useState, useEffect, useCallback } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store'
 
 // Card Images imports
@@ -422,20 +420,7 @@ function ProductImagesTab() {
 export default function ImageUploadPage() {
   const { user, profile, isLoading } = useAuthStore()
   const router = useRouter()
-  const searchParams = useSearchParams()
-
-  const rawTab = searchParams.get('tab') as TabId | null
-  const activeTab: TabId =
-    rawTab && TABS.some((t) => t.id === rawTab) ? rawTab : 'card-images'
-
-  const setTab = useCallback(
-    (id: TabId) => {
-      const params = new URLSearchParams(searchParams.toString())
-      params.set('tab', id)
-      router.replace(`/admin/image-upload?${params.toString()}`)
-    },
-    [router, searchParams],
-  )
+  const [activeTab, setActiveTab] = useState<TabId>('card-images')
 
   // ── Auth guard ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -488,7 +473,7 @@ export default function ImageUploadPage() {
           {TABS.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setTab(tab.id)}
+              onClick={() => setActiveTab(tab.id)}
               className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-150 border ${
                 activeTab === tab.id
                   ? 'bg-yellow-500 text-black border-yellow-500'
