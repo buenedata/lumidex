@@ -1378,19 +1378,18 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                                 className="relative bg-surface overflow-hidden"
                                 style={{ aspectRatio: '2.5/3.5' }}
                               >
-                                {rc.image ? (
-                                 <Image
-                                   src={rc.image}
-                                   alt={rc.name ?? 'Card'}
-                                   fill
-                                   sizes="(max-width: 1280px) 33vw, 150px"
-                                   className="object-cover group-hover:scale-105 transition-transform duration-200"
-                                 />
-                                ) : (
-                                  <div className="w-full h-full flex items-center justify-center text-2xl text-muted">
-                                    🎴
-                                  </div>
-                                )}
+                                <img
+                                  src={rc.image ?? '/pokemon_card_backside.png'}
+                                  alt={rc.name ?? 'Card'}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                  loading="lazy"
+                                  onError={(e) => {
+                                    const t = e.target as HTMLImageElement
+                                    if (!t.src.endsWith('/pokemon_card_backside.png')) {
+                                      t.src = '/pokemon_card_backside.png'
+                                    }
+                                  }}
+                                />
                               </div>
                               {/* Meta */}
                               <div className="p-1.5">
