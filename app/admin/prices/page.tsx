@@ -77,7 +77,12 @@ export default function AdminPricesPage() {
   const [syncState,       setSyncState]       = useState<SyncState>({
     status: 'idle', message: '', matched: 0, total: 0, products: 0, elapsed: 0,
   })
+  const [pipelineState,  setPipelineState]  = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [pipelineResult, setPipelineResult] = useState<string>('')
   const abortRef = useRef<AbortController | null>(null)
+  const [singleCardId,     setSingleCardId]     = useState('')
+  const [singleCardState,  setSingleCardState]  = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [singleCardResult, setSingleCardResult] = useState<string>('')
 
   // ── Auth guard ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -285,6 +290,55 @@ export default function AdminPricesPage() {
       }))
     }
   }, [loadStats, apiSetIdInput])
+
+  // ── New Pipeline ───────────────────────────────────────────────────────────
+  async function runNewPipeline() {
+    if (!selectedSetId) return
+    setPipelineState('running')
+    setPipelineResult('')
+
+    try {
+      const res = await fetch('/api/admin/sync/prices', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ setId: selectedSetId, limit: 50, includeGraded: false }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setPipelineState('done')
+        setPipelineResult(`✅ ${data.processed} processed · ${data.errors} errors · ${data.undervaluedFound} undervalued`)
+      } else {
+        setPipelineState('error')
+        setPipelineResult(data.error ?? 'Unknown error')
+      }
+    } catch {
+      setPipelineState('error')
+      setPipelineResult('Network error')
+    }
+  }
+
+  // ── Sync Single Card ───────────────────────────────────────────────────────
+  async function syncSingleCardAdmin() {
+    if (!singleCardId.trim()) return
+    setSingleCardState('running')
+    setSingleCardResult('')
+    try {
+      const res = await fetch(`/api/admin/sync/card/${encodeURIComponent(singleCardId.trim())}`, {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setSingleCardState('done')
+        setSingleCardResult(`✅ ${data.pricePointsSaved} price points saved · aggregated: ${data.aggregated ? 'yes' : 'no'}`)
+      } else {
+        setSingleCardState('error')
+        setSingleCardResult(data.error ?? 'Unknown error')
+      }
+    } catch {
+      setSingleCardState('error')
+      setSingleCardResult('Network error')
+    }
+  }
 
   // ── Render ─────────────────────────────────────────────────────────────────
   if (isLoading || !user || profile?.role !== 'admin') {
@@ -577,10 +631,66 @@ export default function AdminPricesPage() {
                     </div>
                   </details>
                 )}
+    
               </div>
             )}
           </div>
         )}
+
+        {/* New Pricing Pipeline — always visible */}
+        <div className="mt-6 bg-gray-900 border border-gray-700 rounded-xl p-6">
+          <h3 className="text-base font-semibold text-white mb-1">
+            New Pricing Pipeline (eBay + Pokémon API)
+          </h3>
+          <p className="text-xs text-gray-500 mb-4">
+            Fetches prices from Pokémon TCG API and eBay sold listings. Saves raw data to{' '}
+            <code className="font-mono text-gray-400">price_points</code>, then updates{' '}
+            <code className="font-mono text-gray-400">card_prices</code> cache.
+          </p>
+          <button
+            onClick={runNewPipeline}
+            disabled={pipelineState === 'running'}
+            className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors"
+          >
+            {pipelineState === 'running' ? '⏳ Running…' : '🚀 Run New Pipeline'}
+          </button>
+          {pipelineResult && (
+            <div className={`mt-3 text-sm ${pipelineState === 'done' ? 'text-green-400' : 'text-red-400'}`}>
+              {pipelineResult}
+            </div>
+          )}
+        </div>
+
+        {/* Sync Single Card */}
+        <div className="mt-6 bg-gray-900 border border-gray-700 rounded-xl p-6">
+          <h3 className="text-base font-semibold text-white mb-1">Sync Single Card</h3>
+          <p className="text-xs text-gray-500 mb-4">
+            Run the full pricing pipeline for a single card by its UUID. Fetches all sources,
+            saves to <code className="font-mono text-gray-400">price_points</code>, and aggregates
+            to <code className="font-mono text-gray-400">card_prices</code>.
+          </p>
+          <div className="flex items-center gap-3">
+            <input
+              type="text"
+              placeholder="Card UUID (e.g. 550e8400-e29b-41d4-a716-…)"
+              value={singleCardId}
+              onChange={e => { setSingleCardId(e.target.value); setSingleCardResult('') }}
+              className="flex-1 h-9 bg-gray-800 border border-gray-700 rounded-lg px-3 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-indigo-500 font-mono"
+            />
+            <button
+              onClick={syncSingleCardAdmin}
+              disabled={singleCardState === 'running' || !singleCardId.trim()}
+              className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors shrink-0"
+            >
+              {singleCardState === 'running' ? '⏳ Syncing…' : 'Sync Card'}
+            </button>
+          </div>
+          {singleCardResult && (
+            <div className={`mt-3 text-sm ${singleCardState === 'done' ? 'text-green-400' : 'text-red-400'}`}>
+              {singleCardResult}
+            </div>
+          )}
+        </div>
 
         {/* Footer note */}
         <p className="mt-8 text-xs text-gray-600 text-center">
