@@ -77,8 +77,8 @@ export default function AdminPricesPage() {
   const [syncState,       setSyncState]       = useState<SyncState>({
     status: 'idle', message: '', matched: 0, total: 0, products: 0, elapsed: 0,
   })
-  const [pipelineState,  setPipelineState]  = useState<'idle' | 'running' | 'done' | 'error'>('idle')
-  const [pipelineResult, setPipelineResult] = useState<string>('')
+  const [includeGraded,   setIncludeGraded]   = useState(false)
+  const [includeProducts, setIncludeProducts] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const [singleCardId,     setSingleCardId]     = useState('')
   const [singleCardState,  setSingleCardState]  = useState<'idle' | 'running' | 'done' | 'error'>('idle')
@@ -200,8 +200,8 @@ export default function AdminPricesPage() {
     setSyncState({ status: 'syncing', message: 'Starting…', matched: 0, total: 0, products: 0, elapsed: 0 })
 
     try {
-      const body: Record<string, string> = { setId }
-      if (apiSetIdInput.trim()) body.apiSetId = apiSetIdInput.trim()
+      const body: Record<string, unknown> = { setId, includeGraded }
+      if (includeProducts && apiSetIdInput.trim()) body.apiSetId = apiSetIdInput.trim()
 
       const res = await fetch('/api/prices/sync', {
         method:  'POST',
@@ -234,6 +234,9 @@ export default function AdminPricesPage() {
             }
             if (event.type === 'fetching') {
               setSyncState(prev => ({ ...prev, status: 'syncing', message: event.message ?? `Calling API (page ${event.page})…` }))
+            }
+            if (event.type === 'graded') {
+              setSyncState(prev => ({ ...prev, status: 'syncing', message: `🏅 ${event.message ?? 'Running graded card pricing…'}` }))
             }
             if (event.type === 'warning') {
               setSyncState(prev => ({ ...prev, status: 'syncing', message: `⚠️ ${event.message ?? 'Warning'}` }))
@@ -289,37 +292,7 @@ export default function AdminPricesPage() {
         message: e instanceof Error ? e.message : 'Sync failed',
       }))
     }
-  }, [loadStats, apiSetIdInput])
-
-  // ── New Pipeline ───────────────────────────────────────────────────────────
-  async function runNewPipeline() {
-    if (!selectedSetId) return
-    setPipelineState('running')
-    setPipelineResult('')
-
-    try {
-      const res = await fetch('/api/admin/sync/prices', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ setId: selectedSetId, includeGraded: false }),
-      })
-      const data = await res.json()
-      if (data.ok) {
-        setPipelineState('done')
-        let resultMsg = `✅ ${data.processed} processed · ${data.errors} errors · ${data.undervaluedFound} undervalued`
-        if (data.productCount > 0) {
-          resultMsg += ` · ${data.productCount} products priced`
-        }
-        setPipelineResult(resultMsg)
-      } else {
-        setPipelineState('error')
-        setPipelineResult(data.error ?? 'Unknown error')
-      }
-    } catch {
-      setPipelineState('error')
-      setPipelineResult('Network error')
-    }
-  }
+  }, [loadStats, apiSetIdInput, includeGraded, includeProducts])
 
   // ── Sync Single Card ───────────────────────────────────────────────────────
   async function syncSingleCardAdmin() {
@@ -391,19 +364,60 @@ export default function AdminPricesPage() {
         {selectedSetId && (
           <div className="bg-gray-900 border border-gray-700 rounded-xl p-6 space-y-5">
 
-            {/* Set name + Sync button */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-white">{selectedSetName}</h2>
-                <p className="text-xs text-gray-500 mt-0.5">{selectedSetId}</p>
-              </div>
-              <button
-                onClick={() => syncSet(selectedSetId)}
-                disabled={syncState.status === 'syncing'}
-                className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors"
-              >
-                {syncState.status === 'syncing' ? 'Syncing…' : 'Sync Prices'}
-              </button>
+            {/* Set name */}
+            <div>
+              <h2 className="text-lg font-semibold text-white">{selectedSetName}</h2>
+              <p className="text-xs text-gray-500 mt-0.5">{selectedSetId}</p>
+            </div>
+
+            {/* ── What to import ─────────────────────────────────────────── */}
+            <div className="border border-gray-700 rounded-lg p-4 space-y-3">
+              <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">Import options</p>
+
+              {/* Card prices — always on */}
+              <label className="flex items-center gap-3 cursor-default select-none opacity-60">
+                <input
+                  type="checkbox"
+                  checked
+                  readOnly
+                  className="w-4 h-4 rounded accent-purple-500 cursor-default"
+                />
+                <span className="text-sm text-gray-300">
+                  Card prices <span className="text-gray-500">(eBay + Pokémon TCG API)</span>
+                </span>
+                <span className="ml-auto text-xs text-gray-600 italic">always included</span>
+              </label>
+
+              {/* Graded card prices */}
+              <label className="flex items-center gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={includeGraded}
+                  onChange={e => setIncludeGraded(e.target.checked)}
+                  className="w-4 h-4 rounded accent-purple-500"
+                />
+                <span className="text-sm text-gray-300">
+                  Graded card prices <span className="text-gray-500">(PSA / BGS eBay sold)</span>
+                </span>
+              </label>
+
+              {/* Sealed product prices */}
+              <label className="flex items-center gap-3 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={includeProducts}
+                  onChange={e => setIncludeProducts(e.target.checked)}
+                  className="w-4 h-4 rounded accent-purple-500"
+                />
+                <span className="text-sm text-gray-300">
+                  Sealed product prices <span className="text-gray-500">(requires tcggo.com Episode ID)</span>
+                </span>
+              </label>
+              {includeProducts && !apiSetIdInput.trim() && (
+                <p className="text-xs text-amber-400 pl-7">
+                  ⚠️ Set the tcggo.com Episode ID below before syncing product prices.
+                </p>
+              )}
             </div>
 
             {/* tcggo.com Episode ID — lookup + override */}
@@ -530,6 +544,15 @@ export default function AdminPricesPage() {
               )}
             </div>
 
+            {/* Sync Prices button */}
+            <button
+              onClick={() => syncSet(selectedSetId)}
+              disabled={syncState.status === 'syncing'}
+              className="w-full px-5 py-2.5 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors"
+            >
+              {syncState.status === 'syncing' ? '⏳ Syncing…' : '🚀 Sync Prices'}
+            </button>
+
             {/* Stats grid */}
             {statsLoading ? (
               <div className="text-gray-600 text-sm animate-pulse">Loading stats…</div>
@@ -640,30 +663,6 @@ export default function AdminPricesPage() {
             )}
           </div>
         )}
-
-        {/* New Pricing Pipeline — always visible */}
-        <div className="mt-6 bg-gray-900 border border-gray-700 rounded-xl p-6">
-          <h3 className="text-base font-semibold text-white mb-1">
-            New Pricing Pipeline (eBay + Pokémon API)
-          </h3>
-          <p className="text-xs text-gray-500 mb-4">
-            Fetches prices from Pokémon TCG API and eBay sold listings. Saves raw data to{' '}
-            <code className="font-mono text-gray-400">price_points</code>, then updates{' '}
-            <code className="font-mono text-gray-400">card_prices</code> cache.
-          </p>
-          <button
-            onClick={runNewPipeline}
-            disabled={pipelineState === 'running'}
-            className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors"
-          >
-            {pipelineState === 'running' ? '⏳ Running…' : '🚀 Run New Pipeline'}
-          </button>
-          {pipelineResult && (
-            <div className={`mt-3 text-sm ${pipelineState === 'done' ? 'text-green-400' : 'text-red-400'}`}>
-              {pipelineResult}
-            </div>
-          )}
-        </div>
 
         {/* Sync Single Card */}
         <div className="mt-6 bg-gray-900 border border-gray-700 rounded-xl p-6">
