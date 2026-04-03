@@ -10,7 +10,7 @@ import { syncSingleCard } from '@/services/pricing/pricingJobRunner'
  */
 export async function POST(
   _req: NextRequest,
-  { params }: { params: { cardId: string } },
+  { params }: { params: Promise<{ cardId: string }> },
 ) {
   // 1. Authenticate — throws if not an authenticated admin
   try {
@@ -23,7 +23,7 @@ export async function POST(
   }
 
   // 2. Validate route param
-  const { cardId } = params
+  const { cardId } = await params
   if (!cardId) {
     return NextResponse.json({ ok: false, error: 'Missing cardId' }, { status: 400 })
   }
