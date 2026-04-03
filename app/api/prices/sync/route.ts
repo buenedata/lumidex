@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { requireAdmin } from '@/lib/admin'
 import { runPriceUpdateJob } from '@/services/pricing/pricingJobRunner'
+import { importProductPricing } from '@/services/pricing/productPricingService'
 
 // Allow Vercel Pro functions to run up to 300s (hobby capped at 10s)
 export const maxDuration = 300
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
   }
 
   // 2. Parse body
-  let body: { setId?: string; apiSetId?: string }
+  let body: { setId?: string; apiSetId?: string | number }
   try { body = await request.json() } catch {
     return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
@@ -62,6 +63,9 @@ export async function POST(request: NextRequest) {
     console.log('[prices/sync] Sync worker started — setId:', setId)
     const startTime = Date.now()
 
+    // Capture apiSetId for product pricing (parsed before the worker fires)
+    const apiSetId = body.apiSetId
+
     try {
       // Emit start event
       emit({
@@ -77,8 +81,26 @@ export async function POST(request: NextRequest) {
         page:    1,
       })
 
-      // Run the unified pricing pipeline
-      const result = await runPriceUpdateJob({ setId, limit: 50 })
+      // Run the unified pricing pipeline (no limit → fetch all cards in the set)
+      const result = await runPriceUpdateJob({ setId })
+
+      // Optionally import sealed-product prices from the cardmarket RapidAPI
+      let productCount = 0
+      if (apiSetId) {
+        emit({
+          type:    'fetching',
+          message: `Importing product prices for episode ${apiSetId}…`,
+          page:    2,
+        })
+        try {
+          const productResult = await importProductPricing({ episodeId: apiSetId, setId })
+          productCount = productResult.productCount
+          emit({ type: 'products', count: productCount })
+        } catch (productErr) {
+          console.error('[prices/sync] Product pricing import failed:', productErr)
+          emit({ type: 'warning', message: 'Product price import failed — card prices were still saved' })
+        }
+      }
 
       const elapsed = Date.now() - startTime
 
@@ -94,7 +116,7 @@ export async function POST(request: NextRequest) {
         matched:       result.processed,
         unmatched:     result.errors,
         upsertedCount: result.processed,
-        productCount:  0,
+        productCount,
         backfillCount: 0,
         elapsed,
       })

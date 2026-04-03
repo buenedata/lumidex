@@ -301,12 +301,16 @@ export default function AdminPricesPage() {
       const res = await fetch('/api/admin/sync/prices', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ setId: selectedSetId, limit: 50, includeGraded: false }),
+        body:    JSON.stringify({ setId: selectedSetId, includeGraded: false }),
       })
       const data = await res.json()
       if (data.ok) {
         setPipelineState('done')
-        setPipelineResult(`✅ ${data.processed} processed · ${data.errors} errors · ${data.undervaluedFound} undervalued`)
+        let resultMsg = `✅ ${data.processed} processed · ${data.errors} errors · ${data.undervaluedFound} undervalued`
+        if (data.productCount > 0) {
+          resultMsg += ` · ${data.productCount} products priced`
+        }
+        setPipelineResult(resultMsg)
       } else {
         setPipelineState('error')
         setPipelineResult(data.error ?? 'Unknown error')

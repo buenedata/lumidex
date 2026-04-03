@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   try {
     const result = await updatePricesBatch({
       setId,
-      limit:         limit         ?? 50,
+      limit:         limit         ?? undefined,
       includeGraded: includeGraded ?? false,
     })
 

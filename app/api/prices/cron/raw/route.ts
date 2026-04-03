@@ -13,6 +13,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const result = await runPriceUpdateJob({ limit: 50, includeGraded: false })
+  const result = await runPriceUpdateJob({ includeGraded: false })
   return NextResponse.json({ ok: true, ...result })
 }

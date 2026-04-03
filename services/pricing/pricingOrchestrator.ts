@@ -34,7 +34,9 @@ interface BatchResult {
  * 8. Run undervalued detection
  */
 export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Promise<BatchResult> {
-  const limit = options?.limit ?? 50
+  // When limit is undefined (no explicit cap) we fetch ALL cards for the set.
+  // Pass a numeric value only when the caller explicitly wants a smaller batch.
+  const limit = options?.limit   // undefined → no cap
   const setId = options?.setId
   const includeGraded = options?.includeGraded !== false
 
@@ -44,10 +46,15 @@ export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Pro
   let query = supabase
     .from('cards')
     .select('id, name, set_id, number, api_id')
-    .limit(limit)
 
   if (setId) {
     query = query.eq('set_id', setId)
+  }
+
+  // Only apply a row cap when an explicit limit was provided.
+  // Omitting .limit() fetches every card matching the filter (i.e. the full set).
+  if (limit !== undefined) {
+    query = query.limit(limit)
   }
 
   const { data: cards, error: dbError } = await query
