@@ -709,115 +709,7 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
                 </div>
               )}
 
-              {/* Add set-specific variant button / inline form */}
-              {!showAddForm ? (
-                <button
-                  onClick={() => setShowAddForm(true)}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-2 mb-4 rounded-lg border border-dashed border-gray-600 text-gray-400 hover:border-purple-500 hover:text-purple-400 text-sm transition-colors"
-                >
-                  ➕ Add set specific variant
-                </button>
-              ) : (
-                <div className="bg-gray-700 rounded-lg p-4 mb-4 space-y-3">
-                  <div>
-                    <h4 className="text-white text-sm font-semibold">New Card-Specific Variant</h4>
-                    <p className="text-gray-400 text-xs mt-0.5">
-                      Will be created on{' '}
-                      <span className="text-purple-300 font-medium">
-                        {selectedCardIds.size > 0
-                          ? `${selectedCardIds.size} selected card${selectedCardIds.size === 1 ? '' : 's'}`
-                          : `all ${setCards.length} cards in the set`}
-                      </span>
-                      . Same name allowed across multiple sets.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-gray-400 mb-1 block">Name *</label>
-                    <input
-                      type="text"
-                      value={addForm.name}
-                      onChange={e => setAddForm(prev => ({ ...prev, name: e.target.value }))}
-                      onKeyDown={e => e.key === 'Enter' && handleCreateSetVariant()}
-                      placeholder="e.g., 1st Edition, Reverse Holo"
-                      autoFocus
-                      className="w-full px-2 py-1.5 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:border-purple-500"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-xs text-gray-400 mb-1 block">Color</label>
-                      <select
-                        value={addForm.color}
-                        onChange={e => setAddForm(prev => ({ ...prev, color: e.target.value as ColorOption }))}
-                        className="w-full px-2 py-1.5 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none"
-                      >
-                        <option value="blue">Blue</option>
-                        <option value="green">Green</option>
-                        <option value="purple">Purple</option>
-                        <option value="red">Red</option>
-                        <option value="pink">Pink</option>
-                        <option value="yellow">Yellow</option>
-                        <option value="gray">Gray</option>
-                        <option value="orange">Orange</option>
-                        <option value="teal">Teal</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-400 mb-1 block">Short Label</label>
-                      <input
-                        type="text"
-                        value={addForm.shortLabel}
-                        onChange={e => setAddForm(prev => ({ ...prev, shortLabel: e.target.value }))}
-                        placeholder="e.g., 1st"
-                        maxLength={8}
-                        className="w-full px-2 py-1.5 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:border-purple-500"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-gray-400 mb-1 block">Description</label>
-                    <textarea
-                      value={addForm.description}
-                      onChange={e => setAddForm(prev => ({ ...prev, description: e.target.value }))}
-                      placeholder="Optional description of this variant"
-                      rows={2}
-                      className="w-full px-2 py-1.5 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:border-purple-500 resize-none"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-gray-400 mb-1 block">Sort Order</label>
-                    <input
-                      type="number"
-                      value={addForm.sortOrder}
-                      onChange={e => setAddForm(prev => ({ ...prev, sortOrder: parseInt(e.target.value || '0') }))}
-                      placeholder="0"
-                      className="w-full px-2 py-1.5 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:border-purple-500"
-                    />
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleCreateSetVariant}
-                      disabled={isCreating || !addForm.name.trim()}
-                      className="flex-1 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-sm rounded transition-colors"
-                    >
-                      {isCreating ? 'Creating…' : 'Create & Add'}
-                    </button>
-                    <button
-                      onClick={() => { setShowAddForm(false); setAddForm(DEFAULT_ADD_FORM) }}
-                      className="flex-1 py-1.5 bg-gray-600 hover:bg-gray-500 text-white text-sm rounded transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Add card-specific variant button / inline form (selected cards only) */}
+              {/* Add card-specific variant button / inline form (selected cards only) — shown FIRST */}
               {!showAddCardSpecificForm ? (
                 <button
                   onClick={() => {
@@ -827,22 +719,23 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
                     }
                     setShowAddCardSpecificForm(true)
                   }}
-                  className={`w-full flex items-center justify-center gap-2 px-3 py-2 mb-4 rounded-lg border border-dashed text-sm transition-colors ${
+                  className={`w-full flex items-center justify-center gap-2 px-3 py-2 mb-2 rounded-lg border border-dashed text-sm transition-colors ${
                     selectedCardIds.size > 0
                       ? 'border-gray-600 text-gray-400 hover:border-orange-500 hover:text-orange-400'
                       : 'border-gray-700 text-gray-600 cursor-not-allowed'
                   }`}
-                  title={selectedCardIds.size === 0 ? 'Select cards first' : undefined}
+                  title={selectedCardIds.size === 0 ? 'Select cards in the list first' : undefined}
                 >
-                  ➕ Add card-specific variant
-                  {selectedCardIds.size > 0 && (
-                    <span className="text-xs text-gray-500">({selectedCardIds.size} card{selectedCardIds.size === 1 ? '' : 's'})</span>
-                  )}
+                  ➕ Add variant to selected cards
+                  {selectedCardIds.size > 0
+                    ? <span className="text-xs text-gray-500">({selectedCardIds.size} card{selectedCardIds.size === 1 ? '' : 's'})</span>
+                    : <span className="text-xs text-gray-700">— select cards first</span>
+                  }
                 </button>
               ) : (
-                <div className="bg-gray-700 rounded-lg p-4 mb-4 space-y-3 border border-orange-700/40">
+                <div className="bg-gray-700 rounded-lg p-4 mb-2 space-y-3 border border-orange-700/40">
                   <div>
-                    <h4 className="text-white text-sm font-semibold">New Card-Specific Variant</h4>
+                    <h4 className="text-white text-sm font-semibold">Add Variant — Selected Cards Only</h4>
                     <p className="text-gray-400 text-xs mt-0.5">
                       Will be created{' '}
                       <span className="text-orange-300 font-medium">
@@ -936,6 +829,115 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
                   </div>
                 </div>
               )}
+
+              {/* Add variant to whole set button / inline form */}
+              {!showAddForm ? (
+                <button
+                  onClick={() => setShowAddForm(true)}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-2 mb-4 rounded-lg border border-dashed border-gray-600 text-gray-400 hover:border-purple-500 hover:text-purple-400 text-sm transition-colors"
+                >
+                  ➕ Add variant to whole set
+                </button>
+              ) : (
+                <div className="bg-gray-700 rounded-lg p-4 mb-4 space-y-3">
+                  <div>
+                    <h4 className="text-white text-sm font-semibold">Add Variant — Whole Set</h4>
+                    <p className="text-gray-400 text-xs mt-0.5">
+                      Will be created on{' '}
+                      <span className="text-purple-300 font-medium">
+                        {selectedCardIds.size > 0
+                          ? `${selectedCardIds.size} selected card${selectedCardIds.size === 1 ? '' : 's'}`
+                          : `all ${setCards.length} cards in the set`}
+                      </span>
+                      . Same variant name can exist across multiple sets.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-gray-400 mb-1 block">Name *</label>
+                    <input
+                      type="text"
+                      value={addForm.name}
+                      onChange={e => setAddForm(prev => ({ ...prev, name: e.target.value }))}
+                      onKeyDown={e => e.key === 'Enter' && handleCreateSetVariant()}
+                      placeholder="e.g., 1st Edition, Reverse Holo"
+                      autoFocus
+                      className="w-full px-2 py-1.5 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-gray-400 mb-1 block">Color</label>
+                      <select
+                        value={addForm.color}
+                        onChange={e => setAddForm(prev => ({ ...prev, color: e.target.value as ColorOption }))}
+                        className="w-full px-2 py-1.5 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none"
+                      >
+                        <option value="blue">Blue</option>
+                        <option value="green">Green</option>
+                        <option value="purple">Purple</option>
+                        <option value="red">Red</option>
+                        <option value="pink">Pink</option>
+                        <option value="yellow">Yellow</option>
+                        <option value="gray">Gray</option>
+                        <option value="orange">Orange</option>
+                        <option value="teal">Teal</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400 mb-1 block">Short Label</label>
+                      <input
+                        type="text"
+                        value={addForm.shortLabel}
+                        onChange={e => setAddForm(prev => ({ ...prev, shortLabel: e.target.value }))}
+                        placeholder="e.g., 1st"
+                        maxLength={8}
+                        className="w-full px-2 py-1.5 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-gray-400 mb-1 block">Description</label>
+                    <textarea
+                      value={addForm.description}
+                      onChange={e => setAddForm(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Optional description of this variant"
+                      rows={2}
+                      className="w-full px-2 py-1.5 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:border-purple-500 resize-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-gray-400 mb-1 block">Sort Order</label>
+                    <input
+                      type="number"
+                      value={addForm.sortOrder}
+                      onChange={e => setAddForm(prev => ({ ...prev, sortOrder: parseInt(e.target.value || '0') }))}
+                      placeholder="0"
+                      className="w-full px-2 py-1.5 bg-gray-600 border border-gray-500 rounded text-white text-sm focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleCreateSetVariant}
+                      disabled={isCreating || !addForm.name.trim()}
+                      className="flex-1 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-sm rounded transition-colors"
+                    >
+                      {isCreating ? 'Creating…' : 'Create & Add'}
+                    </button>
+                    <button
+                      onClick={() => { setShowAddForm(false); setAddForm(DEFAULT_ADD_FORM) }}
+                      className="flex-1 py-1.5 bg-gray-600 hover:bg-gray-500 text-white text-sm rounded transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
 
               {/* Quick Add Variant picker */}
               <div className="mb-6">
