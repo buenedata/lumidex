@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 export interface SetSymbolGridItem {
   id: string       // set_id aliased
@@ -22,9 +22,15 @@ export function SetSymbolGrid({ onSetSelect, onSetsLoaded, selectedSetId, refres
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const isInitialLoad = useRef(true)
 
   useEffect(() => {
-    setLoading(true)
+    // Only show the skeleton on the very first fetch; background refreshes
+    // (triggered by refreshKey incrementing after an upload) update data
+    // silently so the list stays mounted and scroll position is preserved.
+    if (isInitialLoad.current) {
+      setLoading(true)
+    }
     setError(null)
 
     async function fetchSets() {
@@ -52,6 +58,7 @@ export function SetSymbolGrid({ onSetSelect, onSetsLoaded, selectedSetId, refres
         setError(err instanceof Error ? err.message : 'Failed to load sets')
       } finally {
         setLoading(false)
+        isInitialLoad.current = false
       }
     }
 
