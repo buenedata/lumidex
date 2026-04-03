@@ -56,6 +56,7 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
   const [cardVariantMap,  setCardVariantMap]  = useState<Record<string, CardVariantState>>({})
   const [isLoadingCards,  setIsLoadingCards]  = useState(false)
   const [rarityFilter,    setRarityFilter]    = useState<string>('all')
+  const [sortMode,        setSortMode]        = useState<'number' | 'name'>('number')
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set())
 
   // ─── Inline per-card editor state ────────────────────────────────────────
@@ -71,6 +72,12 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
   const [showAddForm, setShowAddForm] = useState(false)
   const [addForm,     setAddForm]     = useState(DEFAULT_ADD_FORM)
   const [isCreating,  setIsCreating]  = useState(false)
+
+  // ─── Inline variant rename state (bulk config panel) ─────────────────────
+  const [editingVariantId,   setEditingVariantId]   = useState<string | null>(null)
+  const [editingVariantName, setEditingVariantName] = useState<string>('')
+  const [savingVariantId,    setSavingVariantId]    = useState<string | null>(null)
+  const [localVariantNames,  setLocalVariantNames]  = useState<Record<string, string>>({})
 
   // ─── Message ──────────────────────────────────────────────────────────────
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -147,6 +154,14 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
   const filteredCards = rarityFilter === 'all'
     ? setCards
     : setCards.filter(c => c.rarity === rarityFilter)
+
+  const sortedFilteredCards = [...filteredCards].sort((a, b) => {
+    if (sortMode === 'name') return a.name.localeCompare(b.name)
+    // Sort by card number — parse the numeric prefix (e.g. "128/217" → 128)
+    const numA = parseInt(a.number) || 0
+    const numB = parseInt(b.number) || 0
+    return numA - numB
+  })
 
   const selectAll  = () => setSelectedCardIds(new Set(filteredCards.map(c => c.id)))
   const selectNone = () => setSelectedCardIds(new Set())
@@ -272,6 +287,33 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
     }
   }
 
+  // ─── Rename a variant in the bulk config panel ───────────────────────────
+  const handleRenameVariant = async (variantId: string) => {
+    const trimmed = editingVariantName.trim()
+    if (!trimmed) return
+    setSavingVariantId(variantId)
+    try {
+      const res = await fetch('/api/variants', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: variantId, name: trimmed }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Failed to rename variant')
+      }
+      // Update local display name so the UI reflects the change without a full reload
+      setLocalVariantNames(prev => ({ ...prev, [variantId]: trimmed }))
+      setEditingVariantId(null)
+      setEditingVariantName('')
+      showMessage('success', `Renamed to "${trimmed}"`)
+    } catch (err: any) {
+      showMessage('error', err.message || 'Failed to rename variant')
+    } finally {
+      setSavingVariantId(null)
+    }
+  }
+
   // ─── Build a SearchCard-compatible object for CardVariantEditor ───────────
   const toSearchCard = (card: SetCard): SearchCard => ({
     id:                 card.id,
@@ -373,6 +415,16 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
                     <option key={r} value={r}>{r}</option>
                   ))}
                 </select>
+
+                {/* Sort order */}
+                <select
+                  value={sortMode}
+                  onChange={e => setSortMode(e.target.value as 'number' | 'name')}
+                  className="text-xs bg-gray-700 border border-gray-600 text-white rounded px-2 py-1 focus:outline-none focus:border-purple-500"
+                >
+                  <option value="number">Sort: Number</option>
+                  <option value="name">Sort: Name</option>
+                </select>
               </div>
 
               {/* Card rows */}
@@ -382,7 +434,7 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
                 <div className="text-gray-400 text-center py-10">No cards found.</div>
               ) : (
                 <div className="space-y-1 max-h-[600px] overflow-y-auto pr-1">
-                  {filteredCards.map(card => {
+                    {sortedFilteredCards.map(card => {
                     const state      = cardVariantMap[card.id]
                     const isSelected = selectedCardIds.has(card.id)
                     const isExpanded = expandedCardId === card.id
@@ -431,11 +483,33 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
                           </div>
 
                           {/* Override badge */}
-                          <div className="flex-shrink-0 flex items-center gap-2">
+                          <div className="flex-shrink-0 flex items-center gap-1.5">
                             {state?.hasOverrides ? (
-                              <span className="text-xs bg-blue-900/60 text-blue-300 border border-blue-700 rounded px-1.5 py-0.5">
-                                {state.variants.length}v override
-                              </span>
+                              <>
+                                <span
+                                  className="text-xs bg-blue-900/60 text-blue-300 border border-blue-700 rounded px-1.5 py-0.5 whitespace-nowrap"
+                                  title={state.variants.map(v => v.name).join(', ')}
+                                >
+                                  {state.variants.length}v override
+                                </span>
+                                {state.variants.slice(0, 3).map(v => (
+                                  <span
+                                    key={v.id}
+                                    className="text-xs rounded px-1 py-0.5 font-mono"
+                                    style={{
+                                      backgroundColor: `${COLOR_HEX[v.color] ?? '#6b7280'}22`,
+                                      color: COLOR_HEX[v.color] ?? '#9ca3af',
+                                      border: `1px solid ${COLOR_HEX[v.color] ?? '#6b7280'}66`,
+                                    }}
+                                    title={v.name}
+                                  >
+                                    {v.short_label || v.name.slice(0, 3)}
+                                  </span>
+                                ))}
+                                {state.variants.length > 3 && (
+                                  <span className="text-xs text-gray-500">+{state.variants.length - 3}</span>
+                                )}
+                              </>
                             ) : (
                               <span className="text-xs text-gray-600">— default</span>
                             )}
@@ -486,41 +560,94 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
               ) : (
                 <div className="space-y-2 mb-4">
                   {allVariants.map(variant => {
-                    const isActive = bulkVariantIds.has(variant.id)
-                    const hex = COLOR_HEX[variant.color] ?? COLOR_HEX.gray
+                    const isActive    = bulkVariantIds.has(variant.id)
+                    const hex         = COLOR_HEX[variant.color] ?? COLOR_HEX.gray
+                    const displayName = localVariantNames[variant.id] ?? variant.name
+                    const isEditing   = editingVariantId === variant.id
+
                     return (
-                      <button
-                        key={variant.id}
-                        onClick={() => toggleBulkVariant(variant.id)}
-                        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg border text-left transition-all ${
-                          isActive
-                            ? 'border-opacity-80 bg-opacity-20'
-                            : 'border-gray-600 bg-gray-700 hover:bg-gray-650'
-                        }`}
-                        style={isActive ? {
-                          borderColor: hex,
-                          backgroundColor: `${hex}22`,
-                        } : {}}
-                      >
-                        {/* Color dot */}
-                        <div
-                          className="w-3 h-3 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: isActive ? hex : '#4b5563' }}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <span className={`text-sm font-medium ${isActive ? 'text-white' : 'text-gray-400'}`}>
-                            {variant.name}
-                          </span>
-                          {variant.short_label && (
-                            <span className="ml-2 text-xs text-gray-500">[{variant.short_label}]</span>
-                          )}
-                        </div>
-                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                          isActive ? 'border-white bg-white' : 'border-gray-500'
-                        }`}>
-                          {isActive && <div className="w-2 h-2 rounded-full bg-gray-900" />}
-                        </div>
-                      </button>
+                      <div key={variant.id}>
+                        {isEditing ? (
+                          /* ── Rename mode ── */
+                          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-purple-500 bg-gray-700">
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: hex }}
+                            />
+                            <input
+                              autoFocus
+                              value={editingVariantName}
+                              onChange={e => setEditingVariantName(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter')  handleRenameVariant(variant.id)
+                                if (e.key === 'Escape') { setEditingVariantId(null); setEditingVariantName('') }
+                              }}
+                              className="flex-1 bg-gray-600 border border-gray-500 rounded px-2 py-0.5 text-white text-sm focus:outline-none focus:border-purple-400"
+                            />
+                            <button
+                              onClick={() => handleRenameVariant(variant.id)}
+                              disabled={savingVariantId === variant.id}
+                              className="text-green-400 hover:text-green-300 text-xs px-1.5 py-0.5 rounded transition-colors disabled:opacity-50"
+                              title="Save rename"
+                            >
+                              {savingVariantId === variant.id ? '…' : '✓'}
+                            </button>
+                            <button
+                              onClick={() => { setEditingVariantId(null); setEditingVariantName('') }}
+                              className="text-gray-500 hover:text-gray-300 text-xs px-1 transition-colors"
+                              title="Cancel"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          /* ── Toggle + rename button ── */
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => toggleBulkVariant(variant.id)}
+                              className={`flex-1 flex items-center gap-3 px-3 py-2 rounded-lg border text-left transition-all ${
+                                isActive
+                                  ? 'border-opacity-80 bg-opacity-20'
+                                  : 'border-gray-600 bg-gray-700 hover:bg-gray-650'
+                              }`}
+                              style={isActive ? {
+                                borderColor: hex,
+                                backgroundColor: `${hex}22`,
+                              } : {}}
+                            >
+                              {/* Color dot */}
+                              <div
+                                className="w-3 h-3 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: isActive ? hex : '#4b5563' }}
+                              />
+                              <div className="flex-1 min-w-0">
+                                <span className={`text-sm font-medium ${isActive ? 'text-white' : 'text-gray-400'}`}>
+                                  {displayName}
+                                </span>
+                                {variant.short_label && (
+                                  <span className="ml-2 text-xs text-gray-500">[{variant.short_label}]</span>
+                                )}
+                              </div>
+                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                                isActive ? 'border-white bg-white' : 'border-gray-500'
+                              }`}>
+                                {isActive && <div className="w-2 h-2 rounded-full bg-gray-900" />}
+                              </div>
+                            </button>
+                            {/* Rename button */}
+                            <button
+                              onClick={() => {
+                                setEditingVariantId(variant.id)
+                                setEditingVariantName(displayName)
+                              }}
+                              className="text-gray-500 hover:text-gray-300 p-1.5 rounded transition-colors flex-shrink-0"
+                              title="Rename variant"
+                            >
+                              ✏️
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     )
                   })}
                 </div>
@@ -634,12 +761,14 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
                 </div>
               )}
 
-              {/* Default variant picker */}
+              {/* Quick Add Variant picker */}
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Default Variant
-                  <span className="text-gray-500 font-normal ml-1">(optional)</span>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Quick Add Variant
                 </label>
+                <p className="text-xs text-gray-500 mb-2">
+                  The variant added to a user's collection when they double-click a card image on the set page.
+                </p>
                 <select
                   value={
                     bulkDefaultVariantId === undefined ? ''
@@ -657,7 +786,7 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
                   <option value="">— don't change —</option>
                   <option value="__clear">Clear (no default)</option>
                   {allVariants.map(v => (
-                    <option key={v.id} value={v.id}>{v.name}</option>
+                    <option key={v.id} value={v.id}>{localVariantNames[v.id] ?? v.name}</option>
                   ))}
                 </select>
               </div>

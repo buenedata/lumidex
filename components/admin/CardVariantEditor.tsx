@@ -71,6 +71,11 @@ export function CardVariantEditor({
   // sort_order editing state for existing card-specific variants
   const [savingOrderId, setSavingOrderId] = useState<string | null>(null)
 
+  // inline rename state for card-specific variants
+  const [editingCsVariantId,   setEditingCsVariantId]   = useState<string | null>(null)
+  const [editingCsVariantName, setEditingCsVariantName] = useState<string>('')
+  const [savingRenameId,       setSavingRenameId]       = useState<string | null>(null)
+
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const showMessage = (type: 'success' | 'error', text: string) => {
@@ -193,6 +198,33 @@ export function CardVariantEditor({
       showMessage('error', err.message || 'Failed to delete variant')
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  const handleRenameCardSpecific = async (variantId: string) => {
+    const trimmed = editingCsVariantName.trim()
+    if (!trimmed) return
+    setSavingRenameId(variantId)
+    try {
+      const res = await fetch('/api/variants', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: variantId, name: trimmed }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Failed to rename variant')
+      }
+      setCardSpecificVariants((prev) =>
+        prev.map((v) => v.id === variantId ? { ...v, name: trimmed } : v)
+      )
+      setEditingCsVariantId(null)
+      setEditingCsVariantName('')
+      showMessage('success', `Renamed to "${trimmed}"`)
+    } catch (err: any) {
+      showMessage('error', err.message || 'Failed to rename variant')
+    } finally {
+      setSavingRenameId(null)
     }
   }
 
@@ -337,76 +369,129 @@ export function CardVariantEditor({
               </div>
             ) : (
               <div className="space-y-2 mb-4">
-                {cardSpecificVariants.map((variant) => (
-                  <div
-                    key={variant.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-gray-700/60 border border-gray-600"
-                  >
-                    <div className="flex items-center space-x-3 flex-1 min-w-0">
-                      <div
-                        className="w-3 h-3 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: COLOR_HEX[variant.color] ?? '#6b7280' }}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <span className="text-white font-medium text-sm">{variant.name}</span>
-                        {variant.short_label && (
-                          <span className="ml-2 text-xs text-gray-400 font-mono bg-gray-700 px-1.5 py-0.5 rounded">
-                            {variant.short_label}
-                          </span>
-                        )}
-                        {variant.description && (
-                          <p className="text-gray-500 text-xs mt-0.5">{variant.description}</p>
-                        )}
-                      </div>
+                {cardSpecificVariants.map((variant) => {
+                  const isEditingName = editingCsVariantId === variant.id
+                  return (
+                    <div
+                      key={variant.id}
+                      className="rounded-lg bg-gray-700/60 border border-gray-600 overflow-hidden"
+                    >
+                      {isEditingName ? (
+                        /* ── Rename mode ── */
+                        <div className="flex items-center gap-2 p-3">
+                          <div
+                            className="w-3 h-3 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: COLOR_HEX[variant.color] ?? '#6b7280' }}
+                          />
+                          <input
+                            autoFocus
+                            value={editingCsVariantName}
+                            onChange={e => setEditingCsVariantName(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter')  handleRenameCardSpecific(variant.id)
+                              if (e.key === 'Escape') { setEditingCsVariantId(null); setEditingCsVariantName('') }
+                            }}
+                            className="flex-1 bg-gray-600 border border-gray-500 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-purple-400"
+                          />
+                          <button
+                            onClick={() => handleRenameCardSpecific(variant.id)}
+                            disabled={savingRenameId === variant.id}
+                            className="text-green-400 hover:text-green-300 text-xs px-2 py-1 rounded transition-colors disabled:opacity-50"
+                            title="Save rename"
+                          >
+                            {savingRenameId === variant.id ? '…' : '✓ Save'}
+                          </button>
+                          <button
+                            onClick={() => { setEditingCsVariantId(null); setEditingCsVariantName('') }}
+                            className="text-gray-500 hover:text-gray-300 text-xs px-1.5 py-1 transition-colors"
+                            title="Cancel"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        /* ── Normal view ── */
+                        <div className="flex items-center justify-between p-3">
+                          <div className="flex items-center space-x-3 flex-1 min-w-0">
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: COLOR_HEX[variant.color] ?? '#6b7280' }}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <span className="text-white font-medium text-sm">{variant.name}</span>
+                              {variant.short_label && (
+                                <span className="ml-2 text-xs text-gray-400 font-mono bg-gray-700 px-1.5 py-0.5 rounded">
+                                  {variant.short_label}
+                                </span>
+                              )}
+                              {variant.description && (
+                                <p className="text-gray-500 text-xs mt-0.5">{variant.description}</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                            {/* Rename */}
+                            <button
+                              onClick={() => {
+                                setEditingCsVariantId(variant.id)
+                                setEditingCsVariantName(variant.name)
+                              }}
+                              className="text-gray-500 hover:text-gray-300 text-xs p-1 rounded transition-colors"
+                              title="Rename variant"
+                            >
+                              ✏️
+                            </button>
+                            {/* Sort order */}
+                            <div className="flex items-center gap-1">
+                              <label className="text-xs text-gray-500">Order</label>
+                              <input
+                                type="number"
+                                defaultValue={variant.sort_order ?? 0}
+                                disabled={savingOrderId === variant.id}
+                                onBlur={async (e) => {
+                                  const newOrder = parseInt(e.target.value || '0')
+                                  if (newOrder === (variant.sort_order ?? 0)) return
+                                  setSavingOrderId(variant.id)
+                                  try {
+                                    const res = await fetch('/api/variants', {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      body: JSON.stringify({ id: variant.id, sort_order: newOrder }),
+                                    })
+                                    if (!res.ok) {
+                                      const err = await res.json()
+                                      showMessage('error', err.error || 'Failed to save sort order')
+                                    } else {
+                                      setCardSpecificVariants((prev) =>
+                                        prev.map((v) =>
+                                          v.id === variant.id ? { ...v, sort_order: newOrder } : v
+                                        )
+                                      )
+                                    }
+                                  } catch {
+                                    showMessage('error', 'Failed to save sort order')
+                                  } finally {
+                                    setSavingOrderId(null)
+                                  }
+                                }}
+                                className="w-16 px-1.5 py-0.5 bg-gray-700 border border-gray-600 rounded text-white text-xs focus:outline-none focus:border-purple-500 disabled:opacity-50"
+                              />
+                            </div>
+                            <Button
+                              variant="ghost"
+                              onClick={() => handleDeleteCardSpecific(variant)}
+                              disabled={deletingId === variant.id}
+                              size="sm"
+                              className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                            >
+                              {deletingId === variant.id ? '…' : 'Delete'}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                      <div className="flex items-center gap-1">
-                        <label className="text-xs text-gray-500">Order</label>
-                        <input
-                          type="number"
-                          defaultValue={variant.sort_order ?? 0}
-                          disabled={savingOrderId === variant.id}
-                          onBlur={async (e) => {
-                            const newOrder = parseInt(e.target.value || '0')
-                            if (newOrder === (variant.sort_order ?? 0)) return
-                            setSavingOrderId(variant.id)
-                            try {
-                              const res = await fetch('/api/variants', {
-                                method: 'PATCH',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ id: variant.id, sort_order: newOrder }),
-                              })
-                              if (!res.ok) {
-                                const err = await res.json()
-                                showMessage('error', err.error || 'Failed to save sort order')
-                              } else {
-                                setCardSpecificVariants((prev) =>
-                                  prev.map((v) =>
-                                    v.id === variant.id ? { ...v, sort_order: newOrder } : v
-                                  )
-                                )
-                              }
-                            } catch {
-                              showMessage('error', 'Failed to save sort order')
-                            } finally {
-                              setSavingOrderId(null)
-                            }
-                          }}
-                          className="w-16 px-1.5 py-0.5 bg-gray-700 border border-gray-600 rounded text-white text-xs focus:outline-none focus:border-purple-500 disabled:opacity-50"
-                        />
-                      </div>
-                      <Button
-                        variant="ghost"
-                        onClick={() => handleDeleteCardSpecific(variant)}
-                        disabled={deletingId === variant.id}
-                        size="sm"
-                        className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                      >
-                        {deletingId === variant.id ? '…' : 'Delete'}
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
 
@@ -552,7 +637,7 @@ export function CardVariantEditor({
             {/* Column headers */}
             <div className="flex items-center justify-between px-3 pb-1 text-xs text-gray-500 font-medium uppercase tracking-wider">
               <span>Variant</span>
-              <span title="The variant added when a card tile is double-clicked">Default (quick-add)</span>
+              <span title="The variant added to a user's collection when they double-click a card image on the set page">Quick Add (double-click)</span>
             </div>
 
             <div className="space-y-2">
