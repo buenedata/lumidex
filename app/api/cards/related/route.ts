@@ -72,7 +72,7 @@ export async function GET(request: NextRequest) {
     // ── Step 2: Fetch the limited result set ─────────────────────────────
     let cardsQuery = supabaseAdmin
       .from('cards')
-      .select('id, name, number, rarity, image, image_large, image_small, set_id')
+      .select('id, name, number, rarity, image, set_id')
       .eq('name', name.trim())
       .order('set_id', { ascending: true })
       .limit(limit)
@@ -117,9 +117,9 @@ export async function GET(request: NextRequest) {
     const relatedCards: RelatedCard[] = cards.map((card) => {
       const setMeta = card.set_id ? setsMap.get(card.set_id) : undefined
 
-      // Apply the same fallback chain as getCardImageWithFallback so thumbnails
-      // always resolve to a usable URL even when the primary `image` column is null.
-      let resolvedImage: string | null = card.image ?? card.image_large ?? card.image_small ?? null
+      // Use the stored image URL; if absent generate the Supabase Storage URL
+      // from set_id + number (same convention used by lib/imageUpload.ts).
+      let resolvedImage: string | null = card.image ?? null
       if (!resolvedImage && card.set_id && card.number) {
         const cardNumber = card.number.split('/')[0]
         const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
