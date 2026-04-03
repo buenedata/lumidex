@@ -357,7 +357,11 @@ export async function POST(request: NextRequest) {
 
         let matched   = 0
         let unmatched = 0
-        const priceUpserts: Record<string, unknown>[] = []
+        // Map<card_id (UUID), price row> — keyed so duplicate API cards for the
+        // same DB card (e.g. Celebrations Classic Collection sharing card numbers
+        // with the base set) are deduplicated before upsert, which avoids the
+        // "ON CONFLICT DO UPDATE command cannot affect row a second time" error.
+        const priceUpsertMap = new Map<string, Record<string, unknown>>()
         const apiIdBackfills: { uuid: string; tcgid: string }[] = []
 
         // ── Step 2a: Episode-ID mode ─────────────────────────────────────────
@@ -423,7 +427,7 @@ export async function POST(request: NextRequest) {
 
               if (!uuid) { unmatched++; continue }
               matched++
-              priceUpserts.push(extractCardPriceUpsert(uuid, apiCard))
+              priceUpsertMap.set(uuid, extractCardPriceUpsert(uuid, apiCard))
               if (tcgid && missingApiId.has(uuid)) apiIdBackfills.push({ uuid, tcgid })
             }
 
@@ -468,7 +472,7 @@ export async function POST(request: NextRequest) {
               const uuid    = (tcgid ? apiIdMap.get(tcgid) : null) ?? numberMap.get(normNum)
               if (!uuid) { unmatched++; continue }
               matched++
-              priceUpserts.push(extractCardPriceUpsert(uuid, apiCard))
+              priceUpsertMap.set(uuid, extractCardPriceUpsert(uuid, apiCard))
             }
 
             emit({ type: 'progress', page: Math.ceil(i / BATCH) + 1, fetched: apiCards.length, matched, unmatched, totalCards: tcgids.length })
@@ -564,23 +568,22 @@ export async function POST(request: NextRequest) {
                 const cm_avg_sell_p     = cm2.averageSellPrice ?? null
                 const cm_low_p          = cm2.lowPrice         ?? null
 
-                const existingIdx = priceUpserts.findIndex(r => r.card_id === uuid)
-                if (existingIdx >= 0) {
-                  const row = priceUpserts[existingIdx]
+                const existingRow = priceUpsertMap.get(uuid)
+                if (existingRow) {
                   // Always overwrite variant prices (pokemontcg.io is the authoritative source)
-                  if (tcgp_normal       != null) row.tcgp_normal       = tcgp_normal
-                  if (tcgp_reverse_holo != null) row.tcgp_reverse_holo = tcgp_reverse_holo
-                  if (tcgp_holo         != null) row.tcgp_holo         = tcgp_holo
-                  if (tcgp_1st_edition  != null) row.tcgp_1st_edition  = tcgp_1st_edition
-                  if (cm_trend          != null) row.cm_trend          = cm_trend
+                  if (tcgp_normal       != null) existingRow.tcgp_normal       = tcgp_normal
+                  if (tcgp_reverse_holo != null) existingRow.tcgp_reverse_holo = tcgp_reverse_holo
+                  if (tcgp_holo         != null) existingRow.tcgp_holo         = tcgp_holo
+                  if (tcgp_1st_edition  != null) existingRow.tcgp_1st_edition  = tcgp_1st_edition
+                  if (cm_trend          != null) existingRow.cm_trend          = cm_trend
                   // Fill gaps only (don't overwrite tcggo.com values)
-                  if (tcgp_market_p != null && row.tcgp_market == null) row.tcgp_market = tcgp_market_p
-                  if (cm_avg_30d_p  != null && row.cm_avg_30d  == null) row.cm_avg_30d  = cm_avg_30d_p
-                  if (cm_avg_sell_p != null && row.cm_avg_sell == null) row.cm_avg_sell = cm_avg_sell_p
-                  if (cm_low_p      != null && row.cm_low      == null) row.cm_low      = cm_low_p
+                  if (tcgp_market_p != null && existingRow.tcgp_market == null) existingRow.tcgp_market = tcgp_market_p
+                  if (cm_avg_30d_p  != null && existingRow.cm_avg_30d  == null) existingRow.cm_avg_30d  = cm_avg_30d_p
+                  if (cm_avg_sell_p != null && existingRow.cm_avg_sell == null) existingRow.cm_avg_sell = cm_avg_sell_p
+                  if (cm_low_p      != null && existingRow.cm_low      == null) existingRow.cm_low      = cm_low_p
                 } else {
                   // Card wasn't found by tcggo.com — add pokemontcg.io-only row
-                  priceUpserts.push({
+                  priceUpsertMap.set(uuid, {
                     card_id: uuid, api_card_id: pc.id as string,
                     tcgp_normal, tcgp_reverse_holo, tcgp_holo, tcgp_1st_edition,
                     tcgp_market: tcgp_market_p,
@@ -606,6 +609,8 @@ export async function POST(request: NextRequest) {
         }
 
         // ── Step 3: Upsert card prices ────────────────────────────────────────
+        // Materialise the Map into a deduplicated array — each card_id appears exactly once.
+        const priceUpserts = [...priceUpsertMap.values()]
         let upsertedCount = 0
         for (let i = 0; i < priceUpserts.length; i += BATCH_SIZE) {
           const batch = priceUpserts.slice(i, i + BATCH_SIZE)
