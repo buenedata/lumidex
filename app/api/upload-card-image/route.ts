@@ -186,7 +186,7 @@ async function uploadAndRecord(
   const { data: urlData } = supabaseAdmin.storage
     .from('card-images')
     .getPublicUrl(filename)
-  const imageUrl = urlData.publicUrl
+  const imageUrl = `${urlData.publicUrl}?v=${Date.now()}`
 
   // 7. Update cards table (service-role — bypasses RLS)
   const { error: dbError } = await supabaseAdmin
