@@ -4,7 +4,7 @@ import { useState } from 'react'
 
 // ── SSE event types ───────────────────────────────────────────────────────────
 
-type Bucket = 'card-images' | 'product-images' | 'set-images'
+type Bucket = 'card-images' | 'product-images' | 'set-images' | 'set-symbols'
 
 interface ProgressPayload {
   filename: string
@@ -41,6 +41,7 @@ const BUCKET_LABELS: Record<Bucket, string> = {
   'card-images':    'Card Images',
   'product-images': 'Product Images',
   'set-images':     'Set Images',
+  'set-symbols':    'Set Symbols',
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────

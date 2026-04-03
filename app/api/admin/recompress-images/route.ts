@@ -26,7 +26,7 @@ import { compressImageToWebP, COMPRESSED_CONTENT_TYPE } from '@/lib/imageCompres
 const CONCURRENCY = 3
 const PAGE_SIZE   = 1000   // Supabase max per list() call
 
-const ALLOWED_BUCKETS = ['card-images', 'product-images', 'set-images'] as const
+const ALLOWED_BUCKETS = ['card-images', 'product-images', 'set-images', 'set-symbols'] as const
 type AllowedBucket = (typeof ALLOWED_BUCKETS)[number]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

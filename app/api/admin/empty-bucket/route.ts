@@ -22,7 +22,7 @@ import { NextRequest } from 'next/server'
 import { requireAdmin } from '@/lib/admin'
 import { supabaseAdmin } from '@/lib/supabase'
 
-const ALLOWED_BUCKETS = ['card-images', 'product-images', 'set-images'] as const
+const ALLOWED_BUCKETS = ['card-images', 'product-images', 'set-images', 'set-symbols'] as const
 type AllowedBucket = (typeof ALLOWED_BUCKETS)[number]
 
 const PAGE_SIZE  = 1000

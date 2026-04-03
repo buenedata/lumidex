@@ -6,12 +6,13 @@ import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store'
 import { RecompressImages } from '../../../components/admin/RecompressImages'
 
-type Bucket = 'card-images' | 'product-images' | 'set-images'
+type Bucket = 'card-images' | 'product-images' | 'set-images' | 'set-symbols'
 
 const BUCKET_LABELS: Record<Bucket, string> = {
   'card-images':    'Card Images',
   'product-images': 'Product Images',
   'set-images':     'Set Images',
+  'set-symbols':    'Set Symbols',
 }
 
 type DeletePhase = 'idle' | 'listing' | 'deleting' | 'db' | 'done' | 'error'
