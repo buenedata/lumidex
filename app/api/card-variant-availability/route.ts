@@ -9,7 +9,7 @@ import { Variant } from '@/types'
  *
  * GET /api/card-variant-availability?setId=<id>
  *   Returns variant config for every card in a set in a single round-trip.
- *   Response: { byCard: { [cardId]: { variants: Variant[], hasOverrides: boolean } } }
+ *   Response: { byCard: { [cardId]: { variants: Variant[], hasOverrides: boolean, cardSpecificVariants: Variant[] } } }
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -65,16 +65,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch card-specific variants' }, { status: 500 })
     }
 
-    // Build a set of card-specific variant IDs per card so we can exclude them from global overrides
+    // Build card-specific variant map: cardId → Variant[]
+    const specificByCard: Record<string, Variant[]> = {}
     const specificIdsByCard: Record<string, Set<string>> = {}
     for (const v of (specificRows ?? []) as Variant[]) {
       if (!v.card_id) continue
+      if (!specificByCard[v.card_id]) specificByCard[v.card_id] = []
+      specificByCard[v.card_id].push(v)
       if (!specificIdsByCard[v.card_id]) specificIdsByCard[v.card_id] = new Set()
       specificIdsByCard[v.card_id].add(v.id)
     }
 
     // 4. Group by card_id
-    const byCard: Record<string, { variants: Variant[]; hasOverrides: boolean }> = {}
+    const byCard: Record<string, { variants: Variant[]; hasOverrides: boolean; cardSpecificVariants: Variant[] }> = {}
 
     for (const row of (avaRows ?? []) as unknown as { card_id: string; variants: Variant | null }[]) {
       if (!row.variants) continue
@@ -82,18 +85,19 @@ export async function GET(request: NextRequest) {
       const specificIds = specificIdsByCard[cid] ?? new Set()
       // Skip card-specific variants — they are always available and not toggleable globally
       if (specificIds.has(row.variants.id)) continue
-      if (!byCard[cid]) byCard[cid] = { variants: [], hasOverrides: false }
+      if (!byCard[cid]) byCard[cid] = { variants: [], hasOverrides: false, cardSpecificVariants: [] }
       byCard[cid].variants.push(row.variants)
       byCard[cid].hasOverrides = true
     }
 
-    // Cards that ONLY have card-specific variants (no global overrides) also count as overridden
-    for (const cid of Object.keys(specificIdsByCard)) {
-      if (!byCard[cid]) byCard[cid] = { variants: [], hasOverrides: false }
+    // Include card-specific variants in every card's entry
+    for (const [cid, specifics] of Object.entries(specificByCard)) {
+      if (!byCard[cid]) byCard[cid] = { variants: [], hasOverrides: false, cardSpecificVariants: [] }
+      byCard[cid].cardSpecificVariants = specifics.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
       byCard[cid].hasOverrides = true
     }
 
-    // Sort each card's variant list
+    // Sort each card's global variant list
     for (const cid of Object.keys(byCard)) {
       byCard[cid].variants.sort((a, b) => a.sort_order - b.sort_order)
     }

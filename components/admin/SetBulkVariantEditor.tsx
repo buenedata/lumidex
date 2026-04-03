@@ -20,6 +20,7 @@ interface SetCard {
 interface CardVariantState {
   variants: Variant[]
   hasOverrides: boolean
+  cardSpecificVariants: Variant[]
 }
 
 type ColorOption = 'blue' | 'green' | 'purple' | 'red' | 'pink' | 'yellow' | 'gray' | 'orange' | 'teal'
@@ -485,9 +486,14 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
               ) : (
                 <div className="space-y-1 max-h-[600px] overflow-y-auto pr-1">
                     {sortedFilteredCards.map(card => {
-                    const state      = cardVariantMap[card.id]
-                    const isSelected = selectedCardIds.has(card.id)
-                    const isExpanded = expandedCardId === card.id
+                    const state       = cardVariantMap[card.id]
+                    const isSelected  = selectedCardIds.has(card.id)
+                    const isExpanded  = expandedCardId === card.id
+                    const globalVs    = state?.variants ?? []
+                    const specificVs  = state?.cardSpecificVariants ?? []
+                    const totalCount  = globalVs.length + specificVs.length
+                    const allVs       = [...globalVs, ...specificVs]
+                    const tooltipText = allVs.map(v => v.name).join(', ')
 
                     return (
                       <div key={card.id}>
@@ -532,17 +538,17 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
                             </div>
                           </div>
 
-                          {/* Override badge */}
+                          {/* Override badge + expand button */}
                           <div className="flex-shrink-0 flex items-center gap-1.5">
                             {state?.hasOverrides ? (
                               <>
                                 <span
                                   className="text-xs bg-blue-900/60 text-blue-300 border border-blue-700 rounded px-1.5 py-0.5 whitespace-nowrap"
-                                  title={state.variants.map(v => v.name).join(', ')}
+                                  title={tooltipText}
                                 >
-                                  {state.variants.length}v override
+                                  {totalCount}v override
                                 </span>
-                                {state.variants.slice(0, 3).map(v => (
+                                {allVs.slice(0, 3).map(v => (
                                   <span
                                     key={v.id}
                                     className="text-xs rounded px-1 py-0.5 font-mono"
@@ -551,13 +557,13 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
                                       color: COLOR_HEX[v.color] ?? '#9ca3af',
                                       border: `1px solid ${COLOR_HEX[v.color] ?? '#6b7280'}66`,
                                     }}
-                                    title={v.name}
+                                    title={v.name + (v.card_id ? ' (card-specific)' : '')}
                                   >
                                     {v.short_label || v.name.slice(0, 3)}
                                   </span>
                                 ))}
-                                {state.variants.length > 3 && (
-                                  <span className="text-xs text-gray-500">+{state.variants.length - 3}</span>
+                                {totalCount > 3 && (
+                                  <span className="text-xs text-gray-500">+{totalCount - 3}</span>
                                 )}
                               </>
                             ) : (
