@@ -17,9 +17,13 @@ export async function GET(
       id: card.id,
       set_id: card.set_id,
       name: card.name || 'Unknown Card',
-      image: card.image ?? null,
+      // own_image: the card's own uploaded file (null = never uploaded for this card)
+      image: card.own_image ?? null,
+      // source_image: the inherited image from source_card_id when no own image exists
+      source_image: card.own_image ? null : (card.image ?? null),
+      source_card_id: card.source_card_id ?? null,
       number: card.number || '',
-      rarity: card.rarity || ''
+      rarity: card.rarity || '',
     }))
 
     const response = NextResponse.json(transformedCards)

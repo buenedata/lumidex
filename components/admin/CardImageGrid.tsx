@@ -8,7 +8,12 @@ export interface CardGridItem {
   name: string
   number: string
   rarity: string
+  /** Own uploaded image — null if this card has never had an image uploaded directly. */
   image: string | null
+  /** Image inherited from source_card_id (Prize Pack / reprint link). null when own image exists or no source set. */
+  source_image: string | null
+  /** FK to the original card row this reprint is linked to. */
+  source_card_id: string | null
   image_url: string
 }
 
@@ -82,8 +87,10 @@ export function CardImageGrid({ setId, onCardSelect, onCardsLoaded, selectedCard
     )
   }
 
-  const withImage = cards.filter((c) => !!c.image).length
-  const total = cards.length
+  const withOwnImage    = cards.filter((c) => !!c.image).length
+  const withSourceImage = cards.filter((c) => !c.image && !!c.source_image).length
+  const withImage       = withOwnImage + withSourceImage
+  const total           = cards.length
 
   // Prefer externally-controlled selection; fall back to internal click tracking
   const selectedId = selectedCardId !== undefined ? selectedCardId : internalSelectedId
@@ -98,7 +105,10 @@ export function CardImageGrid({ setId, onCardSelect, onCardsLoaded, selectedCard
       {/* Summary bar */}
       <div className="flex items-center justify-between text-sm">
         <span className="text-gray-400">
-          <span className="text-green-400 font-semibold">{withImage}</span>
+          <span className="text-green-400 font-semibold">{withOwnImage}</span>
+          {withSourceImage > 0 && (
+            <span className="text-teal-400 font-semibold"> +{withSourceImage}🔗</span>
+          )}
           {' / '}
           <span className="text-white font-semibold">{total}</span>
           {' '}cards have images
@@ -126,7 +136,11 @@ export function CardImageGrid({ setId, onCardSelect, onCardsLoaded, selectedCard
         </span>
         <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-4 rounded bg-green-900/50 border border-green-700" />
-          Has image
+          Own image
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block w-3 h-4 rounded bg-teal-900/50 border border-teal-700" />
+          Inherited 🔗
         </span>
         <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-4 rounded bg-yellow-600/20 border border-yellow-500" />
@@ -137,14 +151,22 @@ export function CardImageGrid({ setId, onCardSelect, onCardsLoaded, selectedCard
       {/* Card grid */}
       <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-1.5">
         {cards.map((card) => {
-          const hasImage = !!card.image
-          const isSelected = card.id === selectedId
+          const hasOwnImage    = !!card.image
+          const hasSourceImage = !card.image && !!card.source_image
+          const displayImage   = card.image ?? card.source_image
+          const isSelected     = card.id === selectedId
+
+          const titleSuffix = hasOwnImage
+            ? ' ✅ own image'
+            : hasSourceImage
+            ? ' 🔗 inherited image'
+            : ' — no image'
 
           return (
             <button
               key={card.id}
               onClick={() => handleSelect(card)}
-              title={`${card.name} #${card.number}${hasImage ? ' ✅ has image' : ' — no image'}`}
+              title={`${card.name} #${card.number}${titleSuffix}`}
               className={`
                 relative aspect-[2/3] rounded overflow-hidden transition-all duration-150
                 focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-400
@@ -153,12 +175,12 @@ export function CardImageGrid({ setId, onCardSelect, onCardsLoaded, selectedCard
                   : 'hover:ring-2 hover:ring-yellow-400/60 hover:scale-105 hover:z-10'}
               `}
             >
-              {hasImage ? (
-                /* Thumbnail */
+              {displayImage ? (
+                /* Thumbnail — own or inherited */
                 <img
-                  src={card.image!}
+                  src={displayImage}
                   alt={card.name}
-                  className="w-full h-full object-cover"
+                  className={`w-full h-full object-cover ${hasSourceImage ? 'opacity-80' : ''}`}
                   loading="lazy"
                 />
               ) : (
@@ -170,9 +192,12 @@ export function CardImageGrid({ setId, onCardSelect, onCardsLoaded, selectedCard
                 </div>
               )}
 
-              {/* Green dot badge when image exists */}
-              {hasImage && !isSelected && (
+              {/* Green dot = own image; teal chain = inherited */}
+              {hasOwnImage && !isSelected && (
                 <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-green-400 shadow" />
+              )}
+              {hasSourceImage && !isSelected && (
+                <span className="absolute top-0.5 right-0.5 text-[8px] leading-none">🔗</span>
               )}
             </button>
           )

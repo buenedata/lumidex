@@ -24,6 +24,9 @@ import { SetSymbolUploadModal } from '../../../components/admin/SetSymbolUploadM
 import { ProductImageGrid, type ProductGridItem } from '../../../components/admin/ProductImageGrid'
 import { ProductImageUploadModal } from '../../../components/admin/ProductImageUploadModal'
 
+// Source Images import
+import { LinkSourceImagesTab } from '../../../components/admin/LinkSourceImagesTab'
+
 // ─────────────────────────────────────────────
 // Tab definitions
 // ─────────────────────────────────────────────
@@ -32,6 +35,7 @@ const TABS = [
   { id: 'set-images',      label: 'Set Images',      icon: '🗂️' },
   { id: 'set-symbols',     label: 'Set Symbols',     icon: '🔷' },
   { id: 'product-images',  label: 'Product Images',  icon: '📦' },
+  { id: 'source-images',   label: 'Source Images',   icon: '🔗' },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -491,6 +495,7 @@ export default function ImageUploadPage() {
         {activeTab === 'set-images'     && <SetImagesTab />}
         {activeTab === 'set-symbols'    && <SetSymbolsTab />}
         {activeTab === 'product-images' && <ProductImagesTab />}
+        {activeTab === 'source-images'  && <LinkSourceImagesTab />}
 
       </div>
     </div>

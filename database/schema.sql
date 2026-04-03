@@ -35,19 +35,25 @@ create table if not exists public.sets (
 -- NOTE: id is a UUID (gen_random_uuid()).
 --       set_id is a text FK referencing sets.set_id.
 --       subtypes is a text[] array (e.g. ["Stage 1", "Pokémon"]).
+--       source_card_id: nullable FK to another card row (same table).
+--         Used for reprint/Prize-Pack sets so they inherit the source
+--         card's image without re-uploading.  Collection tracking
+--         remains independent because user_card_variants references
+--         the card's own id.
 create table if not exists public.cards (
-    id          uuid not null default gen_random_uuid() primary key,
-    set_id      text not null,                                         -- FK → sets.set_id
-    name        text not null,
-    number      text,
-    rarity      text,
-    type        text,                   -- element type, e.g. "Grass", "Fire"
-    image       text,                   -- single image URL
-    artist      text,
-    hp          text,
-    supertype   text,                   -- e.g. "Pokémon", "Trainer", "Energy"
-    subtypes    text[],                 -- e.g. '{"Stage 1","Pokémon"}'
-    created_at  timestamp without time zone default now()
+    id             uuid not null default gen_random_uuid() primary key,
+    set_id         text not null,                                         -- FK → sets.set_id
+    name           text not null,
+    number         text,
+    rarity         text,
+    type           text,               -- element type, e.g. "Grass", "Fire"
+    image          text,               -- card's own uploaded image URL
+    source_card_id uuid references public.cards(id) on delete set null,  -- FK → canonical printing
+    artist         text,
+    hp             text,
+    supertype      text,               -- e.g. "Pokémon", "Trainer", "Energy"
+    subtypes       text[],             -- e.g. '{"Stage 1","Pokémon"}'
+    created_at     timestamp without time zone default now()
 );
 
 -- Variants (global catalog of card variant types)

@@ -41,7 +41,23 @@ export interface DbCard {
   number: string | null
   rarity: string | null
   type: string | null
+  /**
+   * Resolved display image: the card's own uploaded image if present,
+   * otherwise the source card's image (for reprints / Prize Pack sets).
+   * Use `own_image` when you need to distinguish the two.
+   */
   image: string | null
+  /**
+   * The card's own uploaded image URL.  null means no image has been
+   * uploaded specifically for this card row (it may still have an
+   * inherited image via source_card_id → image).
+   */
+  own_image: string | null
+  /**
+   * FK → cards.id of the canonical/original printing.  When set the
+   * display image falls back to that card's image.
+   */
+  source_card_id: string | null
   artist: string | null
   /** FK → variants.id — the default variant for double-click quick-add */
   default_variant_id: string | null
@@ -117,21 +133,35 @@ export async function getSetById(setId: string): Promise<DbSet | null> {
 }
 
 /**
- * Get all cards for a specific set, ordered by card number
+ * Get all cards for a specific set, ordered by card number.
+ * The returned `image` field is COALESCED: if the card has its own
+ * uploaded image it is used; otherwise the source card's image is used
+ * (for Prize Pack / reprint sets).  `own_image` carries the raw value.
  */
 export async function getCardsBySet(setId: string): Promise<DbCard[]> {
+  // Supabase FK join: source:source_card_id(image) fetches the linked row's image
   const { data, error } = await supabase
     .from('cards')
-    .select('*')
+    .select('*, source:source_card_id(image)')
     .eq('set_id', setId)
     .order('number', { ascending: true })
-  
+
   if (error) {
     console.error('Error fetching cards:', error)
     throw new Error(`Failed to fetch cards: ${error.message}`)
   }
-  
-  return data || []
+
+  return (data || []).map((raw: any) => {
+    const { source, image, ...rest } = raw
+    const sourceImage: string | null = source?.image ?? null
+    return {
+      ...rest,
+      own_image: image ?? null,
+      source_card_id: raw.source_card_id ?? null,
+      // Resolved display image: own upload takes priority; fall back to source
+      image: image ?? sourceImage,
+    } as DbCard
+  })
 }
 
 /**

@@ -281,15 +281,19 @@ export function CardImageUploadModal({ card, isOpen, onClose, onUploadSuccess, o
                 </button>
               </div>
 
-              {/* Current image preview (if any) */}
-              {card?.image && !uploadState.success && (
+              {/* Current image preview (own upload or inherited source) */}
+              {!uploadState.success && (card?.image || card?.source_image) && (
                 <div className="flex items-center gap-3 p-3 bg-gray-900 rounded-lg border border-gray-800">
                   <img
-                    src={card.image}
+                    src={(card.image ?? card.source_image)!}
                     alt={card.name}
                     className="w-12 h-auto rounded"
                   />
-                  <p className="text-green-400 text-sm">✅ Card already has an image — uploading will replace it</p>
+                  {card.image ? (
+                    <p className="text-green-400 text-sm">✅ Card already has an image — uploading will replace it</p>
+                  ) : (
+                    <p className="text-teal-400 text-sm">🔗 Using inherited image from source card — uploading will add a card-specific image</p>
+                  )}
                 </div>
               )}
 
