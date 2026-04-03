@@ -328,8 +328,18 @@ export async function POST(request: NextRequest) {
         const missingApiId = new Set<string>()
 
         for (const card of dbCards) {
-          const uuid = card.id as string
-          numberMap.set(normalizeNumber(String(card.number ?? '')), uuid)
+          const uuid    = card.id as string
+          const normNum = normalizeNumber(String(card.number ?? ''))
+          numberMap.set(normNum, uuid)
+          // Also register the numeric-only form of alpha-prefixed card numbers
+          // (e.g. "C7" → also map "7") so tcggo.com's integer card_number values
+          // can match Classic Collection / subset cards that carry a letter prefix
+          // in the DB (Celebrations Classic Collection: C1–C25, Galarian Gallery
+          // GG cards, Trainer Gallery TG cards, etc.).
+          const numericSuffix = normNum.replace(/^[A-Za-z]+/, '')
+          if (numericSuffix && numericSuffix !== normNum && /^\d+$/.test(numericSuffix)) {
+            numberMap.set(String(parseInt(numericSuffix, 10)), uuid)
+          }
           if (card.api_id) {
             apiIdMap.set(card.api_id as string, uuid)
           } else {
@@ -605,6 +615,20 @@ export async function POST(request: NextRequest) {
               message: `pokemontcg.io merged ${ptcgoMerged} cards` })
           } catch (ptcgoErr) {
             emit({ type: 'warning', message: `pokemontcg.io failed (non-critical): ${ptcgoErr instanceof Error ? ptcgoErr.message : String(ptcgoErr)}` })
+          }
+        }
+
+        // ── Step 2.9: Diagnostic — report DB cards still without a price row ──
+        {
+          const unmatchedCards = dbCards
+            .filter(c => !priceUpsertMap.has(c.id as string))
+            .map(c => ({ number: c.number, api_id: c.api_id ?? null }))
+          if (unmatchedCards.length > 0) {
+            emit({
+              type:    'debug',
+              message: `${unmatchedCards.length} DB card(s) still unmatched after tcggo + pokemontcg.io`,
+              unmatched: unmatchedCards,
+            })
           }
         }
 
