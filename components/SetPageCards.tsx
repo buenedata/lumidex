@@ -187,13 +187,13 @@ export default function SetPageCards({
                   { label: 'Cards',          value: statCards ?? '—' },
                   {
                     label: 'Most Expensive',
-                    value: statMostExpensiveName != null && statMostExpensiveUSD != null
+                    value: statMostExpensiveName != null && statMostExpensiveUSD != null && statMostExpensiveUSD > 0
                       ? `${statMostExpensiveName} · ${formatPrice(statMostExpensiveUSD, effectiveCurrency)}`
                       : '—',
                   },
                   {
                     label: 'Set Value',
-                    value: statSetValueUSD != null ? formatPrice(statSetValueUSD, effectiveCurrency) : '—',
+                    value: statSetValueUSD != null && statSetValueUSD > 0 ? formatPrice(statSetValueUSD, effectiveCurrency) : '—',
                   },
                 ...(isAuthenticated && myCollectedValue > 0
                   ? [{ label: 'My Collection', value: formatPrice(myCollectedValue, effectiveCurrency) }]

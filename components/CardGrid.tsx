@@ -173,18 +173,6 @@ function getTypeGlowClass(type: string | null | undefined): string {
   return known.includes(key) ? `card-type-${key}` : ''
 }
 
-/**
- * Maps a variant display name to the matching per-variant TCGPlayer price field.
- * Falls back to tcgp_normal for any variant not explicitly matched.
- */
-function getVariantMarketPrice(variantName: string, row: CardPriceRow): number | null {
-  const name = variantName.toLowerCase()
-  if (name.includes('reverse'))                          return row.tcgp_reverse_holo
-  if (name.includes('1st') || name.includes('first'))   return row.tcgp_1st_edition
-  if (name.includes('holo'))                             return row.tcgp_holo
-  return row.tcgp_normal
-}
-
 export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', priceSource = 'tcgplayer', onVariantsLegendChange, disableGreyOut = false }: CardGridProps) {
   const { updateCardQuantity, userCards: storeUserCards, fetchUserCards } = useCollectionStore()
   const { user, isLoading, profile } = useAuthStore()
@@ -1256,13 +1244,24 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                             </div>
                           </div>
 
-                          {/* Market Price */}
+                          {/* Market Price — same source/value as shown under the card in the grid */}
                           <div className="w-20 text-center shrink-0">
                             <div className="text-price font-medium text-sm">
                               {(() => {
+                                // Prefer the pre-computed grid price (tcgp_market or CM equivalent)
+                                const gridPrice = cardPricesUSD?.[selectedCard.id]
+                                if (gridPrice != null) return formatPrice(gridPrice, effectiveCurrency)
+                                // Fallback: derive from the full price row if available
                                 const priceRow = cardPriceCache.get(selectedCard.id)
-                                const price = priceRow ? getVariantMarketPrice(variant.name, priceRow) : null
-                                return price != null ? formatPrice(price, effectiveCurrency) : isLoadingPrice ? '…' : '—'
+                                if (!priceRow) return isLoadingPrice ? '…' : '—'
+                                let price: number | null = null
+                                if (priceSource === 'cardmarket') {
+                                  const eur = priceRow.cm_avg_sell ?? priceRow.cm_trend ?? null
+                                  price = eur != null ? Math.round(eur * EUR_TO_USD * 100) / 100 : null
+                                } else {
+                                  price = priceRow.tcgp_market ?? null
+                                }
+                                return price != null ? formatPrice(price, effectiveCurrency) : '—'
                               })()}
                             </div>
                           </div>

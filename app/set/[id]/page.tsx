@@ -2,7 +2,6 @@ import { getSetById, getCardsBySet, hasPromoCards } from '@/lib/db'
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import { supabaseAdmin } from '@/lib/supabase'
 import { PokemonCard, PokemonSet, CollectionGoal, PriceSource } from '@/types'
-import { getMockPriceUSD } from '@/lib/mockPricing'
 import { getCardPricesForSet, getSealedProductsForSet, buildCardPriceMap, type SetProductPrice } from '@/lib/pricing'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -57,11 +56,6 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
       rarity: card.rarity || '',
     })) as PokemonCard[]
 
-    // Pricing is deferred until after auth so we know price_source.
-    // Temporarily seed with mock prices — overwritten below once we know
-    // the user's price_source preference.
-    cards.forEach(c => { cardPricesUSD[c.id] = getMockPriceUSD(c) })
-
   } catch (err) {
     console.error('Error fetching set data:', err)
     error = 'Failed to load set data. Please try again later.'
@@ -108,9 +102,8 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
     console.warn('Could not fetch user session:', err)
   }
 
-  // ── Real price lookup (replaces mock seed above) ──────────────────────────
-  // Runs after auth so we have price_source. Falls back to existing mock values
-  // for any card that has no price row yet.
+  // ── Real price lookup ─────────────────────────────────────────────────────
+  // Only real DB prices are used — cards without a price row show no price.
   try {
     const [realPrices, products] = await Promise.all([
       getCardPricesForSet(id, priceSource),
@@ -118,14 +111,10 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
     ])
 
     sealedProducts = products
-
-    if (Object.keys(realPrices).length > 0) {
-      pricesAreLive = true
-      cardPricesUSD = buildCardPriceMap(cards, realPrices, getMockPriceUSD)
-    }
-    // else: keep the mock seed that was set above
+    cardPricesUSD = buildCardPriceMap(cards, realPrices)
+    pricesAreLive = Object.keys(cardPricesUSD).length > 0
   } catch (err) {
-    console.warn('[set page] Price lookup failed, using mock prices:', err)
+    console.warn('[set page] Price lookup failed:', err)
   }
 
   // (Re-)compute set stats now that final prices are settled

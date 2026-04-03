@@ -2,10 +2,7 @@
  * lib/pricing.ts
  *
  * Real-price lookup from the card_prices / set_products Supabase tables.
- * Replaces lib/mockPricing.ts as the primary pricing consumer.
- *
- * lib/mockPricing.ts is kept intact and used as a graceful fallback
- * when no DB price row exists for a card.
+ * Cards without a price row are omitted — the UI shows a dash for unpriced cards.
  */
 
 import { supabaseAdmin } from '@/lib/supabase'
@@ -135,8 +132,7 @@ export interface SeriesProductGroup {
  * Fetches all card prices for a set from the `card_prices` table.
  *
  * Returns a Record<cardId, CardPriceData> keyed by the internal UUID.
- * Cards with no price row are omitted — caller should fall back to
- * getMockPriceUSD() from lib/mockPricing.ts.
+ * Cards with no price row are omitted — those cards should show no price.
  *
  * @param setId       The set's text ID (e.g. "sv1")
  * @param priceSource User preference: 'tcgplayer' | 'cardmarket'
@@ -358,33 +354,23 @@ export async function getSealedProductsForAllSeries(): Promise<SeriesProductGrou
 }
 
 /**
- * Given a CardPriceData (or null) and a fallback mock price, returns the
- * best market price in USD. Prefers real data; falls back to the mock value.
- */
-export function resolveCardPriceUSD(
-  real: CardPriceData | null | undefined,
-  mockUSD: number,
-): number {
-  return real?.marketUSD ?? mockUSD
-}
-
-/**
- * Builds the cardPricesUSD map (card UUID → USD price) for a whole set,
- * merging real prices with mock fallbacks.
+ * Builds the cardPricesUSD map (card UUID → USD price) for a whole set.
+ * Only cards with a real price row are included — cards without data are
+ * omitted so the UI can show a dash instead of a fake price.
  *
- * @param cards         Array of PokemonCard (must have .id; rarity used by mock fallback)
- * @param realPrices    Result of getCardPricesForSet()
- * @param getMockPrice  Reference to getMockPriceUSD from lib/mockPricing
+ * @param cards       Array of PokemonCard (must have .id)
+ * @param realPrices  Result of getCardPricesForSet()
  */
 export function buildCardPriceMap(
   cards: PokemonCard[],
   realPrices: Record<string, CardPriceData>,
-  getMockPrice: (card: PokemonCard) => number,
 ): Record<string, number> {
   const map: Record<string, number> = {}
   for (const card of cards) {
-    const real = realPrices[card.id]
-    map[card.id] = real?.marketUSD ?? getMockPrice(card)
+    const price = realPrices[card.id]?.marketUSD
+    if (price != null) {
+      map[card.id] = price
+    }
   }
   return map
 }
