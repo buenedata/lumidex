@@ -19,15 +19,7 @@ const ADMIN_TOOLS: AdminTool[] = [
     icon: '🖼️',
     title: 'Image Upload',
     description:
-      'Upload card images, set logos, and set symbols in one place. Switch between types using the pill tabs. Supports drag-and-drop, URL paste, and bulk import.',
-    badge: 'Storage',
-  },
-  {
-    href: '/admin/product-images',
-    icon: '📦',
-    title: 'Product Image Upload',
-    description:
-      'Drag sealed product images from Collectr directly into the uploader. Images are stored in Supabase and displayed on the products page.',
+      'Upload card images, set logos, set symbols, and sealed product images in one place. Switch between types using the pill tabs. Supports drag-and-drop, URL paste, and bulk import.',
     badge: 'Storage',
   },
   {
