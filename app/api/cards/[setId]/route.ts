@@ -23,7 +23,7 @@ export async function GET(
     }))
 
     const response = NextResponse.json(transformedCards)
-    response.headers.set('Cache-Control', 's-maxage=300, stale-while-revalidate=600')
+    response.headers.set('Cache-Control', 'no-store')
     return response
   } catch (error) {
     console.error('Database error fetching cards:', error)
