@@ -15,11 +15,11 @@ interface AdminTool {
 
 const ADMIN_TOOLS: AdminTool[] = [
   {
-    href: '/admin/set-images',
-    icon: '🗂️',
-    title: 'Set Image Upload',
+    href: '/admin/image-upload',
+    icon: '🖼️',
+    title: 'Image Upload',
     description:
-      'Drag set logos from pkmn.gg directly into the uploader. Logos are stored in Supabase and displayed on the sets browse page.',
+      'Upload card images, set logos, and set symbols in one place. Switch between types using the pill tabs. Supports drag-and-drop, URL paste, and bulk import.',
     badge: 'Storage',
   },
   {
@@ -28,22 +28,6 @@ const ADMIN_TOOLS: AdminTool[] = [
     title: 'Product Image Upload',
     description:
       'Drag sealed product images from Collectr directly into the uploader. Images are stored in Supabase and displayed on the products page.',
-    badge: 'Storage',
-  },
-  {
-    href: '/admin/set-symbols',
-    icon: '🔷',
-    title: 'Set Symbol Upload',
-    description:
-      'Drag set symbol icons from pkmn.gg directly into the uploader. Symbols appear as a small badge in the bottom-left corner of every set card.',
-    badge: 'Storage',
-  },
-  {
-    href: '/admin/card-images',
-    icon: '🖼️',
-    title: 'Card Image Upload',
-    description:
-      'Drag card images from pkmn.gg directly into the uploader. Images are automatically stored in Supabase and linked to the correct card.',
     badge: 'Storage',
   },
   {
