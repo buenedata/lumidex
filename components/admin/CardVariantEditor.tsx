@@ -72,9 +72,13 @@ export function CardVariantEditor({
   const [savingOrderId, setSavingOrderId] = useState<string | null>(null)
 
   // inline rename state for card-specific variants
-  const [editingCsVariantId,   setEditingCsVariantId]   = useState<string | null>(null)
-  const [editingCsVariantName, setEditingCsVariantName] = useState<string>('')
-  const [savingRenameId,       setSavingRenameId]       = useState<string | null>(null)
+  const [editingCsVariantId,         setEditingCsVariantId]         = useState<string | null>(null)
+  const [editingCsVariantName,       setEditingCsVariantName]       = useState<string>('')
+  const [editingCsVariantShortLabel, setEditingCsVariantShortLabel] = useState<string>('')
+  const [savingRenameId,             setSavingRenameId]             = useState<string | null>(null)
+
+  // global variant promotion state
+  const [promotingGlobalId, setPromotingGlobalId] = useState<string | null>(null)
 
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
@@ -202,29 +206,84 @@ export function CardVariantEditor({
   }
 
   const handleRenameCardSpecific = async (variantId: string) => {
-    const trimmed = editingCsVariantName.trim()
-    if (!trimmed) return
+    const trimmedName  = editingCsVariantName.trim()
+    const trimmedLabel = editingCsVariantShortLabel.trim()
+    if (!trimmedName) return
     setSavingRenameId(variantId)
     try {
       const res = await fetch('/api/variants', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: variantId, name: trimmed }),
+        body: JSON.stringify({
+          id:          variantId,
+          name:        trimmedName,
+          short_label: trimmedLabel || null,
+        }),
       })
       if (!res.ok) {
         const err = await res.json()
-        throw new Error(err.error || 'Failed to rename variant')
+        throw new Error(err.error || 'Failed to save variant')
       }
       setCardSpecificVariants((prev) =>
-        prev.map((v) => v.id === variantId ? { ...v, name: trimmed } : v)
+        prev.map((v) =>
+          v.id === variantId
+            ? { ...v, name: trimmedName, short_label: trimmedLabel || null }
+            : v
+        )
       )
       setEditingCsVariantId(null)
       setEditingCsVariantName('')
-      showMessage('success', `Renamed to "${trimmed}"`)
+      setEditingCsVariantShortLabel('')
+      showMessage('success', `"${trimmedName}" saved.`)
     } catch (err: any) {
-      showMessage('error', err.message || 'Failed to rename variant')
+      showMessage('error', err.message || 'Failed to save variant')
     } finally {
       setSavingRenameId(null)
+    }
+  }
+
+  const handlePromoteGlobal = async (variant: Variant) => {
+    if (!confirm(
+      `"${variant.name}" is a global variant shared across all cards.\n\n` +
+      `Creating a card-specific copy lets you customize its short label for this card only, ` +
+      `without affecting other cards.\n\n` +
+      `Existing collection entries for this card will be migrated to the new copy. Continue?`
+    )) return
+
+    setPromotingGlobalId(variant.id)
+    try {
+      const res = await fetch('/api/admin/promote-global-to-card-specific', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cardId: selectedCard.id, globalVariantId: variant.id }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Promotion failed')
+      }
+      const { variant: newVariant } = await res.json()
+
+      // Add the new card-specific clone to the top section
+      setCardSpecificVariants((prev) => [...prev, newVariant])
+      // Deselect the global variant from availability toggles
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        next.delete(variant.id)
+        return next
+      })
+      setSavedIds((prev) => {
+        const next = new Set(prev)
+        next.delete(variant.id)
+        return next
+      })
+      showMessage(
+        'success',
+        `"${variant.name}" is now a card-specific variant — edit its short label in the top section.`
+      )
+    } catch (err: any) {
+      showMessage('error', err.message || 'Failed to promote variant')
+    } finally {
+      setPromotingGlobalId(null)
     }
   }
 
@@ -377,37 +436,68 @@ export function CardVariantEditor({
                       className="rounded-lg bg-gray-700/60 border border-gray-600 overflow-hidden"
                     >
                       {isEditingName ? (
-                        /* ── Rename mode ── */
-                        <div className="flex items-center gap-2 p-3">
-                          <div
-                            className="w-3 h-3 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: COLOR_HEX[variant.color] ?? '#6b7280' }}
-                          />
-                          <input
-                            autoFocus
-                            value={editingCsVariantName}
-                            onChange={e => setEditingCsVariantName(e.target.value)}
-                            onKeyDown={e => {
-                              if (e.key === 'Enter')  handleRenameCardSpecific(variant.id)
-                              if (e.key === 'Escape') { setEditingCsVariantId(null); setEditingCsVariantName('') }
-                            }}
-                            className="flex-1 bg-gray-600 border border-gray-500 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-purple-400"
-                          />
-                          <button
-                            onClick={() => handleRenameCardSpecific(variant.id)}
-                            disabled={savingRenameId === variant.id}
-                            className="text-green-400 hover:text-green-300 text-xs px-2 py-1 rounded transition-colors disabled:opacity-50"
-                            title="Save rename"
-                          >
-                            {savingRenameId === variant.id ? '…' : '✓ Save'}
-                          </button>
-                          <button
-                            onClick={() => { setEditingCsVariantId(null); setEditingCsVariantName('') }}
-                            className="text-gray-500 hover:text-gray-300 text-xs px-1.5 py-1 transition-colors"
-                            title="Cancel"
-                          >
-                            ✕
-                          </button>
+                        /* ── Edit mode ── */
+                        <div className="flex flex-col gap-2 p-3">
+                          {/* Row 1: colour dot + name */}
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: COLOR_HEX[variant.color] ?? '#6b7280' }}
+                            />
+                            <input
+                              autoFocus
+                              value={editingCsVariantName}
+                              onChange={e => setEditingCsVariantName(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter')  handleRenameCardSpecific(variant.id)
+                                if (e.key === 'Escape') {
+                                  setEditingCsVariantId(null)
+                                  setEditingCsVariantName('')
+                                  setEditingCsVariantShortLabel('')
+                                }
+                              }}
+                              placeholder="Variant name"
+                              className="flex-1 bg-gray-600 border border-gray-500 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-purple-400"
+                            />
+                          </div>
+                          {/* Row 2: short label + save/cancel */}
+                          <div className="flex items-center gap-2 pl-5">
+                            <span className="text-xs text-gray-500 w-20 flex-shrink-0">Short label</span>
+                            <input
+                              value={editingCsVariantShortLabel}
+                              onChange={e => setEditingCsVariantShortLabel(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter')  handleRenameCardSpecific(variant.id)
+                                if (e.key === 'Escape') {
+                                  setEditingCsVariantId(null)
+                                  setEditingCsVariantName('')
+                                  setEditingCsVariantShortLabel('')
+                                }
+                              }}
+                              placeholder="e.g. 1st, SW"
+                              maxLength={10}
+                              className="w-28 bg-gray-600 border border-gray-500 rounded px-2 py-1 text-white text-sm font-mono focus:outline-none focus:border-purple-400"
+                            />
+                            <button
+                              onClick={() => handleRenameCardSpecific(variant.id)}
+                              disabled={savingRenameId === variant.id}
+                              className="text-green-400 hover:text-green-300 text-xs px-2 py-1 rounded transition-colors disabled:opacity-50"
+                              title="Save"
+                            >
+                              {savingRenameId === variant.id ? '…' : '✓ Save'}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingCsVariantId(null)
+                                setEditingCsVariantName('')
+                                setEditingCsVariantShortLabel('')
+                              }}
+                              className="text-gray-500 hover:text-gray-300 text-xs px-1.5 py-1 transition-colors"
+                              title="Cancel"
+                            >
+                              ✕
+                            </button>
+                          </div>
                         </div>
                       ) : (
                         /* ── Normal view ── */
@@ -430,14 +520,15 @@ export function CardVariantEditor({
                             </div>
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                            {/* Rename */}
+                            {/* Edit name + short label */}
                             <button
                               onClick={() => {
                                 setEditingCsVariantId(variant.id)
                                 setEditingCsVariantName(variant.name)
+                                setEditingCsVariantShortLabel(variant.short_label ?? '')
                               }}
                               className="text-gray-500 hover:text-gray-300 text-xs p-1 rounded transition-colors"
-                              title="Rename variant"
+                              title="Edit name & short label"
                             >
                               ✏️
                             </button>
@@ -695,8 +786,19 @@ export function CardVariantEditor({
                         </div>
                       </label>
 
-                      {/* Right: quick-add badge + default radio */}
+                      {/* Right: customize + quick-add badge + default radio */}
                       <div className="flex items-center gap-3 ml-3 flex-shrink-0">
+                        {/* Customize short label for this card only (enabled variants only) */}
+                        {checked && (
+                          <button
+                            onClick={() => handlePromoteGlobal(variant)}
+                            disabled={promotingGlobalId === variant.id}
+                            className="text-gray-500 hover:text-purple-300 text-xs px-2 py-0.5 rounded border border-gray-700 hover:border-purple-500 transition-colors disabled:opacity-40"
+                            title="Customize short label for this card only — creates a card-specific copy"
+                          >
+                            {promotingGlobalId === variant.id ? '…' : '✂ Customize'}
+                          </button>
+                        )}
                         {variant.is_quick_add && (
                           <span className="text-blue-400 bg-blue-900/30 text-xs px-2 py-0.5 rounded-full">
                             quick add
