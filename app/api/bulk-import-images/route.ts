@@ -21,12 +21,14 @@ function sseData(payload: unknown): Uint8Array {
   return new TextEncoder().encode(`data: ${JSON.stringify(payload)}\n\n`)
 }
 
-// ── pkmn.gg scraping ─────────────────────────────────────────────────────────
+// ── Shared card shape ─────────────────────────────────────────────────────────
 
 interface PkmnCard {
   number: string
   imageUrl: string
 }
+
+// ── pkmn.gg scraping ─────────────────────────────────────────────────────────
 
 /**
  * Fetch a pkmn.gg set page and extract card image URLs.
@@ -127,6 +129,177 @@ async function extractCardsFromPkmnGg(pkmnGgUrl: string): Promise<PkmnCard[]> {
     .filter((c) => c.number !== '' && c.imageUrl !== '')
 }
 
+// ── dext TCG scraping ────────────────────────────────────────────────────────
+
+/**
+ * Extract the expansion ID from a dext TCG URL.
+ * Handles both clean paths and URLs with query params:
+ *   https://app.dextcg.com/expansions/me1?screenTitle=…&initial=false → "me1"
+ */
+function extractDextExpansionId(expansionUrl: string): string {
+  const parsed = new URL(expansionUrl)
+  const segments = parsed.pathname.split('/').filter(Boolean)
+  const expansionIdx = segments.indexOf('expansions')
+  const id = expansionIdx >= 0 ? segments[expansionIdx + 1] : null
+  if (!id) {
+    throw new Error(
+      `Could not extract expansion ID from dext TCG URL.\n` +
+        `Expected: https://app.dextcg.com/expansions/{id}?…\n` +
+        `Got path: ${parsed.pathname}`,
+    )
+  }
+  return id
+}
+
+/**
+ * Fetch a dext TCG expansion page and extract card image URLs.
+ *
+ * dext TCG is a client-side React app. Card data is loaded at runtime via an
+ * API call rather than embedded in the initial HTML.  This function therefore
+ * attempts a direct JSON API request first, then falls back to looking for an
+ * embedded data blob in the page HTML.
+ *
+ * ⚠️  If this throws "Could not resolve card data", open the expansion page in
+ *     Chrome → DevTools → Network tab, filter by Fetch/XHR, reload the page and
+ *     find the request that returns the card list.  Update `API_PATTERNS` below
+ *     to match the real endpoint.
+ */
+async function extractCardsFromDextCg(expansionUrl: string): Promise<PkmnCard[]> {
+  const expansionId = extractDextExpansionId(expansionUrl)
+  console.log(`[bulk-import] dext TCG expansion ID: "${expansionId}"`)
+
+  const browserHeaders = {
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    Accept: 'application/json, text/html, */*',
+    Origin: 'https://app.dextcg.com',
+    Referer: 'https://app.dextcg.com/',
+  }
+
+  // ── Attempt 1: direct JSON API ───────────────────────────────────────────
+  // ⚠️  TODO: Update these URL patterns to match the real dext TCG API after
+  //     inspecting the Network tab in Chrome DevTools on an expansion page.
+  const API_PATTERNS = [
+    `https://app.dextcg.com/api/expansions/${expansionId}/cards`,
+    `https://api.dextcg.com/v1/expansions/${expansionId}/cards`,
+    `https://api.dextcg.com/expansions/${expansionId}/cards`,
+  ]
+
+  for (const apiUrl of API_PATTERNS) {
+    try {
+      const res = await fetch(apiUrl, {
+        headers: { ...browserHeaders, Accept: 'application/json' },
+      })
+      if (!res.ok) continue
+
+      const contentType = res.headers.get('content-type') ?? ''
+      if (!contentType.includes('json')) continue
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = (await res.json()) as any
+
+      // Normalise the response — common shapes:
+      //   { cards: [...] }  |  { data: [...] }  |  [...]
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cards: any[] = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.cards)
+          ? data.cards
+          : Array.isArray(data?.data)
+            ? data.data
+            : []
+
+      if (cards.length === 0) {
+        console.warn(
+          `[bulk-import] dext TCG API at "${apiUrl}" returned JSON but no card array. ` +
+            `Top-level keys: ${Object.keys(data ?? {}).join(', ')}`,
+        )
+        continue
+      }
+
+      console.log(
+        `[bulk-import] dext TCG: found ${cards.length} cards via API at "${apiUrl}"`,
+      )
+
+      return cards
+        .map((c) => ({
+          // ⚠️  TODO: Adjust field names to match the real API response.
+          number: String(
+            c.serialNumber ?? c.cardNumber ?? c.number ?? c.card_number ?? '',
+          ),
+          imageUrl: String(
+            c.imageUrl ?? c.image_url ?? c.image ?? c.cardImageUrl ?? '',
+          ),
+        }))
+        .filter((c) => c.number !== '' && c.imageUrl !== '')
+    } catch (err) {
+      console.warn(`[bulk-import] dext TCG API attempt "${apiUrl}" failed:`, err)
+    }
+  }
+
+  // ── Attempt 2: embedded data in page HTML ────────────────────────────────
+  console.log(`[bulk-import] dext TCG API attempts exhausted — falling back to HTML scrape`)
+  const pageRes = await fetch(expansionUrl, { headers: browserHeaders })
+  if (!pageRes.ok) {
+    throw new Error(
+      `Failed to fetch dext TCG expansion page (HTTP ${pageRes.status}). ` +
+        `API patterns tried: ${API_PATTERNS.join(', ')}`,
+    )
+  }
+
+  const html = await pageRes.text()
+
+  // Try __NEXT_DATA__ (Next.js SSR)
+  const nextMatch = html.match(
+    /<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/,
+  )
+  if (nextMatch) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const nextData = JSON.parse(nextMatch[1]) as any
+    const pageProps = nextData?.props?.pageProps
+    console.log(
+      `[bulk-import] dext TCG __NEXT_DATA__ pageProps keys: ${Object.keys(pageProps ?? {}).join(', ')}`,
+    )
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const candidateArrays: any[][] = [
+      pageProps?.cards,
+      pageProps?.cardData,
+      pageProps?.expansion?.cards,
+    ].filter((arr): arr is any[] => Array.isArray(arr) && arr.length > 0)
+
+    if (candidateArrays.length > 0) {
+      const merged = candidateArrays.flat()
+      console.log(`[bulk-import] dext TCG: found ${merged.length} cards in __NEXT_DATA__`)
+      return merged
+        .map((c) => ({
+          number: String(
+            c.serialNumber ?? c.cardNumber ?? c.number ?? c.card_number ?? '',
+          ),
+          imageUrl: String(
+            c.imageUrl ?? c.image_url ?? c.image ?? c.cardImageUrl ?? '',
+          ),
+        }))
+        .filter((c) => c.number !== '' && c.imageUrl !== '')
+    }
+  }
+
+  // ── Diagnostics to help the implementer ─────────────────────────────────
+  const scriptTags = [...html.matchAll(/<script[^>]*src="([^"]+)"/g)].map((m) => m[1])
+  console.error(
+    `[bulk-import] dext TCG: could not resolve card data for expansion "${expansionId}".\n` +
+      `Page script tags: ${scriptTags.slice(0, 10).join(', ')}\n` +
+      `Page HTML snippet (first 500 chars): ${html.slice(0, 500)}`,
+  )
+
+  throw new Error(
+    `Could not extract card data from dext TCG expansion "${expansionId}".\n` +
+      `The API endpoint patterns did not match and no embedded card data was found.\n` +
+      `Please inspect the Network tab in Chrome DevTools on the expansion page and update ` +
+      `the API_PATTERNS array in app/api/bulk-import-images/route.ts.`,
+  )
+}
+
 // ── DB card type ──────────────────────────────────────────────────────────────
 
 interface DbCard {
@@ -152,7 +325,13 @@ export async function POST(request: NextRequest) {
   }
 
   // 2. Parse body
-  let body: { pkmnGgUrl?: string; setId?: string; overwrite?: boolean }
+  let body: {
+    sourceUrl?: string
+    /** @deprecated use sourceUrl */
+    pkmnGgUrl?: string
+    setId?: string
+    overwrite?: boolean
+  }
   try {
     body = await request.json()
   } catch {
@@ -162,11 +341,13 @@ export async function POST(request: NextRequest) {
     })
   }
 
-  const { pkmnGgUrl, setId, overwrite = false } = body
+  // Accept either the new generic `sourceUrl` field or the legacy `pkmnGgUrl` alias
+  const sourceUrl = body.sourceUrl ?? body.pkmnGgUrl
+  const { setId, overwrite = false } = body
 
-  if (!pkmnGgUrl || !setId) {
+  if (!sourceUrl || !setId) {
     return new Response(
-      JSON.stringify({ error: 'pkmnGgUrl and setId are required' }),
+      JSON.stringify({ error: 'sourceUrl and setId are required' }),
       { status: 400, headers: { 'Content-Type': 'application/json' } },
     )
   }
@@ -207,15 +388,32 @@ export async function POST(request: NextRequest) {
           return
         }
 
-        // ── Scrape pkmn.gg ───────────────────────────────────────────────────
+        // ── Scrape external source ───────────────────────────────────────────
+        let sourceHost: string
+        try {
+          sourceHost = new URL(sourceUrl).hostname
+        } catch {
+          emit({
+            type: 'error',
+            payload: { message: `Invalid source URL: "${sourceUrl}"` },
+          })
+          controller.close()
+          return
+        }
+
         let pkmnCards: PkmnCard[]
         try {
-          pkmnCards = await extractCardsFromPkmnGg(pkmnGgUrl)
+          if (sourceHost === 'app.dextcg.com') {
+            pkmnCards = await extractCardsFromDextCg(sourceUrl)
+          } else {
+            // Default: treat as pkmn.gg (all pkmn.gg hosts + legacy callers)
+            pkmnCards = await extractCardsFromPkmnGg(sourceUrl)
+          }
         } catch (err) {
           emit({
             type: 'error',
             payload: {
-              message: err instanceof Error ? err.message : 'Failed to fetch pkmn.gg page',
+              message: err instanceof Error ? err.message : `Failed to fetch source page (${sourceHost})`,
             },
           })
           controller.close()

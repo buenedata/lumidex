@@ -42,7 +42,7 @@ interface Props {
 }
 
 export function BulkImageImport({ setId, onComplete }: Props) {
-  const [pkmnGgUrl, setPkmnGgUrl] = useState('')
+  const [sourceUrl, setSourceUrl] = useState('')
   const [overwrite, setOverwrite] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
   const [isDone, setIsDone] = useState(false)
@@ -62,7 +62,7 @@ export function BulkImageImport({ setId, onComplete }: Props) {
     const res = await fetch('/api/bulk-import-images', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pkmnGgUrl, setId, overwrite }),
+      body: JSON.stringify({ sourceUrl, setId, overwrite }),
     })
 
     if (!res.ok || !res.body) {
@@ -134,18 +134,18 @@ export function BulkImageImport({ setId, onComplete }: Props) {
       {/* ── Input area ────────────────────────────────────────────────────── */}
       <div className="space-y-3">
         <div>
-          <label className="block text-gray-400 mb-1" htmlFor="pkmn-gg-url">
-              pkmn.gg URL
-            </label>
-            <input
-              id="pkmn-gg-url"
-              type="url"
-              value={pkmnGgUrl}
-              onChange={(e) => setPkmnGgUrl(e.target.value)}
-              placeholder="https://www.pkmn.gg/series/scarlet-violet/151  or  /collections/trick-or-trade-2022"
-              disabled={isRunning}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-yellow-500 disabled:opacity-50"
-            />
+          <label className="block text-gray-400 mb-1" htmlFor="source-url">
+            Import source URL
+          </label>
+          <input
+            id="source-url"
+            type="url"
+            value={sourceUrl}
+            onChange={(e) => setSourceUrl(e.target.value)}
+            placeholder="https://www.pkmn.gg/series/…  or  https://app.dextcg.com/expansions/me1?…"
+            disabled={isRunning}
+            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-yellow-500 disabled:opacity-50"
+          />
         </div>
 
         <label className="flex items-center gap-2 cursor-pointer select-none">
@@ -167,7 +167,7 @@ export function BulkImageImport({ setId, onComplete }: Props) {
         <div className="flex items-center gap-3">
           <button
             onClick={handleStart}
-            disabled={isRunning || pkmnGgUrl.trim() === ''}
+            disabled={isRunning || sourceUrl.trim() === ''}
             className="px-4 py-2 rounded-lg bg-yellow-500 text-black font-semibold hover:bg-yellow-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {isRunning ? 'Importing…' : 'Start Import'}
@@ -183,8 +183,10 @@ export function BulkImageImport({ setId, onComplete }: Props) {
         </div>
 
         <p className="text-gray-500 text-xs">
-          Accepts set pages (<code className="text-gray-400">/series/…</code>) and collection pages (<code className="text-gray-400">/collections/…</code>).
-          Images are fetched from assets.pkmn.gg and stored in Supabase Storage.
+          Accepts pkmn.gg set pages (<code className="text-gray-400">pkmn.gg/series/…</code>
+          {' '}or <code className="text-gray-400">/collections/…</code>) and dext TCG expansion pages
+          (<code className="text-gray-400">app.dextcg.com/expansions/{'{id}'}?…</code>).
+          Images are fetched from the source and stored in Supabase Storage.
         </p>
       </div>
 

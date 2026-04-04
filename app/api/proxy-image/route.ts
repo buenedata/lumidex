@@ -11,11 +11,14 @@ const ALLOWED_DOMAINS = [
   'tcgcollector.com',
   'www.tcgcollector.com',
   'static.tcgcollector.com',
+  // dext TCG
+  'app.dextcg.com',
+  'cdn.dextcg.com',
   // Other trusted sources
   'public.getcollectr.com',
   'limitlesstcg.com',
   'www.limitlesstcg.com',
-  'bulbapedia.bulbagarden.net'
+  'bulbapedia.bulbagarden.net',
 ]
 
 export async function GET(request: NextRequest) {

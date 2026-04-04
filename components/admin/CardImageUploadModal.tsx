@@ -30,6 +30,10 @@ const ACCEPTED_URL_HOSTS = [
   'pkmn.gg',
   'www.pkmn.gg',
   'site.pkmn.gg',
+  // dext TCG
+  'app.dextcg.com',
+  'cdn.dextcg.com',
+  // Other trusted sources
   'public.getcollectr.com',
   'limitlesstcg.com',
   'www.limitlesstcg.com',
@@ -163,7 +167,7 @@ export function CardImageUploadModal({ card, isOpen, onClose, onUploadSuccess, o
     if (!isAcceptedImageUrl(trimmed)) {
       setUploadState((prev) => ({
         ...prev,
-        error: 'URL must be an https image from TCGCollector or pkmn.gg',
+        error: 'URL must be an https image from TCGCollector, pkmn.gg, or dext TCG',
       }))
       return
     }
@@ -387,8 +391,10 @@ export function CardImageUploadModal({ card, isOpen, onClose, onUploadSuccess, o
                         <p className="text-white font-medium">
                           Drag image from{' '}
                           <span className="text-yellow-400">TCGCollector</span>
-                          {' '}or{' '}
+                          {', '}
                           <span className="text-yellow-400">pkmn.gg</span>
+                          {', or '}
+                          <span className="text-yellow-400">dext TCG</span>
                         </p>
                         <p className="text-gray-500 text-sm">or click to browse files</p>
                       </div>
@@ -424,7 +430,7 @@ export function CardImageUploadModal({ card, isOpen, onClose, onUploadSuccess, o
                             handleLoadFromUrl()
                           }
                         }}
-                        placeholder="https://static.tcgcollector.com/…  or  https://assets.pkmn.gg/…"
+                        placeholder="https://static.tcgcollector.com/…  or  https://assets.pkmn.gg/…  or  https://app.dextcg.com/…"
                         disabled={fetchingUrl || uploadState.uploading}
                         className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-yellow-500 disabled:opacity-50"
                       />
@@ -438,7 +444,7 @@ export function CardImageUploadModal({ card, isOpen, onClose, onUploadSuccess, o
                     </div>
                     {urlInput.length > 8 && !urlInputValid && (
                       <p className="text-yellow-600 text-xs mt-1">
-                        ⚠️ Must be an https URL from TCGCollector or pkmn.gg
+                        ⚠️ Must be an https URL from TCGCollector, pkmn.gg, or dext TCG
                       </p>
                     )}
                   </div>
