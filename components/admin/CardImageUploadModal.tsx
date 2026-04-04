@@ -31,6 +31,8 @@ const ACCEPTED_URL_HOSTS = [
   'www.pkmn.gg',
   'site.pkmn.gg',
   // dext TCG
+  'dextcg.com',
+  'www.dextcg.com',
   'app.dextcg.com',
   'cdn.dextcg.com',
   // Other trusted sources

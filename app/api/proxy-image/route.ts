@@ -12,6 +12,8 @@ const ALLOWED_DOMAINS = [
   'www.tcgcollector.com',
   'static.tcgcollector.com',
   // dext TCG
+  'dextcg.com',
+  'www.dextcg.com',
   'app.dextcg.com',
   'cdn.dextcg.com',
   // Other trusted sources
