@@ -412,7 +412,14 @@ export async function createCardSpecificVariant(formData: FormData) {
     }
 
     // ── Insert the card-specific variant ────────────────────────
-    const key = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
+    // The `variants_key_unique` constraint is global, so two cards with the
+    // same variant display name (e.g. "Pokémon Center") would collide if we
+    // derived the key from the name alone.  Appending a 12-char card-ID
+    // fragment matches the strategy used by bulk-create-card-specific and
+    // promote-global-to-card-specific.
+    const nameSlug     = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
+    const cardFragment = cardId.replace(/-/g, '').slice(0, 12)
+    const key          = `${nameSlug}_${cardFragment}`
 
     const { data: newVariant, error: insertError } = await supabase
       .from('variants')
