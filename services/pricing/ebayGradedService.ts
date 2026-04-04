@@ -262,44 +262,45 @@ export async function probeEbayGradedSearch(
 
 /**
  * Fetch eBay last-sold graded prices for a card from PSA, CGC and ACE.
- * Runs one Browse API search per company (3 total) and returns all results combined.
+ * All 3 company searches run in parallel (Promise.all) — same accuracy,
+ * ~3× faster than sequential (one eBay round-trip instead of three).
  */
 export async function fetchEbayGradedPrices(card: CardSearchData): Promise<EbayGradedResult[]> {
-  const baseKeywords = buildEbaySearchString(card);
-  const allResults: EbayGradedResult[] = [];
+  const baseKeywords    = buildEbaySearchString(card);
+  const companyEntries  = Object.entries(COMPANY_CONFIG) as [GradingCompany, typeof COMPANY_CONFIG[GradingCompany]][];
 
-  for (const [company, config] of Object.entries(COMPANY_CONFIG) as [GradingCompany, typeof COMPANY_CONFIG[GradingCompany]][]) {
-    const keywords = `${baseKeywords} ${config.suffix}`;
+  const perCompanyResults = await Promise.all(
+    companyEntries.map(async ([company, config]) => {
+      const keywords = `${baseKeywords} ${config.suffix}`;
+      try {
+        const { items } = await searchBrowseCompletedItems(keywords);
 
-    try {
-      const { items } = await searchBrowseCompletedItems(keywords);
+        if (!items.length) {
+          console.warn(`[ebayGradedService] No ${company} graded results for card "${card.id}"`);
+          return [] as EbayGradedResult[];
+        }
 
-      if (!items.length) {
-        console.warn(`[ebayGradedService] No ${company} graded results found for card "${card.id}"`);
-        continue;
+        const gradeGroups = parseGradeGroups(items, config.regex);
+
+        if (!gradeGroups.size) {
+          console.warn(`[ebayGradedService] No parseable ${company} grades for card "${card.id}"`);
+          return [] as EbayGradedResult[];
+        }
+
+        const results = gradeGroupsToResults(card.id, company, gradeGroups);
+        if (results.length > 0) {
+          console.log(`[ebayGradedService] ${company}: ${results.length} grade(s) for card "${card.id}"`);
+        }
+        return results;
+      } catch (err) {
+        console.warn(
+          `[ebayGradedService] ${company} search failed for card "${card.id}":`,
+          err instanceof Error ? err.message : err
+        );
+        return [] as EbayGradedResult[];
       }
+    })
+  );
 
-      const gradeGroups = parseGradeGroups(items, config.regex);
-
-      if (!gradeGroups.size) {
-        console.warn(`[ebayGradedService] No valid ${company} graded items found for card "${card.id}"`);
-        continue;
-      }
-
-      const results = gradeGroupsToResults(card.id, company, gradeGroups);
-      allResults.push(...results);
-
-      if (results.length > 0) {
-        console.log(`[ebayGradedService] ${company}: ${results.length} grade(s) for card "${card.id}"`);
-      }
-    } catch (err) {
-      console.warn(
-        `[ebayGradedService] ${company} search failed for card "${card.id}":`,
-        err instanceof Error ? err.message : err
-      );
-      // Continue with other companies even if one fails
-    }
-  }
-
-  return allResults;
+  return perCompanyResults.flat();
 }
