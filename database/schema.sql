@@ -151,6 +151,16 @@ create table if not exists public.user_achievements (
     unlocked_at    timestamp with time zone not null default timezone('utc'::text, now())
 );
 
+-- eBay webhook event log
+-- Stores raw payloads received from eBay Marketplace Account Deletion /
+-- notification subscriptions. Written server-side via service role only;
+-- no user-facing RLS policies are required for this table.
+create table if not exists public.ebay_webhooks (
+    id         uuid not null default gen_random_uuid() primary key,
+    payload    jsonb,
+    created_at timestamp without time zone default now()
+);
+
 -- ── Row Level Security ────────────────────────────────────────
 alter table public.users enable row level security;
 alter table public.sets enable row level security;
