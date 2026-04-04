@@ -897,7 +897,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                       key={variant.id}
                       onClick={(e) => {
                         e.stopPropagation()
-                        if (variant.color === 'gray') {
+                        if (variant.color === 'gray' || variant.card_id != null) {
                           handleCardClick(card)
                         } else {
                           handleVariantClick(e, card.id, variant.id)
@@ -906,7 +906,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                       onContextMenu={(e) => {
                         e.preventDefault()
                         e.stopPropagation()
-                        if (variant.color === 'gray') {
+                        if (variant.color === 'gray' || variant.card_id != null) {
                           handleCardClick(card)
                         } else {
                           handleVariantClick(e, card.id, variant.id)
