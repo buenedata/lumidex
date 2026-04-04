@@ -365,12 +365,13 @@ export async function createCardSpecificVariant(formData: FormData) {
     const user = await requireAdmin()
     const supabase = getAdminSupabaseClient()
 
-    const cardId   = formData.get('cardId') as string
-    const name     = (formData.get('name')  as string)?.trim()
-    const color    = (formData.get('color') as string) || 'gray'
-    const shortLabel = (formData.get('shortLabel') as string)?.trim() || null
+    const cardId      = formData.get('cardId') as string
+    const name        = (formData.get('name')  as string)?.trim()
+    const color       = (formData.get('color') as string) || 'gray'
+    const shortLabel  = (formData.get('shortLabel') as string)?.trim() || null
     const description = (formData.get('description') as string)?.trim() || null
-    const sortOrder = parseInt(formData.get('sortOrder') as string || '0')
+    const sortOrder   = parseInt(formData.get('sortOrder') as string || '0')
+    const makeDefault = formData.get('makeDefault') === 'true'
 
     // ── Validate ────────────────────────────────────────────────
     if (!cardId || !validateUUID(cardId)) {
@@ -447,9 +448,22 @@ export async function createCardSpecificVariant(formData: FormData) {
     // merged on top of the existing rarity/override result — they do NOT touch
     // `card_variant_availability`, which would replace the global rarity rules.
 
+    // Optionally set this new variant as the card's quick-add default.
+    if (makeDefault) {
+      const { error: defaultError } = await supabase
+        .from('cards')
+        .update({ default_variant_id: newVariant.id })
+        .eq('id', cardId)
+
+      if (defaultError) {
+        // Non-fatal: variant was created; just warn rather than roll back.
+        console.warn('createCardSpecificVariant: failed to set default_variant_id:', defaultError.message)
+      }
+    }
+
     revalidatePath('/admin/variants')
 
-    return { success: true, data: newVariant }
+    return { success: true, data: newVariant, madeDefault: makeDefault }
 
   } catch (error: any) {
     console.error('createCardSpecificVariant error:', error)

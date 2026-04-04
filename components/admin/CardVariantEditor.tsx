@@ -36,6 +36,7 @@ const DEFAULT_FORM = {
   shortLabel: '',
   description: '',
   sortOrder: 0,
+  makeDefault: false,
 }
 
 export function CardVariantEditor({
@@ -307,6 +308,7 @@ export function CardVariantEditor({
     formData.append('shortLabel', addForm.shortLabel.trim())
     formData.append('description', addForm.description.trim())
     formData.append('sortOrder', addForm.sortOrder.toString())
+    formData.append('makeDefault', addForm.makeDefault ? 'true' : 'false')
 
     startCreating(async () => {
       try {
@@ -314,6 +316,13 @@ export function CardVariantEditor({
         if (result.success && result.data) {
           setCardSpecificVariants((prev) => [...prev, result.data as Variant])
           onCardVariantCreated?.(result.data as Variant)
+          // If the user opted to make this the quick-add default, sync state
+          // immediately so the global-section radio button reflects it without
+          // requiring a separate "Save Changes" click.
+          if (result.madeDefault && result.data.id) {
+            setDefaultVariantId(result.data.id)
+            setSavedDefaultVariantId(result.data.id)
+          }
           setAddForm(DEFAULT_FORM)
           setShowAddForm(false)
           showMessage('success', `Card-specific variant "${result.data.name}" created!`)
@@ -717,6 +726,23 @@ export function CardVariantEditor({
                       />
                     </div>
                   </div>
+
+                  {/* Make default quick-add */}
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none group">
+                    <input
+                      type="checkbox"
+                      checked={addForm.makeDefault}
+                      onChange={(e) =>
+                        setAddForm((prev) => ({ ...prev, makeDefault: e.target.checked }))
+                      }
+                      className="w-4 h-4 accent-yellow-400 cursor-pointer flex-shrink-0"
+                    />
+                    <span className="text-sm text-gray-300 group-hover:text-white transition-colors">
+                      Make this the{' '}
+                      <span className="text-yellow-400 font-medium">quick add default</span>
+                      {' '}for this card
+                    </span>
+                  </label>
 
                   <div className="flex items-center gap-3 pt-1">
                     <Button
