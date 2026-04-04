@@ -1,36 +1,42 @@
+/**
+ * eBay Graded Price Service — Browse API
+ *
+ * Fetches PSA graded sold listings via the eBay Browse API (OAuth, v1).
+ * Replaced the deprecated Finding API (findCompletedItems on svcs.ebay.com)
+ * which was returning HTTP 500.
+ *
+ * Auth: Application-level OAuth token via getEbayAppToken()
+ * Scope: https://api.ebay.com/oauth/api_scope
+ */
+
+import { getEbayAppToken } from '@/lib/ebayAuth';
 import { CardSearchData, EbayGradedResult } from './types';
 import { buildEbaySearchString, mapVariant } from './cardMatcher';
 import { removeOutliers, average, median } from './priceNormalizer';
 
-const PSA_GRADE_REGEX = /PSA\s?(\d+)/i;
-const MIN_GRADE = 1;
-const MAX_GRADE = 10;
-export const MIN_ITEMS_PER_GRADE = 1; // lowered from 2 — captures low-volume sets
-const MIN_PRICE = 0.10;
-const MAX_PRICE = 5000;
+// ── Constants ─────────────────────────────────────────────────────────────────
 
-interface EbayFindingItem {
-  title?: string[];
-  sellingStatus?: Array<{
-    currentPrice?: Array<{ __value__?: string }>;
-  }>;
+const BROWSE_BASE    = 'https://api.ebay.com/buy/browse/v1/item_summary/search';
+const MARKETPLACE_ID = 'EBAY_US';
+
+const PSA_GRADE_REGEX   = /PSA\s?(\d+)/i;
+const MIN_GRADE          = 1;
+const MAX_GRADE          = 10;
+export const MIN_ITEMS_PER_GRADE = 1;   // 1 allows low-volume sets to register prices
+const MIN_PRICE          = 0.10;
+const MAX_PRICE          = 5000;
+
+// ── Browse API types ──────────────────────────────────────────────────────────
+
+interface BrowseItemSummary {
+  title?: string;
+  price?: { value?: string; currency?: string };
 }
 
-interface EbayFindingResponse {
-  findCompletedItemsResponse?: Array<{
-    ack?: string[];
-    errorMessage?: Array<{
-      error?: Array<{
-        message?: string[];
-        errorId?: string[];
-        domain?: string[];
-      }>;
-    }>;
-    searchResult?: Array<{
-      '@count'?: string;
-      item?: EbayFindingItem[];
-    }>;
-  }>;
+interface BrowseSearchResponse {
+  total?: number;
+  itemSummaries?: BrowseItemSummary[];
+  warnings?: Array<{ message?: string; errorId?: string }>;
 }
 
 interface GradeGroup {
@@ -38,42 +44,79 @@ interface GradeGroup {
   titles: string[];
 }
 
-/** Build the eBay Finding API URL for graded sold listings of a card. */
-export function buildGradedSearchUrl(card: { name: string; number: string }): string {
-  const baseKeywords = buildEbaySearchString(card);
-  const keywords = `${baseKeywords} PSA graded`;
+// ── Shared Browse API helper ──────────────────────────────────────────────────
+
+/**
+ * Call the eBay Browse API for completed/sold fixed-price listings.
+ * Returns the raw item list, or throws with a descriptive message on failure.
+ *
+ * @internal — exported for use in probeEbayGradedSearch
+ */
+export async function searchBrowseCompletedItems(
+  keywords: string,
+  limit = 50
+): Promise<{ items: BrowseItemSummary[]; total: number; httpStatus: number; tokenSnippet: string }> {
+  let token: string;
+  try {
+    token = await getEbayAppToken();
+  } catch (err) {
+    throw new Error(
+      `[ebayGradedService] OAuth token fetch failed: ${err instanceof Error ? err.message : String(err)}`
+    );
+  }
+
+  // Only log first 20 chars so the token is never fully exposed in logs
+  const tokenSnippet = token.slice(0, 20) + '…';
 
   const params = new URLSearchParams({
-    'OPERATION-NAME': 'findCompletedItems',
-    'SERVICE-VERSION': '1.0.0',
-    'SECURITY-APPNAME': process.env.EBAY_CLIENT_ID ?? '',
-    'RESPONSE-DATA-FORMAT': 'JSON',
-    'REST-PAYLOAD': '',
-    keywords,
-    'itemFilter(0).name': 'SoldItemsOnly',
-    'itemFilter(0).value': 'true',
-    'itemFilter(1).name': 'ListingType',
-    'itemFilter(1).value': 'FixedPrice',
-    'itemFilter(2).name': 'Condition',
-    'itemFilter(2).value(0)': '1000',
-    'itemFilter(2).value(1)': '3000',
-    sortOrder: 'EndTimeSoonest',
-    'paginationInput.entriesPerPage': '50',
+    q:      keywords,
+    filter: 'buyingOptions:{FIXED_PRICE},completedItems:true',
+    limit:  String(limit),
+    sort:   'endTimeSoonest',
   });
 
-  return `https://svcs.ebay.com/services/search/FindingService/v1?${params.toString()}`;
+  const url = `${BROWSE_BASE}?${params.toString()}`;
+
+  const response = await fetch(url, {
+    headers: {
+      'Authorization':            `Bearer ${token}`,
+      'X-EBAY-C-MARKETPLACE-ID':  MARKETPLACE_ID,
+      'Content-Type':             'application/json',
+    },
+  });
+
+  const httpStatus = response.status;
+
+  if (!response.ok) {
+    let errBody = '';
+    try { errBody = await response.text() } catch { /* ignore */ }
+    throw new Error(
+      `[ebayGradedService] Browse API HTTP ${httpStatus} for query "${keywords}": ${errBody.slice(0, 200)}`
+    );
+  }
+
+  const json = (await response.json()) as BrowseSearchResponse;
+  return {
+    items:       json.itemSummaries ?? [],
+    total:       json.total ?? 0,
+    httpStatus,
+    tokenSnippet,
+  };
 }
+
+// ── Probe (diagnostic) ────────────────────────────────────────────────────────
 
 /** Raw diagnostic data returned by probeEbayGradedSearch. */
 export interface EbayGradedProbeResult {
-  searchKeywords: string;
-  httpStatus: number;
-  ack: string | null;
-  apiErrorMessages: string[];
-  rawItemCount: number;
-  itemsSample: Array<{ title: string; price: string | null }>;
-  parsedGrades: Record<number, { priceCount: number; avg: number | null }>;
-  finalResults: EbayGradedResult[];
+  searchKeywords:   string;
+  httpStatus:       number;
+  tokenSnippet:     string;
+  tokenError:       string | null;
+  rawItemCount:     number;
+  apiTotal:         number;
+  itemsSample:      Array<{ title: string; price: string | null; currency: string | null }>;
+  parsedGrades:     Record<number, { priceCount: number; avg: number | null }>;
+  finalResults:     EbayGradedResult[];
 }
 
 /**
@@ -83,69 +126,63 @@ export interface EbayGradedProbeResult {
 export async function probeEbayGradedSearch(
   card: CardSearchData
 ): Promise<EbayGradedProbeResult> {
-  const url = buildGradedSearchUrl(card);
-  const baseKeywords = buildEbaySearchString(card);
+  const baseKeywords   = buildEbaySearchString(card);
   const searchKeywords = `${baseKeywords} PSA graded`;
 
-  const response = await fetch(url);
-  const httpStatus = response.status;
+  let httpStatus   = 0;
+  let tokenSnippet = '';
+  let tokenError: string | null = null;
+  let items: BrowseItemSummary[] = [];
+  let apiTotal = 0;
 
-  let rawJson: EbayFindingResponse = {};
   try {
-    rawJson = (await response.json()) as EbayFindingResponse;
-  } catch {
+    const result = await searchBrowseCompletedItems(searchKeywords);
+    httpStatus   = result.httpStatus;
+    tokenSnippet = result.tokenSnippet;
+    items        = result.items;
+    apiTotal     = result.total;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('OAuth token fetch failed')) {
+      tokenError = msg;
+    }
     return {
       searchKeywords,
       httpStatus,
-      ack: null,
-      apiErrorMessages: ['Failed to parse eBay API response as JSON'],
-      rawItemCount: 0,
-      itemsSample: [],
-      parsedGrades: {},
-      finalResults: [],
+      tokenSnippet,
+      tokenError,
+      rawItemCount:  0,
+      apiTotal:      0,
+      itemsSample:   [],
+      parsedGrades:  {},
+      finalResults:  [],
     };
   }
 
-  const responseRoot = rawJson?.findCompletedItemsResponse?.[0];
-  const ack = responseRoot?.ack?.[0] ?? null;
-
-  // Extract any error messages from the eBay API response
-  const apiErrorMessages: string[] = [];
-  const errors = responseRoot?.errorMessage?.[0]?.error ?? [];
-  for (const err of errors) {
-    const msg = err.message?.[0];
-    if (msg) apiErrorMessages.push(msg);
-  }
-
-  const searchResult = responseRoot?.searchResult?.[0];
-  const items: EbayFindingItem[] = searchResult?.item ?? [];
-  const rawItemCount = parseInt(searchResult?.['@count'] ?? '0', 10);
-
   const itemsSample = items.slice(0, 5).map(item => ({
-    title: item.title?.[0] ?? '(no title)',
-    price: item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ ?? null,
+    title:    item.title ?? '(no title)',
+    price:    item.price?.value ?? null,
+    currency: item.price?.currency ?? null,
   }));
 
-  // Run the same parsing logic as the real service
+  // Run the same grade-parsing logic as fetchEbayGradedPrices
   const gradeGroups = new Map<number, GradeGroup>();
 
   for (const item of items) {
-    const title = item.title?.[0] ?? '';
+    const title = item.title ?? '';
     const gradeMatch = PSA_GRADE_REGEX.exec(title);
     if (!gradeMatch) continue;
 
     const grade = parseInt(gradeMatch[1], 10);
     if (isNaN(grade) || grade < MIN_GRADE || grade > MAX_GRADE) continue;
 
-    const rawPrice = item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__;
+    const rawPrice = item.price?.value;
     if (!rawPrice) continue;
 
     const price = parseFloat(rawPrice);
     if (isNaN(price) || price < MIN_PRICE || price > MAX_PRICE) continue;
 
-    if (!gradeGroups.has(grade)) {
-      gradeGroups.set(grade, { prices: [], titles: [] });
-    }
+    if (!gradeGroups.has(grade)) gradeGroups.set(grade, { prices: [], titles: [] });
     const group = gradeGroups.get(grade)!;
     group.prices.push(price);
     group.titles.push(title);
@@ -157,51 +194,37 @@ export async function probeEbayGradedSearch(
     parsedGrades[grade] = { priceCount: group.prices.length, avg: average(cleaned) };
   }
 
-  // Build final results using same logic as fetchEbayGradedPrices
+  // Run the full pipeline to get final filtered results
   const finalResults = await fetchEbayGradedPrices(card);
 
   return {
     searchKeywords,
     httpStatus,
-    ack,
-    apiErrorMessages,
-    rawItemCount,
+    tokenSnippet,
+    tokenError,
+    rawItemCount: items.length,
+    apiTotal,
     itemsSample,
     parsedGrades,
     finalResults,
   };
 }
 
+// ── Main export ───────────────────────────────────────────────────────────────
+
 export async function fetchEbayGradedPrices(card: CardSearchData): Promise<EbayGradedResult[]> {
   try {
-    const url = buildGradedSearchUrl(card);
+    const baseKeywords = buildEbaySearchString(card);
+    const keywords     = `${baseKeywords} PSA graded`;
 
-    const response = await fetch(url);
-
-    if (!response.ok) {
-      console.warn(
-        `[ebayGradedService] Non-200 response for card "${card.id}": ${response.status} ${response.statusText}`
-      );
+    let items: BrowseItemSummary[];
+    try {
+      const result = await searchBrowseCompletedItems(keywords);
+      items = result.items;
+    } catch (err) {
+      console.warn(`[ebayGradedService] Browse API call failed for card "${card.id}":`, err instanceof Error ? err.message : err);
       return [];
     }
-
-    const json = (await response.json()) as EbayFindingResponse;
-
-    const responseRoot = json?.findCompletedItemsResponse?.[0];
-
-    // Check eBay API-level ack — "Failure" means auth or request error
-    const ack = responseRoot?.ack?.[0];
-    if (ack === 'Failure') {
-      const errors = responseRoot?.errorMessage?.[0]?.error ?? [];
-      const messages = errors.map(e => e.message?.[0]).filter(Boolean).join('; ');
-      console.warn(
-        `[ebayGradedService] eBay API returned ack=Failure for card "${card.id}": ${messages || '(no error message)'}`
-      );
-      return [];
-    }
-
-    const searchResult = responseRoot?.searchResult?.[0];
-    const items: EbayFindingItem[] = searchResult?.item ?? [];
 
     if (!items.length) {
       console.warn(`[ebayGradedService] No eBay graded results found for card "${card.id}"`);
@@ -212,7 +235,7 @@ export async function fetchEbayGradedPrices(card: CardSearchData): Promise<EbayG
     const gradeGroups = new Map<number, GradeGroup>();
 
     for (const item of items) {
-      const title = item.title?.[0] ?? '';
+      const title = item.title ?? '';
 
       const gradeMatch = PSA_GRADE_REGEX.exec(title);
       if (!gradeMatch) continue;
@@ -220,16 +243,13 @@ export async function fetchEbayGradedPrices(card: CardSearchData): Promise<EbayG
       const grade = parseInt(gradeMatch[1], 10);
       if (isNaN(grade) || grade < MIN_GRADE || grade > MAX_GRADE) continue;
 
-      const rawPrice = item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__;
+      const rawPrice = item.price?.value;
       if (!rawPrice) continue;
 
       const price = parseFloat(rawPrice);
       if (isNaN(price) || price < MIN_PRICE || price > MAX_PRICE) continue;
 
-      if (!gradeGroups.has(grade)) {
-        gradeGroups.set(grade, { prices: [], titles: [] });
-      }
-
+      if (!gradeGroups.has(grade)) gradeGroups.set(grade, { prices: [], titles: [] });
       const group = gradeGroups.get(grade)!;
       group.prices.push(price);
       group.titles.push(title);
@@ -252,31 +272,22 @@ export async function fetchEbayGradedPrices(card: CardSearchData): Promise<EbayG
 
       const cleaned = removeOutliers(group.prices);
       if (!cleaned.length) {
-        console.warn(
-          `[ebayGradedService] All prices removed by outlier filter for PSA ${grade}, card "${card.id}"`
-        );
+        console.warn(`[ebayGradedService] All prices removed by outlier filter for PSA ${grade}, card "${card.id}"`);
         continue;
       }
 
       const avg = average(cleaned);
       const med = median(cleaned);
-
       if (avg === null || med === null) {
-        console.warn(
-          `[ebayGradedService] Could not compute average/median for PSA ${grade}, card "${card.id}"`
-        );
+        console.warn(`[ebayGradedService] Could not compute average/median for PSA ${grade}, card "${card.id}"`);
         continue;
       }
 
-      // Extract variant from first title in the group
       let variantKey = null;
-      const firstTitle = group.titles[0];
-      if (firstTitle) {
-        try {
-          variantKey = mapVariant(firstTitle);
-        } catch {
-          variantKey = null;
-        }
+      try {
+        variantKey = mapVariant(group.titles[0]);
+      } catch {
+        variantKey = null;
       }
 
       results.push({
@@ -284,7 +295,7 @@ export async function fetchEbayGradedPrices(card: CardSearchData): Promise<EbayG
         gradingCompany: 'PSA',
         grade,
         average: avg,
-        median: med,
+        median:  med,
         currency: 'USD',
         variantKey,
         sampleSize: cleaned.length,

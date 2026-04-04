@@ -6,10 +6,19 @@ import { probeEbayGradedSearch } from '@/services/pricing/ebayGradedService'
 /**
  * GET /api/admin/prices/probe-graded?cardId=<uuid>
  *
- * Diagnostic endpoint — runs the full eBay graded price search for a single card
- * and returns the raw API response details without saving anything to the database.
+ * Diagnostic endpoint — runs the eBay Browse API graded price search for a single
+ * card and returns full debug data without saving anything to the database.
  *
- * Useful for debugging why graded prices are returning 0 results.
+ * Response includes:
+ *   - tokenSnippet    : first 20 chars of the OAuth token (confirms auth works)
+ *   - tokenError      : non-null if OAuth token fetch failed
+ *   - httpStatus      : HTTP status code from the Browse API call
+ *   - searchKeywords  : the full query string sent to eBay
+ *   - rawItemCount    : number of items eBay returned
+ *   - apiTotal        : total matches eBay reported
+ *   - itemsSample     : first 5 titles + prices
+ *   - parsedGrades    : per-grade price counts and averages before MIN_ITEMS filter
+ *   - finalResults    : grades that passed all filters (what would be saved to DB)
  */
 export async function GET(request: NextRequest) {
   // Auth guard
@@ -45,33 +54,26 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  // Check env
+  // Check critical env vars up front
   const envCheck = {
-    EBAY_CLIENT_ID: process.env.EBAY_CLIENT_ID
-      ? `set (${process.env.EBAY_CLIENT_ID.slice(0, 10)}…)`
-      : '⚠️ MISSING — eBay API calls will fail',
-    EBAY_CLIENT_SECRET: process.env.EBAY_CLIENT_SECRET ? 'set' : '⚠️ MISSING',
+    EBAY_CLIENT_ID:     process.env.EBAY_CLIENT_ID     ? `set (${process.env.EBAY_CLIENT_ID.slice(0, 10)}…)`     : '⚠️ MISSING',
+    EBAY_CLIENT_SECRET: process.env.EBAY_CLIENT_SECRET ? 'set' : '⚠️ MISSING — OAuth token refresh will fail',
   }
 
   try {
     const probe = await probeEbayGradedSearch(card)
 
     return NextResponse.json({
-      card: {
-        id: card.id,
-        name: card.name,
-        number: card.number,
-        set_id: card.set_id,
-      },
+      card: { id: card.id, name: card.name, number: card.number, set_id: card.set_id },
       envCheck,
       ...probe,
     })
   } catch (err) {
     return NextResponse.json(
       {
-        card: { id: card.id, name: card.name },
+        card:     { id: card.id, name: card.name },
         envCheck,
-        error: err instanceof Error ? err.message : 'Probe failed',
+        error:    err instanceof Error ? err.message : 'Probe failed',
       },
       { status: 500 }
     )

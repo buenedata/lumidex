@@ -751,16 +751,17 @@ export default function AdminPricesPage() {
           </div>
 
           {probeResult && (() => {
-            const pr = probeResult
-            const envCheck    = pr.envCheck    as Record<string, string> | undefined
-            const httpStatus  = pr.httpStatus  as number
-            const searchKw    = pr.searchKeywords as string
-            const ack         = pr.ack         as string | null
-            const apiErrors   = pr.apiErrorMessages as string[]
-            const rawCount    = pr.rawItemCount as number
-            const grades      = pr.parsedGrades as Record<string, { priceCount: number; avg: number | null }> | undefined
-            const samples     = pr.itemsSample  as { title: string; price: string | null }[]
-            const finalCount  = (pr.finalResults as unknown[])?.length ?? 0
+            const pr           = probeResult
+            const envCheck     = pr.envCheck     as Record<string, string> | undefined
+            const tokenSnippet = pr.tokenSnippet as string | undefined
+            const tokenError   = pr.tokenError   as string | null
+            const httpStatus   = pr.httpStatus   as number
+            const searchKw     = pr.searchKeywords as string
+            const rawCount     = pr.rawItemCount  as number
+            const apiTotal     = pr.apiTotal      as number
+            const grades       = pr.parsedGrades  as Record<string, { priceCount: number; avg: number | null }> | undefined
+            const samples      = pr.itemsSample   as { title: string; price: string | null; currency: string | null }[]
+            const finalCount   = (pr.finalResults as unknown[])?.length ?? 0
 
             return (
               <div className="mt-4 space-y-3">
@@ -777,37 +778,37 @@ export default function AdminPricesPage() {
                   </div>
                 )}
 
-                {/* API result summary */}
+                {/* OAuth + Browse API result summary */}
                 <div className="bg-gray-800 rounded-lg p-3 text-xs space-y-1">
-                  <div className="text-gray-500 font-medium mb-1">eBay API Result</div>
+                  <div className="text-gray-500 font-medium mb-1">eBay Browse API Result</div>
                   <div>
                     <span className="text-gray-500">Search query:</span>{' '}
                     <code className="text-indigo-300">{searchKw}</code>
                   </div>
                   <div>
+                    <span className="text-gray-500">OAuth token:</span>{' '}
+                    {tokenError
+                      ? <span className="text-red-400">❌ {tokenError}</span>
+                      : <span className="text-green-400">✓ {tokenSnippet}</span>
+                    }
+                  </div>
+                  <div>
                     <span className="text-gray-500">HTTP status:</span>{' '}
-                    <span className={httpStatus === 200 ? 'text-green-400' : 'text-red-400'}>{httpStatus}</span>
+                    <span className={httpStatus === 200 ? 'text-green-400' : 'text-red-400'}>{httpStatus || '—'}</span>
                   </div>
                   <div>
-                    <span className="text-gray-500">eBay ack:</span>{' '}
-                    <span className={ack === 'Success' ? 'text-green-400' : 'text-red-400'}>{ack ?? 'null'}</span>
-                  </div>
-                  {apiErrors?.length > 0 && (
-                    <div>
-                      <span className="text-gray-500">API errors:</span>{' '}
-                      <span className="text-red-400">{apiErrors.join('; ')}</span>
-                    </div>
-                  )}
-                  <div>
-                    <span className="text-gray-500">Raw item count:</span>{' '}
+                    <span className="text-gray-500">Items returned:</span>{' '}
                     <span className="text-white">{rawCount}</span>
+                    {apiTotal > rawCount && (
+                      <span className="text-gray-500 ml-1">(API total: {apiTotal})</span>
+                    )}
                   </div>
                 </div>
 
                 {/* Grade breakdown */}
                 {grades && Object.keys(grades).length > 0 && (
                   <div className="bg-gray-800 rounded-lg p-3 text-xs">
-                    <div className="text-gray-500 font-medium mb-2">Parsed Grades</div>
+                    <div className="text-gray-500 font-medium mb-2">Parsed Grades (before MIN_ITEMS filter)</div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       {Object.entries(grades)
                         .sort(([a], [b]) => parseInt(b) - parseInt(a))
@@ -832,7 +833,9 @@ export default function AdminPricesPage() {
                       {samples.map((item, i) => (
                         <div key={i} className="text-xs text-gray-400 font-mono flex justify-between gap-2">
                           <span className="truncate">{item.title}</span>
-                          <span className="text-green-400 shrink-0">{item.price ? `$${item.price}` : '—'}</span>
+                          <span className="text-green-400 shrink-0">
+                            {item.price ? `${item.currency === 'USD' ? '$' : (item.currency ?? '')}${item.price}` : '—'}
+                          </span>
                         </div>
                       ))}
                     </div>
@@ -843,7 +846,7 @@ export default function AdminPricesPage() {
                 <div className="text-xs text-gray-500">
                   Final graded results after filtering:{' '}
                   <span className={finalCount > 0 ? 'text-green-400' : 'text-amber-400'}>
-                    {finalCount} grade(s) saved
+                    {finalCount} grade(s) would be saved
                   </span>
                 </div>
               </div>
