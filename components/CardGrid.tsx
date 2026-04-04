@@ -915,7 +915,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                       className={`
                         w-6 h-6 rounded flex items-center justify-center
                         text-xs font-bold border border-black/30 shadow-sm
-                        ${colorMap[variant.color] || 'bg-zinc-500'}
+                        ${variant.card_id != null ? 'bg-gray-500' : (colorMap[variant.color] || 'bg-zinc-500')}
                         ${variant.quantity > 0 ? '!text-black' : 'text-transparent'}
                         hover:scale-110 transition-transform cursor-pointer
                       `}
@@ -1238,6 +1238,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                     {filteredVariants.map(variant => (
                       <div key={variant.id} className="bg-elevated rounded-lg p-3 hover:bg-card-item transition-colors border border-subtle">
                         <div className="flex items-center gap-2">
+                          {/* Variant colour dot */}
+                          <div className={`w-3 h-3 rounded-full shrink-0 ${colorMap[variant.color] || 'bg-zinc-500'}`} />
                           {/* Variant Name */}
                           <div className="flex-1 min-w-0">
                             <div className="text-primary font-medium text-sm truncate">{variant.name}</div>
