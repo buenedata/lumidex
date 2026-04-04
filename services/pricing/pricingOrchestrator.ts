@@ -4,6 +4,7 @@ import { fetchEbayRawPrices } from './ebayService'
 import { fetchEbayGradedPrices } from './ebayGradedService'
 import { normalizePoints } from './priceNormalizer'
 import { savePricePoints, savePriceHistory } from './priceRepository'
+import { upsertGradedPrices } from './gradedPriceRepository'
 import { aggregatePricesForCard, writeCardPriceCache } from './priceAggregator'
 import { findUndervaluedCards } from './undervaluedDetector'
 import { NormalizedPricePoint } from './types'
@@ -106,39 +107,31 @@ export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Pro
         }]
       }
 
-      // c. eBay graded prices (if includeGraded)
-      let gradedPoints: NormalizedPricePoint[] = []
+      // c. eBay graded prices (if includeGraded) — saved to card_graded_prices, NOT price_points
       if (includeGraded) {
         const gradedResults = await fetchEbayGradedPrices(card)
-        gradedPoints = gradedResults.map(r => ({
-          cardId: card.id,
-          source: 'ebay',
-          variantKey: r.variantKey,
-          price: r.average,
-          priceUsd: r.average,
-          currency: 'USD',
-          isGraded: true,
-          grade: r.grade,
-          gradingCompany: r.gradingCompany,
-        }))
 
-        gradedPointsSaved += gradedPoints.length
+        if (gradedResults.length > 0) {
+          // Persist to dedicated card_graded_prices table (PSA/CGC/ACE)
+          await upsertGradedPrices(gradedResults)
+          gradedPointsSaved += gradedResults.length
 
-        // Emit per-card graded result for live UI feedback
-        if (emit && gradedResults.length > 0) {
-          emit({
-            type: 'graded_card',
-            cardId: card.id,
-            cardName: card.name,
-            gradesFound: gradedResults.length,
-            pointsSaved: gradedPoints.length,
-            runningTotal: gradedPointsSaved,
-          })
+          // Emit per-card graded result for live UI feedback
+          if (emit) {
+            emit({
+              type:         'graded_card',
+              cardId:       card.id,
+              cardName:     card.name,
+              gradesFound:  gradedResults.length,
+              pointsSaved:  gradedResults.length,
+              runningTotal: gradedPointsSaved,
+            })
+          }
         }
       }
 
-      // d. Combine and save
-      const allPoints = [...apiPoints, ...ebayPoints, ...gradedPoints]
+      // d. Combine raw (non-graded) points and save
+      const allPoints = [...apiPoints, ...ebayPoints]
       await savePricePoints(allPoints)
       await savePriceHistory(allPoints)
 

@@ -1,16 +1,16 @@
 /**
  * eBay Graded Price Service — Browse API
  *
- * Fetches PSA graded sold listings via the eBay Browse API (OAuth, v1).
- * Replaced the deprecated Finding API (findCompletedItems on svcs.ebay.com)
- * which was returning HTTP 500.
+ * Fetches PSA, CGC and ACE graded sold listings via the eBay Browse API (OAuth).
+ * Runs one search per grading company, parses grade numbers from listing titles,
+ * and returns averaged price data per (company, grade).
  *
  * Auth: Application-level OAuth token via getEbayAppToken()
  * Scope: https://api.ebay.com/oauth/api_scope
  */
 
 import { getEbayAppToken } from '@/lib/ebayAuth';
-import { CardSearchData, EbayGradedResult } from './types';
+import { CardSearchData, EbayGradedResult, GradingCompany } from './types';
 import { buildEbaySearchString, mapVariant } from './cardMatcher';
 import { removeOutliers, average, median } from './priceNormalizer';
 
@@ -19,12 +19,18 @@ import { removeOutliers, average, median } from './priceNormalizer';
 const BROWSE_BASE    = 'https://api.ebay.com/buy/browse/v1/item_summary/search';
 const MARKETPLACE_ID = 'EBAY_US';
 
-const PSA_GRADE_REGEX   = /PSA\s?(\d+)/i;
-const MIN_GRADE          = 1;
-const MAX_GRADE          = 10;
 export const MIN_ITEMS_PER_GRADE = 1;   // 1 allows low-volume sets to register prices
-const MIN_PRICE          = 0.10;
-const MAX_PRICE          = 5000;
+const MIN_GRADE  = 1;
+const MAX_GRADE  = 10;
+const MIN_PRICE  = 0.10;
+const MAX_PRICE  = 5000;
+
+// Per-company search suffix and grade-extraction regex
+const COMPANY_CONFIG: Record<GradingCompany, { suffix: string; regex: RegExp }> = {
+  PSA: { suffix: 'PSA graded',  regex: /PSA\s*(\d+)/i },
+  CGC: { suffix: 'CGC graded',  regex: /CGC\s*(\d+)/i },
+  ACE: { suffix: 'ACE Grade',   regex: /ACE\s*Grade\s*(\d+)/i },
+};
 
 // ── Browse API types ──────────────────────────────────────────────────────────
 
@@ -36,7 +42,6 @@ interface BrowseItemSummary {
 interface BrowseSearchResponse {
   total?: number;
   itemSummaries?: BrowseItemSummary[];
-  warnings?: Array<{ message?: string; errorId?: string }>;
 }
 
 interface GradeGroup {
@@ -48,9 +53,8 @@ interface GradeGroup {
 
 /**
  * Call the eBay Browse API for completed/sold fixed-price listings.
- * Returns the raw item list, or throws with a descriptive message on failure.
- *
- * @internal — exported for use in probeEbayGradedSearch
+ * Throws with a descriptive message on HTTP or OAuth failure.
+ * Exported for use in the probe endpoint.
  */
 export async function searchBrowseCompletedItems(
   keywords: string,
@@ -65,7 +69,6 @@ export async function searchBrowseCompletedItems(
     );
   }
 
-  // Only log first 20 chars so the token is never fully exposed in logs
   const tokenSnippet = token.slice(0, 20) + '…';
 
   const params = new URLSearchParams({
@@ -104,9 +107,89 @@ export async function searchBrowseCompletedItems(
   };
 }
 
+// ── Internal: parse one company's search results into grade groups ─────────────
+
+function parseGradeGroups(
+  items: BrowseItemSummary[],
+  gradeRegex: RegExp
+): Map<number, GradeGroup> {
+  const groups = new Map<number, GradeGroup>();
+
+  for (const item of items) {
+    const title = item.title ?? '';
+
+    const gradeMatch = gradeRegex.exec(title);
+    if (!gradeMatch) continue;
+
+    const grade = parseInt(gradeMatch[1], 10);
+    if (isNaN(grade) || grade < MIN_GRADE || grade > MAX_GRADE) continue;
+
+    const rawPrice = item.price?.value;
+    if (!rawPrice) continue;
+
+    const price = parseFloat(rawPrice);
+    if (isNaN(price) || price < MIN_PRICE || price > MAX_PRICE) continue;
+
+    if (!groups.has(grade)) groups.set(grade, { prices: [], titles: [] });
+    const group = groups.get(grade)!;
+    group.prices.push(price);
+    group.titles.push(title);
+  }
+
+  return groups;
+}
+
+// ── Internal: convert grade groups to EbayGradedResult[] ─────────────────────
+
+function gradeGroupsToResults(
+  cardId: string,
+  company: GradingCompany,
+  gradeGroups: Map<number, GradeGroup>
+): EbayGradedResult[] {
+  const results: EbayGradedResult[] = [];
+
+  for (const [grade, group] of gradeGroups.entries()) {
+    if (group.prices.length < MIN_ITEMS_PER_GRADE) {
+      console.warn(
+        `[ebayGradedService] ${company} ${grade} for card "${cardId}" has only ${group.prices.length} item(s) — skipping`
+      );
+      continue;
+    }
+
+    const cleaned = removeOutliers(group.prices);
+    if (!cleaned.length) {
+      console.warn(`[ebayGradedService] All prices removed by outlier filter for ${company} ${grade}, card "${cardId}"`);
+      continue;
+    }
+
+    const avg = average(cleaned);
+    const med = median(cleaned);
+    if (avg === null || med === null) continue;
+
+    let variantKey = null;
+    try {
+      variantKey = mapVariant(group.titles[0]);
+    } catch {
+      variantKey = null;
+    }
+
+    results.push({
+      cardId,
+      gradingCompany: company,
+      grade,
+      average: avg,
+      median:  med,
+      currency: 'USD',
+      variantKey,
+      sampleSize: cleaned.length,
+    });
+  }
+
+  return results;
+}
+
 // ── Probe (diagnostic) ────────────────────────────────────────────────────────
 
-/** Raw diagnostic data returned by probeEbayGradedSearch. */
 export interface EbayGradedProbeResult {
   searchKeywords:   string;
   httpStatus:       number;
@@ -120,14 +203,16 @@ export interface EbayGradedProbeResult {
 }
 
 /**
- * Probe the eBay graded search for a single card and return full debug data.
- * Used by the admin probe endpoint — does NOT save anything to the database.
+ * Probe the eBay graded search for a single card (PSA only — for diagnostics).
+ * Returns full debug data without saving anything to the database.
  */
 export async function probeEbayGradedSearch(
   card: CardSearchData
 ): Promise<EbayGradedProbeResult> {
   const baseKeywords   = buildEbaySearchString(card);
-  const searchKeywords = `${baseKeywords} PSA graded`;
+  // Probe uses PSA as the representative company
+  const config         = COMPANY_CONFIG['PSA'];
+  const searchKeywords = `${baseKeywords} ${config.suffix}`;
 
   let httpStatus   = 0;
   let tokenSnippet = '';
@@ -143,19 +228,11 @@ export async function probeEbayGradedSearch(
     apiTotal     = result.total;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('OAuth token fetch failed')) {
-      tokenError = msg;
-    }
+    if (msg.includes('OAuth token fetch failed')) tokenError = msg;
+    else tokenError = msg;
     return {
-      searchKeywords,
-      httpStatus,
-      tokenSnippet,
-      tokenError,
-      rawItemCount:  0,
-      apiTotal:      0,
-      itemsSample:   [],
-      parsedGrades:  {},
-      finalResults:  [],
+      searchKeywords, httpStatus, tokenSnippet, tokenError,
+      rawItemCount: 0, apiTotal: 0, itemsSample: [], parsedGrades: {}, finalResults: [],
     };
   }
 
@@ -165,28 +242,7 @@ export async function probeEbayGradedSearch(
     currency: item.price?.currency ?? null,
   }));
 
-  // Run the same grade-parsing logic as fetchEbayGradedPrices
-  const gradeGroups = new Map<number, GradeGroup>();
-
-  for (const item of items) {
-    const title = item.title ?? '';
-    const gradeMatch = PSA_GRADE_REGEX.exec(title);
-    if (!gradeMatch) continue;
-
-    const grade = parseInt(gradeMatch[1], 10);
-    if (isNaN(grade) || grade < MIN_GRADE || grade > MAX_GRADE) continue;
-
-    const rawPrice = item.price?.value;
-    if (!rawPrice) continue;
-
-    const price = parseFloat(rawPrice);
-    if (isNaN(price) || price < MIN_PRICE || price > MAX_PRICE) continue;
-
-    if (!gradeGroups.has(grade)) gradeGroups.set(grade, { prices: [], titles: [] });
-    const group = gradeGroups.get(grade)!;
-    group.prices.push(price);
-    group.titles.push(title);
-  }
+  const gradeGroups = parseGradeGroups(items, config.regex);
 
   const parsedGrades: Record<number, { priceCount: number; avg: number | null }> = {};
   for (const [grade, group] of gradeGroups.entries()) {
@@ -194,117 +250,56 @@ export async function probeEbayGradedSearch(
     parsedGrades[grade] = { priceCount: group.prices.length, avg: average(cleaned) };
   }
 
-  // Run the full pipeline to get final filtered results
   const finalResults = await fetchEbayGradedPrices(card);
 
   return {
-    searchKeywords,
-    httpStatus,
-    tokenSnippet,
-    tokenError,
-    rawItemCount: items.length,
-    apiTotal,
-    itemsSample,
-    parsedGrades,
-    finalResults,
+    searchKeywords, httpStatus, tokenSnippet, tokenError,
+    rawItemCount: items.length, apiTotal, itemsSample, parsedGrades, finalResults,
   };
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
 
+/**
+ * Fetch eBay last-sold graded prices for a card from PSA, CGC and ACE.
+ * Runs one Browse API search per company (3 total) and returns all results combined.
+ */
 export async function fetchEbayGradedPrices(card: CardSearchData): Promise<EbayGradedResult[]> {
-  try {
-    const baseKeywords = buildEbaySearchString(card);
-    const keywords     = `${baseKeywords} PSA graded`;
+  const baseKeywords = buildEbaySearchString(card);
+  const allResults: EbayGradedResult[] = [];
 
-    let items: BrowseItemSummary[];
+  for (const [company, config] of Object.entries(COMPANY_CONFIG) as [GradingCompany, typeof COMPANY_CONFIG[GradingCompany]][]) {
+    const keywords = `${baseKeywords} ${config.suffix}`;
+
     try {
-      const result = await searchBrowseCompletedItems(keywords);
-      items = result.items;
+      const { items } = await searchBrowseCompletedItems(keywords);
+
+      if (!items.length) {
+        console.warn(`[ebayGradedService] No ${company} graded results found for card "${card.id}"`);
+        continue;
+      }
+
+      const gradeGroups = parseGradeGroups(items, config.regex);
+
+      if (!gradeGroups.size) {
+        console.warn(`[ebayGradedService] No valid ${company} graded items found for card "${card.id}"`);
+        continue;
+      }
+
+      const results = gradeGroupsToResults(card.id, company, gradeGroups);
+      allResults.push(...results);
+
+      if (results.length > 0) {
+        console.log(`[ebayGradedService] ${company}: ${results.length} grade(s) for card "${card.id}"`);
+      }
     } catch (err) {
-      console.warn(`[ebayGradedService] Browse API call failed for card "${card.id}":`, err instanceof Error ? err.message : err);
-      return [];
+      console.warn(
+        `[ebayGradedService] ${company} search failed for card "${card.id}":`,
+        err instanceof Error ? err.message : err
+      );
+      // Continue with other companies even if one fails
     }
-
-    if (!items.length) {
-      console.warn(`[ebayGradedService] No eBay graded results found for card "${card.id}"`);
-      return [];
-    }
-
-    // Group items by PSA grade
-    const gradeGroups = new Map<number, GradeGroup>();
-
-    for (const item of items) {
-      const title = item.title ?? '';
-
-      const gradeMatch = PSA_GRADE_REGEX.exec(title);
-      if (!gradeMatch) continue;
-
-      const grade = parseInt(gradeMatch[1], 10);
-      if (isNaN(grade) || grade < MIN_GRADE || grade > MAX_GRADE) continue;
-
-      const rawPrice = item.price?.value;
-      if (!rawPrice) continue;
-
-      const price = parseFloat(rawPrice);
-      if (isNaN(price) || price < MIN_PRICE || price > MAX_PRICE) continue;
-
-      if (!gradeGroups.has(grade)) gradeGroups.set(grade, { prices: [], titles: [] });
-      const group = gradeGroups.get(grade)!;
-      group.prices.push(price);
-      group.titles.push(title);
-    }
-
-    if (!gradeGroups.size) {
-      console.warn(`[ebayGradedService] No valid graded items found for card "${card.id}"`);
-      return [];
-    }
-
-    const results: EbayGradedResult[] = [];
-
-    for (const [grade, group] of gradeGroups.entries()) {
-      if (group.prices.length < MIN_ITEMS_PER_GRADE) {
-        console.warn(
-          `[ebayGradedService] PSA ${grade} for card "${card.id}" has only ${group.prices.length} item(s) — skipping`
-        );
-        continue;
-      }
-
-      const cleaned = removeOutliers(group.prices);
-      if (!cleaned.length) {
-        console.warn(`[ebayGradedService] All prices removed by outlier filter for PSA ${grade}, card "${card.id}"`);
-        continue;
-      }
-
-      const avg = average(cleaned);
-      const med = median(cleaned);
-      if (avg === null || med === null) {
-        console.warn(`[ebayGradedService] Could not compute average/median for PSA ${grade}, card "${card.id}"`);
-        continue;
-      }
-
-      let variantKey = null;
-      try {
-        variantKey = mapVariant(group.titles[0]);
-      } catch {
-        variantKey = null;
-      }
-
-      results.push({
-        cardId: card.id,
-        gradingCompany: 'PSA',
-        grade,
-        average: avg,
-        median:  med,
-        currency: 'USD',
-        variantKey,
-        sampleSize: cleaned.length,
-      });
-    }
-
-    return results;
-  } catch (err) {
-    console.warn(`[ebayGradedService] Unexpected error for card "${card.id}":`, err);
-    return [];
   }
+
+  return allResults;
 }

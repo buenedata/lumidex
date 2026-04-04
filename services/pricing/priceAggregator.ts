@@ -32,9 +32,8 @@ function minimum(values: number[]): number | null {
  *   cm_low      = minimum
  *   cm_trend    = most-recent price
  *
- * eBay graded (fallback when TCGPlayer graded is absent):
- *   PSA 10 → tcgp_psa10 fallback
- *   PSA 9  → tcgp_psa9  fallback
+ * Note: eBay graded prices (PSA/CGC/ACE) are stored in card_graded_prices,
+ * not in card_prices. The aggregator only handles TCGPlayer and CardMarket data.
  */
 export async function aggregatePricesForCard(cardId: string): Promise<CardPriceUpdate> {
   const supabase = await createSupabaseServerClient()
@@ -76,8 +75,8 @@ export async function aggregatePricesForCard(cardId: string): Promise<CardPriceU
     .filter(r => r.grade === 9 && r.grading_company === 'PSA')
     .map(r => r.price as number)
 
-  let tcgp_psa10 = average(tcgpPsa10Prices)
-  let tcgp_psa9  = average(tcgpPsa9Prices)
+  const tcgp_psa10 = average(tcgpPsa10Prices)
+  const tcgp_psa9  = average(tcgpPsa9Prices)
 
   // ── CardMarket ungraded (normal variant) ─────────────────────────────────
   const cmRows = rows
@@ -89,23 +88,6 @@ export async function aggregatePricesForCard(cardId: string): Promise<CardPriceU
   const cm_avg_sell = average(cmPrices)
   const cm_low      = minimum(cmPrices)
   const cm_trend    = cmRows.length > 0 ? (cmRows[0].price as number) : null
-
-  // ── eBay graded (fallback) ────────────────────────────────────────────────
-  const ebayGraded = rows.filter(r => r.source === 'ebay' && r.is_graded)
-
-  if (tcgp_psa10 === null) {
-    const ebayPsa10Prices = ebayGraded
-      .filter(r => r.grade === 10 && r.grading_company === 'PSA')
-      .map(r => r.price as number)
-    tcgp_psa10 = average(ebayPsa10Prices)
-  }
-
-  if (tcgp_psa9 === null) {
-    const ebayPsa9Prices = ebayGraded
-      .filter(r => r.grade === 9 && r.grading_company === 'PSA')
-      .map(r => r.price as number)
-    tcgp_psa9 = average(ebayPsa9Prices)
-  }
 
   return {
     cardId,

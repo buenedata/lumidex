@@ -50,10 +50,13 @@ export interface EbayPriceResult {
   isGraded: false;
 }
 
+// Grading companies supported for eBay last-sold price fetching
+export type GradingCompany = 'PSA' | 'CGC' | 'ACE';
+
 // Result from ebayGradedService
 export interface EbayGradedResult {
   cardId: string;
-  gradingCompany: 'PSA';
+  gradingCompany: GradingCompany;
   grade: number;
   average: number;
   median: number;

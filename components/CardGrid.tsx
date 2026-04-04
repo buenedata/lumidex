@@ -235,6 +235,11 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const [priceChartRange, setPriceChartRange]           = useState<PriceChartRange>('30d')
   const [priceHistoryCache, setPriceHistoryCache]       = useState<Map<string, PriceHistoryPoint[]>>(new Map())
   const [isLoadingHistory, setIsLoadingHistory]         = useState(false)
+  // eBay graded price state (PSA / CGC / ACE)
+  type GradeData = { grade: number; avgPriceUsd: number; sampleSize: number; fetchedAt: string }
+  type GradedByCompany = Record<string, GradeData[]>
+  const [gradedPriceCache, setGradedPriceCache]         = useState<Map<string, GradedByCompany>>(new Map())
+  const [isLoadingGraded, setIsLoadingGraded]           = useState(false)
   // Wanted list state
   const [wantedCardIds, setWantedCardIds]               = useState<Set<string>>(new Set())
   const [wantedLoading, setWantedLoading]               = useState(false)
@@ -742,6 +747,23 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     }
   }, [priceHistoryCache])
 
+  // Fetch eBay graded prices (PSA/CGC/ACE) for a card — cached per session
+  const fetchGradedPrices = useCallback(async (cardId: string) => {
+    if (gradedPriceCache.has(cardId)) return
+    setIsLoadingGraded(true)
+    try {
+      const res = await fetch(`/api/prices/card/${cardId}/graded`)
+      if (res.ok) {
+        const json = await res.json()
+        setGradedPriceCache(prev => new Map(prev).set(cardId, json.byCompany ?? {}))
+      }
+    } catch {
+      setGradedPriceCache(prev => new Map(prev).set(cardId, {}))
+    } finally {
+      setIsLoadingGraded(false)
+    }
+  }, [gradedPriceCache])
+
   // Load the user's wanted card IDs once on first modal open (if authenticated)
   const fetchWantedCards = useCallback(async () => {
     if (wantedInitialized) return
@@ -1146,6 +1168,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                     onClick={() => {
                       setModalTab('price')
                       fetchCardPrice(selectedCard.id)
+                      fetchGradedPrices(selectedCard.id)
                       fetchCardPriceHistory(selectedCard.id, priceChartRange)
                     }}
                   >
@@ -1282,6 +1305,90 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                             </div>
                           </div>
                         )}
+
+                        {/* ── eBay Last Sold · Graded ── */}
+                        {(() => {
+                          const gradedData = gradedPriceCache.get(selectedCard.id) ?? {}
+                          const companies = Object.keys(gradedData).sort() // PSA, CGC, ACE alphabetically
+                          if (companies.length === 0 && !isLoadingGraded) return null
+
+                          const COMPANY_STYLE: Record<string, { badge: string; bar: string; label: string }> = {
+                            PSA: { badge: 'bg-blue-900/50 text-blue-300 border-blue-700',   bar: '#3b82f6', label: 'PSA' },
+                            CGC: { badge: 'bg-amber-900/50 text-amber-300 border-amber-700', bar: '#f59e0b', label: 'CGC' },
+                            ACE: { badge: 'bg-emerald-900/50 text-emerald-300 border-emerald-700', bar: '#10b981', label: 'ACE' },
+                          }
+                          const defaultStyle = { badge: 'bg-gray-700/50 text-gray-300 border-gray-600', bar: '#6b7280', label: '' }
+
+                          const cardName    = selectedCard.name
+                          const cardNumber  = selectedCard.number
+
+                          return (
+                            <div>
+                              <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">
+                                🏷️ eBay Last Sold · Graded
+                              </h3>
+
+                              {isLoadingGraded && companies.length === 0 && (
+                                <p className="text-muted text-xs animate-pulse">Loading graded prices…</p>
+                              )}
+
+                              <div className="space-y-4">
+                                {companies.map(company => {
+                                  const grades    = gradedData[company] ?? []
+                                  const style     = COMPANY_STYLE[company] ?? defaultStyle
+                                  const maxPrice  = grades.length > 0 ? Math.max(...grades.map(g => g.avgPriceUsd)) : 0
+                                  const ebayQuery = encodeURIComponent(`${cardName} ${cardNumber} pokemon ${company} graded`)
+                                  const ebayUrl   = `https://www.ebay.com/sch/i.html?_nkw=${ebayQuery}&LH_Sold=1&LH_Complete=1`
+
+                                  return (
+                                    <div key={company}>
+                                      {/* Company header */}
+                                      <div className="flex items-center justify-between mb-1.5">
+                                        <span className={`text-xs font-bold px-2 py-0.5 rounded border ${style.badge}`}>
+                                          {style.label || company}
+                                        </span>
+                                        <a
+                                          href={ebayUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="text-xs text-muted/60 hover:text-muted underline underline-offset-2 transition-colors"
+                                        >
+                                          See last sold ↗
+                                        </a>
+                                      </div>
+
+                                      {/* Grade rows */}
+                                      <div className="space-y-1.5">
+                                        {grades.map(g => {
+                                          const pct = maxPrice > 0 ? Math.round((g.avgPriceUsd / maxPrice) * 100) : 0
+                                          return (
+                                            <div key={g.grade} className="flex items-center gap-2">
+                                              <span className="text-xs text-secondary w-12 shrink-0 tabular-nums">
+                                                {company} {g.grade}
+                                              </span>
+                                              <div className="flex-1 h-1.5 bg-elevated rounded-full overflow-hidden">
+                                                <div
+                                                  className="h-full rounded-full transition-all"
+                                                  style={{ width: `${pct}%`, backgroundColor: style.bar }}
+                                                />
+                                              </div>
+                                              <span className="text-xs font-semibold text-success tabular-nums w-16 text-right shrink-0">
+                                                {formatPrice(g.avgPriceUsd, effectiveCurrency)}
+                                              </span>
+                                              <span className="text-xs text-muted/50 w-12 text-right shrink-0 tabular-nums">
+                                                {g.sampleSize}×
+                                              </span>
+                                            </div>
+                                          )
+                                        })}
+                                      </div>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        })()}
 
                         <p className="text-muted/50 text-xs border-t border-subtle pt-3">
                           Prices synced {new Date(row.fetched_at).toLocaleDateString()}
