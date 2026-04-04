@@ -473,7 +473,7 @@ export default function SetPageCards({
         ) : (
           <CardGrid
               cards={filteredCards}
-              userCards={new Map()}
+              userCards={storeUserCards}
               filter={safeFilter}
               sortBy={sortBy}
               setTotal={setTotal}
