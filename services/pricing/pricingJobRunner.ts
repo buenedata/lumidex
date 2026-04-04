@@ -42,6 +42,8 @@ interface PriceUpdateJobOptions {
   setId?: string
   limit?: number
   includeGraded?: boolean
+  /** Optional SSE emit callback forwarded to the orchestrator. */
+  emit?: (payload: unknown) => void
 }
 
 interface SyncSingleCardResult {
@@ -61,11 +63,17 @@ export async function runPriceUpdateJob(opts?: PriceUpdateJobOptions) {
   console.log('[PricingJobRunner] runPriceUpdateJob: start', { opts })
 
   try {
-    const result = await updatePricesBatch(opts)
+    const result = await updatePricesBatch({
+      setId:          opts?.setId,
+      limit:          opts?.limit,
+      includeGraded:  opts?.includeGraded,
+      emit:           opts?.emit,
+    })
     const duration = Date.now() - startTime
     console.log(
       `[PricingJobRunner] runPriceUpdateJob: complete — ` +
       `processed=${result.processed}, errors=${result.errors}, ` +
+      `gradedPointsSaved=${result.gradedPointsSaved}, ` +
       `undervaluedFound=${result.undervaluedFound}, duration=${duration}ms`
     )
     return result

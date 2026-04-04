@@ -14,19 +14,23 @@ interface UpdatePricesBatchOptions {
   limit?: number
   setId?: string
   includeGraded?: boolean
+  /** Optional SSE emit callback — called with progress events during the batch. */
+  emit?: (payload: unknown) => void
 }
 
 interface BatchResult {
   processed: number
   errors: number
   undervaluedFound: number
+  /** Total number of graded price points saved across all cards. */
+  gradedPointsSaved: number
 }
 
 /**
  * Process a batch of cards through the full pricing pipeline:
  * 1. Fetch raw prices from Pokemon TCG API (tcgplayer + cardmarket)
  * 2. Fetch eBay raw sold listings
- * 3. Fetch eBay graded sold listings (PSA)
+ * 3. Fetch eBay graded sold listings (PSA) — when includeGraded=true
  * 4. Normalize all prices to USD
  * 5. Save to price_points
  * 6. Save selected points to price_history
@@ -39,6 +43,7 @@ export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Pro
   const limit = options?.limit   // undefined → no cap
   const setId = options?.setId
   const includeGraded = options?.includeGraded !== false
+  const emit = options?.emit ?? null
 
   // Step 1 — Load cards from DB
   const supabase = await createSupabaseServerClient()
@@ -61,18 +66,19 @@ export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Pro
 
   if (dbError) {
     console.error('[PricingOrchestrator] Failed to load cards from DB:', dbError.message)
-    return { processed: 0, errors: 1, undervaluedFound: 0 }
+    return { processed: 0, errors: 1, undervaluedFound: 0, gradedPointsSaved: 0 }
   }
 
   if (!cards || cards.length === 0) {
     console.log('[PricingOrchestrator] No cards found to process.')
-    return { processed: 0, errors: 0, undervaluedFound: 0 }
+    return { processed: 0, errors: 0, undervaluedFound: 0, gradedPointsSaved: 0 }
   }
 
   console.log(`[PricingOrchestrator] Starting batch: ${cards.length} cards (includeGraded=${includeGraded})`)
 
   let processed = 0
   let errors = 0
+  let gradedPointsSaved = 0
   const processedCardIds: string[] = []
 
   // Step 2 — Process each card sequentially
@@ -115,6 +121,20 @@ export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Pro
           grade: r.grade,
           gradingCompany: r.gradingCompany,
         }))
+
+        gradedPointsSaved += gradedPoints.length
+
+        // Emit per-card graded result for live UI feedback
+        if (emit && gradedResults.length > 0) {
+          emit({
+            type: 'graded_card',
+            cardId: card.id,
+            cardName: card.name,
+            gradesFound: gradedResults.length,
+            pointsSaved: gradedPoints.length,
+            runningTotal: gradedPointsSaved,
+          })
+        }
       }
 
       // d. Combine and save
@@ -151,7 +171,10 @@ export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Pro
     }
   }
 
-  console.log(`[PricingOrchestrator] Batch complete — processed: ${processed}, errors: ${errors}, undervalued: ${undervaluedFound}`)
+  console.log(
+    `[PricingOrchestrator] Batch complete — processed: ${processed}, errors: ${errors}, ` +
+    `undervalued: ${undervaluedFound}, gradedPointsSaved: ${gradedPointsSaved}`
+  )
 
-  return { processed, errors, undervaluedFound }
+  return { processed, errors, undervaluedFound, gradedPointsSaved }
 }

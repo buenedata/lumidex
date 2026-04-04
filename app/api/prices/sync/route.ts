@@ -92,7 +92,8 @@ export async function POST(request: NextRequest) {
 
       // Run the unified pricing pipeline — pass includeGraded so the runner
       // fetches eBay graded sold listings in addition to raw card prices.
-      const result = await runPriceUpdateJob({ setId, includeGraded })
+      // Pass emit so per-card graded events stream to the client in real time.
+      const result = await runPriceUpdateJob({ setId, includeGraded, emit })
 
       // Optionally import sealed-product prices from the cardmarket RapidAPI
       let productCount = 0
@@ -121,13 +122,14 @@ export async function POST(request: NextRequest) {
       //   event.matched       → matched state
       //   event.unmatched     → total = matched + unmatched
       emit({
-        type:          'complete',
+        type:             'complete',
         setId,
-        matched:       result.processed,
-        unmatched:     result.errors,
-        upsertedCount: result.processed,
+        matched:          result.processed,
+        unmatched:        result.errors,
+        upsertedCount:    result.processed,
         productCount,
-        backfillCount: 0,
+        gradedPointsSaved: result.gradedPointsSaved,
+        backfillCount:    0,
         elapsed,
       })
     } catch (err) {

@@ -19,12 +19,13 @@ interface SetStats {
 type SyncStatus = 'idle' | 'syncing' | 'done' | 'error'
 
 interface SyncState {
-  status:    SyncStatus
-  message:   string
-  matched:   number
-  total:     number
-  products:  number
-  elapsed:   number
+  status:        SyncStatus
+  message:       string
+  matched:       number
+  total:         number
+  products:      number
+  gradedPoints:  number
+  elapsed:       number
   priceKeys?: string[]
   apiShape?: {
     topKeys:   string[]
@@ -75,8 +76,9 @@ export default function AdminPricesPage() {
   const [stats,           setStats]           = useState<SetStats | null>(null)
   const [statsLoading,    setStatsLoading]    = useState(false)
   const [syncState,       setSyncState]       = useState<SyncState>({
-    status: 'idle', message: '', matched: 0, total: 0, products: 0, elapsed: 0,
+    status: 'idle', message: '', matched: 0, total: 0, products: 0, gradedPoints: 0, elapsed: 0,
   })
+  const [probeCardId,      setProbeCardId]      = useState('')
   const [includeGraded,   setIncludeGraded]   = useState(false)
   const [includeProducts, setIncludeProducts] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
@@ -115,7 +117,7 @@ export default function AdminPricesPage() {
     setApiSuggestions([])
     setSuggestionsSearch('')
     setDiscoverErr(null)
-    setSyncState({ status: 'idle', message: '', matched: 0, total: 0, products: 0, elapsed: 0 })
+    setSyncState({ status: 'idle', message: '', matched: 0, total: 0, products: 0, gradedPoints: 0, elapsed: 0 })
     loadStats(setId)
   }, [loadStats])
 
@@ -162,6 +164,21 @@ export default function AdminPricesPage() {
     }
   }, [])
 
+  const runGradedProbe = useCallback(async () => {
+    if (!probeCardId.trim()) return
+    setProbeLoading(true)
+    setProbeResult(null)
+    try {
+      const res = await fetch(`/api/admin/prices/probe-graded?cardId=${encodeURIComponent(probeCardId.trim())}`)
+      const json = await res.json()
+      setProbeResult(json)
+    } catch (e) {
+      setProbeResult({ error: String(e) })
+    } finally {
+      setProbeLoading(false)
+    }
+  }, [probeCardId])
+
   // Fetch ALL sets from the API (for browsing when name search fails)
   const browseAllSets = useCallback(async () => {
     setDiscoverLoading(true)
@@ -197,7 +214,7 @@ export default function AdminPricesPage() {
     const controller = new AbortController()
     abortRef.current = controller
 
-    setSyncState({ status: 'syncing', message: 'Starting…', matched: 0, total: 0, products: 0, elapsed: 0 })
+    setSyncState({ status: 'syncing', message: 'Starting…', matched: 0, total: 0, products: 0, gradedPoints: 0, elapsed: 0 })
 
     try {
       const body: Record<string, unknown> = { setId, includeGraded }
@@ -238,6 +255,13 @@ export default function AdminPricesPage() {
             if (event.type === 'graded') {
               setSyncState(prev => ({ ...prev, status: 'syncing', message: `🏅 ${event.message ?? 'Running graded card pricing…'}` }))
             }
+            if (event.type === 'graded_card') {
+              setSyncState(prev => ({
+                ...prev,
+                gradedPoints: event.runningTotal ?? (prev.gradedPoints + (event.pointsSaved ?? 0)),
+                message: `🏅 Graded: ${event.runningTotal ?? prev.gradedPoints + (event.pointsSaved ?? 0)} pts found so far…`,
+              }))
+            }
             if (event.type === 'warning') {
               setSyncState(prev => ({ ...prev, status: 'syncing', message: `⚠️ ${event.message ?? 'Warning'}` }))
             }
@@ -270,14 +294,20 @@ export default function AdminPricesPage() {
               }))
             }
             if (event.type === 'complete') {
+              const gradedSaved: number = event.gradedPointsSaved ?? 0
+              const parts: string[] = [`${event.upsertedCount} cards`]
+              if (gradedSaved > 0) parts.push(`${gradedSaved} graded pts`)
+              parts.push(`${event.productCount} products`)
+              parts.push(formatElapsed(event.elapsed))
               setSyncState({
-                status:   'done',
-                message:  `${event.upsertedCount} prices · ${event.productCount} products · ${formatElapsed(event.elapsed)}`,
-                matched:  event.matched,
-                total:    event.matched + event.unmatched,
-                products: event.productCount,
-                elapsed:  event.elapsed,
-                priceKeys: undefined,
+                status:       'done',
+                message:      parts.join(' · '),
+                matched:      event.matched,
+                total:        event.matched + event.unmatched,
+                products:     event.productCount,
+                gradedPoints: gradedSaved,
+                elapsed:      event.elapsed,
+                priceKeys:    undefined,
               })
               loadStats(setId)
             }
@@ -693,6 +723,132 @@ export default function AdminPricesPage() {
               {singleCardResult}
             </div>
           )}
+        </div>
+
+        {/* Probe eBay Graded */}
+        <div className="mt-6 bg-gray-900 border border-gray-700 rounded-xl p-6">
+          <h3 className="text-base font-semibold text-white mb-1">🔬 Probe eBay Graded Search</h3>
+          <p className="text-xs text-gray-500 mb-4">
+            Diagnostic tool — runs the eBay graded price search for a single card and returns the
+            raw API response without saving anything. Use this to diagnose why graded prices may be
+            returning 0 results (auth failures, no listings, etc.).
+          </p>
+          <div className="flex items-center gap-3">
+            <input
+              type="text"
+              placeholder="Card UUID (e.g. 550e8400-e29b-41d4-a716-…)"
+              value={probeCardId}
+              onChange={e => { setProbeCardId(e.target.value); setProbeResult(null) }}
+              className="flex-1 h-9 bg-gray-800 border border-gray-700 rounded-lg px-3 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-indigo-500 font-mono"
+            />
+            <button
+              onClick={runGradedProbe}
+              disabled={probeLoading || !probeCardId.trim()}
+              className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors shrink-0"
+            >
+              {probeLoading ? '⏳ Probing…' : 'Run Probe'}
+            </button>
+          </div>
+
+          {probeResult && (() => {
+            const pr = probeResult
+            const envCheck    = pr.envCheck    as Record<string, string> | undefined
+            const httpStatus  = pr.httpStatus  as number
+            const searchKw    = pr.searchKeywords as string
+            const ack         = pr.ack         as string | null
+            const apiErrors   = pr.apiErrorMessages as string[]
+            const rawCount    = pr.rawItemCount as number
+            const grades      = pr.parsedGrades as Record<string, { priceCount: number; avg: number | null }> | undefined
+            const samples     = pr.itemsSample  as { title: string; price: string | null }[]
+            const finalCount  = (pr.finalResults as unknown[])?.length ?? 0
+
+            return (
+              <div className="mt-4 space-y-3">
+                {/* Env check */}
+                {envCheck && (
+                  <div className="bg-gray-800 rounded-lg p-3 text-xs font-mono space-y-1">
+                    <div className="text-gray-500 font-sans font-medium mb-1">Environment</div>
+                    {Object.entries(envCheck).map(([k, v]) => (
+                      <div key={k}>
+                        <span className="text-gray-500">{k}:</span>{' '}
+                        <span className={v.startsWith('⚠️') ? 'text-amber-400' : 'text-green-400'}>{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* API result summary */}
+                <div className="bg-gray-800 rounded-lg p-3 text-xs space-y-1">
+                  <div className="text-gray-500 font-medium mb-1">eBay API Result</div>
+                  <div>
+                    <span className="text-gray-500">Search query:</span>{' '}
+                    <code className="text-indigo-300">{searchKw}</code>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">HTTP status:</span>{' '}
+                    <span className={httpStatus === 200 ? 'text-green-400' : 'text-red-400'}>{httpStatus}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">eBay ack:</span>{' '}
+                    <span className={ack === 'Success' ? 'text-green-400' : 'text-red-400'}>{ack ?? 'null'}</span>
+                  </div>
+                  {apiErrors?.length > 0 && (
+                    <div>
+                      <span className="text-gray-500">API errors:</span>{' '}
+                      <span className="text-red-400">{apiErrors.join('; ')}</span>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-gray-500">Raw item count:</span>{' '}
+                    <span className="text-white">{rawCount}</span>
+                  </div>
+                </div>
+
+                {/* Grade breakdown */}
+                {grades && Object.keys(grades).length > 0 && (
+                  <div className="bg-gray-800 rounded-lg p-3 text-xs">
+                    <div className="text-gray-500 font-medium mb-2">Parsed Grades</div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {Object.entries(grades)
+                        .sort(([a], [b]) => parseInt(b) - parseInt(a))
+                        .map(([grade, data]) => (
+                          <div key={grade} className="bg-gray-700 rounded p-2 text-center">
+                            <div className="text-indigo-300 font-semibold">PSA {grade}</div>
+                            <div className="text-gray-400">{data.priceCount} sales</div>
+                            <div className="text-white">{data.avg != null ? `$${data.avg.toFixed(2)}` : '—'}</div>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Sample items */}
+                {samples?.length > 0 && (
+                  <details className="bg-gray-800 rounded-lg p-3">
+                    <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-300">
+                      Sample listings ({samples.length})
+                    </summary>
+                    <div className="mt-2 space-y-1">
+                      {samples.map((item, i) => (
+                        <div key={i} className="text-xs text-gray-400 font-mono flex justify-between gap-2">
+                          <span className="truncate">{item.title}</span>
+                          <span className="text-green-400 shrink-0">{item.price ? `$${item.price}` : '—'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+
+                {/* Final results */}
+                <div className="text-xs text-gray-500">
+                  Final graded results after filtering:{' '}
+                  <span className={finalCount > 0 ? 'text-green-400' : 'text-amber-400'}>
+                    {finalCount} grade(s) saved
+                  </span>
+                </div>
+              </div>
+            )
+          })()}
         </div>
 
         {/* Footer note */}
