@@ -64,10 +64,9 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
   const [expandedCardId, setExpandedCardId] = useState<string | null>(null)
 
   // ─── Bulk variant config state ────────────────────────────────────────────
-  // undefined = don't change • null = clear the default • 'uuid' = set to this variant
-  const [bulkVariantIds,       setBulkVariantIds]       = useState<Set<string>>(new Set())
-  const [bulkDefaultVariantId, setBulkDefaultVariantId] = useState<string | null | undefined>(undefined)
-  const [isSaving,             setIsSaving]             = useState(false)
+  const [bulkVariantIds,  setBulkVariantIds]  = useState<Set<string>>(new Set())
+  const [bulkDefaultMode, setBulkDefaultMode] = useState<'normal' | 'holo'>('normal')
+  const [isSaving,        setIsSaving]        = useState(false)
 
   // ─── Set-specific variant creation ───────────────────────────────────────
   const [showAddForm, setShowAddForm] = useState(false)
@@ -92,6 +91,12 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
     setMessage({ type, text })
     setTimeout(() => setMessage(null), 5000)
   }
+
+  // ─── Initialise bulkDefaultMode based on which global variants exist ──────
+  useEffect(() => {
+    const hasNormal = allVariants.some(v => v.name.toLowerCase() === 'normal')
+    setBulkDefaultMode(hasNormal ? 'normal' : 'holo')
+  }, [allVariants])
 
   // ─── Load cards + variant map when set changes ───────────────────────────
   useEffect(() => {
@@ -151,7 +156,6 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
     setSelectedSetName(setName)
     setSetPickerOpen(false)
     setBulkVariantIds(new Set())
-    setBulkDefaultVariantId(undefined)
   }
 
   // ─── Card list helpers ────────────────────────────────────────────────────
@@ -203,9 +207,20 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
         ? `${bulkVariantIds.size} variant${bulkVariantIds.size === 1 ? '' : 's'} selected`
         : 'none (reverts selected cards to rarity-based defaults)'
 
+    // Resolve the actual variant UUID for the chosen mode, with cross-fallback
+    const normalVariant = allVariants.find(v => v.name.toLowerCase() === 'normal')
+    const holoVariant   = allVariants.find(v => v.name.toLowerCase() === 'holo')
+    const defaultVariantId =
+      bulkDefaultMode === 'normal'
+        ? (normalVariant?.id ?? holoVariant?.id ?? null)
+        : (holoVariant?.id   ?? normalVariant?.id ?? null)
+
+    const modeLabel = bulkDefaultMode === 'normal' ? 'Normal' : 'Holo'
+
     const confirmed = confirm(
       `Apply variant configuration to ${selectedCardIds.size} card${selectedCardIds.size === 1 ? '' : 's'}?\n\n` +
-      `Variants: ${variantLabel}\n\n` +
+      `Variants: ${variantLabel}\n` +
+      `Quick-add default: ${modeLabel}\n\n` +
       `This will replace any existing overrides on the selected cards.`
     )
     if (!confirmed) return
@@ -218,7 +233,7 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
         body: JSON.stringify({
           cardIds:          Array.from(selectedCardIds),
           variantIds:       Array.from(bulkVariantIds),
-          defaultVariantId: bulkDefaultVariantId,
+          defaultVariantId: defaultVariantId,
         }),
       })
 
@@ -947,26 +962,30 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
                 <p className="text-xs text-gray-500 mb-2">
                   The variant added to a user's collection when they double-click a card image on the set page.
                 </p>
-                <select
-                  value={
-                    bulkDefaultVariantId === undefined ? ''
-                    : bulkDefaultVariantId === null    ? '__clear'
-                    : bulkDefaultVariantId
-                  }
-                  onChange={e => {
-                    const val = e.target.value
-                    if      (val === '')        setBulkDefaultVariantId(undefined)
-                    else if (val === '__clear') setBulkDefaultVariantId(null)
-                    else                        setBulkDefaultVariantId(val)
-                  }}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500"
-                >
-                  <option value="">— don't change —</option>
-                  <option value="__clear">Clear (no default)</option>
-                  {allVariants.map(v => (
-                    <option key={v.id} value={v.id}>{localVariantNames[v.id] ?? v.name}</option>
-                  ))}
-                </select>
+                <div className="flex rounded-lg overflow-hidden border border-gray-600">
+                  <button
+                    type="button"
+                    onClick={() => setBulkDefaultMode('normal')}
+                    className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                      bulkDefaultMode === 'normal'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
+                    }`}
+                  >
+                    Normal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBulkDefaultMode('holo')}
+                    className={`flex-1 py-2 text-sm font-medium transition-colors border-l border-gray-600 ${
+                      bulkDefaultMode === 'holo'
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
+                    }`}
+                  >
+                    Holo
+                  </button>
+                </div>
               </div>
 
               {/* Selection summary */}
