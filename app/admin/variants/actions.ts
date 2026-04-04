@@ -181,6 +181,104 @@ export async function renameVariant(variantId: string, newName: string) {
 }
 
 /**
+ * Update a variant's name, description, color, and sort_order.
+ *
+ * Duplicate-name logic:
+ *  - Global variants (card_id IS NULL) → must be unique across the global catalog.
+ *  - Card-specific variants (card_id IS NOT NULL) → must be unique within that card; other
+ *    cards (and the global catalog) may share the same display name.
+ */
+export async function updateVariant(
+  variantId: string,
+  fields: { name: string; description: string | null; color: string; sortOrder: number }
+) {
+  try {
+    await requireAdmin()
+    const supabase = getAdminSupabaseClient()
+
+    if (!variantId || !validateUUID(variantId)) {
+      return { success: false, error: 'Invalid variant ID' }
+    }
+
+    const trimmedName = fields.name?.trim()
+    if (!trimmedName) {
+      return { success: false, error: 'Variant name is required' }
+    }
+    if (trimmedName.length > 100) {
+      return { success: false, error: 'Variant name is too long (max 100 characters)' }
+    }
+
+    const validColors = ['green', 'blue', 'purple', 'red', 'pink', 'yellow', 'gray', 'orange', 'teal']
+    if (!validColors.includes(fields.color)) {
+      return { success: false, error: 'Invalid color selection' }
+    }
+
+    // Fetch the current variant so we know if it is global or card-specific
+    const { data: current, error: fetchError } = await supabase
+      .from('variants')
+      .select('id, card_id')
+      .eq('id', variantId)
+      .single()
+
+    if (fetchError || !current) {
+      return { success: false, error: 'Variant not found' }
+    }
+
+    // Duplicate-name check scoped to the variant's domain
+    if (current.card_id) {
+      // Card-specific: unique within the same card
+      const { data: dup } = await supabase
+        .from('variants')
+        .select('id')
+        .eq('card_id', current.card_id)
+        .ilike('name', trimmedName)
+        .neq('id', variantId)
+        .maybeSingle()
+
+      if (dup) {
+        return { success: false, error: 'A variant with this name already exists for this card' }
+      }
+    } else {
+      // Global: unique across the entire catalog
+      const { data: dup } = await supabase
+        .from('variants')
+        .select('id')
+        .ilike('name', trimmedName)
+        .neq('id', variantId)
+        .maybeSingle()
+
+      if (dup) {
+        return { success: false, error: 'A variant with this name already exists' }
+      }
+    }
+
+    const { data, error } = await supabase
+      .from('variants')
+      .update({
+        name:        trimmedName,
+        description: fields.description?.trim() || null,
+        color:       fields.color,
+        sort_order:  fields.sortOrder,
+      })
+      .eq('id', variantId)
+      .select()
+      .single()
+
+    if (error) {
+      throw new Error(`Failed to update variant: ${error.message}`)
+    }
+
+    revalidatePath('/admin/variants')
+
+    return { success: true, data }
+
+  } catch (error: any) {
+    console.error('updateVariant error:', error)
+    return { success: false, error: error.message || 'Failed to update variant' }
+  }
+}
+
+/**
  * Delete a variant
  */
 export async function deleteVariant(variantId: string) {

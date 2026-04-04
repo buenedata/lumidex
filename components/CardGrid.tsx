@@ -10,6 +10,7 @@ import Modal from '@/components/ui/Modal'
 import VariantSuggestionModal from '@/components/VariantSuggestionModal'
 import { formatPrice, EUR_TO_USD } from '@/lib/pricing'
 import type { PriceChartRange } from '@/components/PriceChart'
+import { updateVariant, deleteVariant } from '@/app/admin/variants/actions'
 
 // Recharts has SSR issues — load only on client
 const PriceChart = dynamic(() => import('@/components/PriceChart'), { ssr: false })
@@ -180,6 +181,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   // over the server-passed prop, which may have defaulted to 'USD' if the server-side
   // supabaseAdmin profile query failed silently.
   const effectiveCurrency = (profile?.preferred_currency as string | undefined) ?? currency
+  // Admin: true when the logged-in user has role = 'admin'
+  const isAdmin = profile?.role === 'admin'
   // disableGreyOut overrides the user's setting — used on pages like browse where
   // collection status should not affect card appearance (only set pages grey out).
   const greyOutUnowned: boolean = !disableGreyOut && (profile?.grey_out_unowned ?? false)
@@ -241,10 +244,85 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const [isLoadingFriends, setIsLoadingFriends]         = useState(false)
   // Per-variant input text while the user is typing a quantity directly
   const [variantInputValues, setVariantInputValues]     = useState<Map<string, string>>(new Map())
+  // Admin: floating popup edit state for variant editing
+  const [editingVariantId, setEditingVariantId]   = useState<string | null>(null)
+  const [editForm,         setEditForm]            = useState({ name: '', description: '', color: 'gray', sortOrder: 0 })
+  const [variantEditError, setVariantEditError]    = useState<string | null>(null)
+  const [confirmDeleteId,  setConfirmDeleteId]     = useState<string | null>(null)
+  const [isSavingEdit,     setIsSavingEdit]        = useState(false)
+  const editPopupRef = useRef<HTMLDivElement>(null)
   // Ensures we only auto-open the initialCardId modal once
   const autoOpenedRef = useRef(false)
   // Used to distinguish single-click (open modal) from double-click (add default variant)
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Admin: close edit popup when clicking outside it
+  useEffect(() => {
+    if (!editingVariantId) return
+    function handleClickAway(e: MouseEvent) {
+      if (editPopupRef.current && !editPopupRef.current.contains(e.target as Node)) {
+        setEditingVariantId(null)
+        setVariantEditError(null)
+        setConfirmDeleteId(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickAway)
+    return () => document.removeEventListener('mousedown', handleClickAway)
+  }, [editingVariantId])
+
+  // Admin: save variant field edits and patch local state
+  async function handleVariantEditSave(variantId: string) {
+    setIsSavingEdit(true)
+    setVariantEditError(null)
+    const result = await updateVariant(variantId, {
+      name:        editForm.name,
+      description: editForm.description || null,
+      color:       editForm.color,
+      sortOrder:   editForm.sortOrder,
+    })
+    setIsSavingEdit(false)
+    if (!result.success) {
+      setVariantEditError(result.error ?? 'Failed to save')
+      return
+    }
+    if (selectedCard) {
+      setCardVariants(prev => {
+        const next = new Map(prev)
+        const variants = next.get(selectedCard.id) ?? []
+        next.set(
+          selectedCard.id,
+          variants.map(v =>
+            v.id === variantId
+              ? { ...v, name: editForm.name, description: editForm.description || null, color: editForm.color as any, sort_order: editForm.sortOrder }
+              : v
+          )
+        )
+        return next
+      })
+    }
+    setEditingVariantId(null)
+  }
+
+  // Admin: delete variant and remove from local state
+  async function handleVariantDelete(variantId: string) {
+    setIsSavingEdit(true)
+    const result = await deleteVariant(variantId)
+    setIsSavingEdit(false)
+    if (!result.success) {
+      setVariantEditError(result.error ?? 'Failed to delete')
+      return
+    }
+    if (selectedCard) {
+      setCardVariants(prev => {
+        const next = new Map(prev)
+        const variants = next.get(selectedCard.id) ?? []
+        next.set(selectedCard.id, variants.filter(v => v.id !== variantId))
+        return next
+      })
+    }
+    setEditingVariantId(null)
+    setConfirmDeleteId(null)
+  }
 
   const filteredCards = useMemo(() => {
     const filtered = cards.filter(card => {
@@ -1237,8 +1315,33 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
                   <div className="space-y-2">
                     {filteredVariants.map(variant => (
-                      <div key={variant.id} className="bg-elevated rounded-lg p-3 hover:bg-card-item transition-colors border border-subtle">
+                      <div key={variant.id} className="relative bg-elevated rounded-lg p-3 hover:bg-card-item transition-colors border border-subtle">
                         <div className="flex items-center gap-2">
+                          {/* Admin: pencil edit button */}
+                          {isAdmin && (
+                            <button
+                              onClick={e => {
+                                e.stopPropagation()
+                                if (editingVariantId === variant.id) {
+                                  setEditingVariantId(null)
+                                } else {
+                                  setEditingVariantId(variant.id)
+                                  setEditForm({
+                                    name:        variant.name,
+                                    description: variant.description || '',
+                                    color:       variant.color,
+                                    sortOrder:   variant.sort_order,
+                                  })
+                                  setVariantEditError(null)
+                                  setConfirmDeleteId(null)
+                                }
+                              }}
+                              title="Edit variant (admin)"
+                              className="shrink-0 w-5 h-5 flex items-center justify-center transition-opacity rounded opacity-50 hover:opacity-100"
+                            >
+                              ✏️
+                            </button>
+                          )}
                           {/* Variant colour dot */}
                           <div className={`w-3 h-3 rounded-full shrink-0 ${colorMap[variant.color] || 'bg-zinc-500'}`} />
                           {/* Variant Name */}
@@ -1330,6 +1433,100 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                             </button>
                           </div>
                         </div>
+
+                        {/* Admin: floating variant edit popup */}
+                        {isAdmin && editingVariantId === variant.id && (
+                          <div
+                            ref={editPopupRef}
+                            className="absolute left-0 top-full mt-1 z-50 w-72 bg-base border border-subtle rounded-xl shadow-2xl p-3 space-y-2"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <p className="text-xs font-semibold text-muted uppercase tracking-wider">Edit Variant</p>
+                            {/* Name */}
+                            <div>
+                              <label className="text-xs text-muted mb-1 block">Name</label>
+                              <input
+                                type="text"
+                                value={editForm.name}
+                                onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                                className="w-full bg-elevated border border-subtle rounded px-2 py-1 text-sm text-primary focus:outline-none focus:border-accent"
+                              />
+                            </div>
+                            {/* Description */}
+                            <div>
+                              <label className="text-xs text-muted mb-1 block">Description</label>
+                              <input
+                                type="text"
+                                value={editForm.description}
+                                onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+                                className="w-full bg-elevated border border-subtle rounded px-2 py-1 text-sm text-primary focus:outline-none focus:border-accent"
+                              />
+                            </div>
+                            {/* Sort order */}
+                            <div>
+                              <label className="text-xs text-muted mb-1 block">Sort order</label>
+                              <input
+                                type="number"
+                                value={editForm.sortOrder}
+                                onChange={e => setEditForm(f => ({ ...f, sortOrder: parseInt(e.target.value) || 0 }))}
+                                className="w-20 bg-elevated border border-subtle rounded px-2 py-1 text-sm text-primary focus:outline-none focus:border-accent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                              />
+                            </div>
+                            {/* Color swatches */}
+                            <div>
+                              <label className="text-xs text-muted mb-1 block">Color</label>
+                              <div className="flex gap-1.5 flex-wrap">
+                                {(['green','blue','purple','red','pink','yellow','gray','orange','teal'] as const).map(c => (
+                                  <button
+                                    key={c}
+                                    onClick={() => setEditForm(f => ({ ...f, color: c }))}
+                                    className={`w-5 h-5 rounded-full ${colorMap[c]} transition-all ${editForm.color === c ? 'ring-2 ring-offset-1 ring-white scale-110' : 'opacity-60 hover:opacity-100'}`}
+                                    title={c}
+                                  />
+                                ))}
+                              </div>
+                            </div>
+                            {/* Error message */}
+                            {variantEditError && (
+                              <p className="text-red-400 text-xs">{variantEditError}</p>
+                            )}
+                            {/* Action buttons */}
+                            <div className="flex items-center gap-1.5 pt-1">
+                              <button
+                                onClick={() => handleVariantEditSave(variant.id)}
+                                disabled={isSavingEdit}
+                                className="flex-1 py-1 rounded bg-accent text-white text-xs font-medium hover:opacity-90 disabled:opacity-50"
+                              >
+                                {isSavingEdit ? 'Saving…' : 'Save'}
+                              </button>
+                              <button
+                                onClick={() => { setEditingVariantId(null); setVariantEditError(null); setConfirmDeleteId(null) }}
+                                disabled={isSavingEdit}
+                                className="flex-1 py-1 rounded bg-elevated border border-subtle text-primary text-xs hover:bg-card-item disabled:opacity-50"
+                              >
+                                Cancel
+                              </button>
+                              {confirmDeleteId === variant.id ? (
+                                <button
+                                  onClick={() => handleVariantDelete(variant.id)}
+                                  disabled={isSavingEdit}
+                                  className="py-1 px-2 rounded bg-red-600 text-white text-xs font-medium hover:bg-red-700 disabled:opacity-50"
+                                >
+                                  {isSavingEdit ? '…' : 'Yes, delete'}
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => setConfirmDeleteId(variant.id)}
+                                  disabled={isSavingEdit}
+                                  className="py-1 px-2 rounded bg-elevated border border-red-600/40 text-red-400 text-xs hover:bg-red-600/10 disabled:opacity-50"
+                                  title="Delete variant"
+                                >
+                                  🗑
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
