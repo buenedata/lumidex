@@ -520,7 +520,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, sort_order, name, short_label, color } = body
+    const { id, sort_order, name, short_label, description, color } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -528,10 +528,11 @@ export async function PATCH(request: NextRequest) {
 
     // Build partial update — only include fields that were explicitly provided
     const updates: Record<string, unknown> = {}
-    if (sort_order !== undefined) updates.sort_order = sort_order
-    if (name       !== undefined) updates.name       = name.trim()
-    if (short_label !== undefined) updates.short_label = short_label?.trim() || null
-    if (color      !== undefined) updates.color      = color
+    if (sort_order   !== undefined) updates.sort_order   = sort_order
+    if (name         !== undefined) updates.name         = name.trim()
+    if (short_label  !== undefined) updates.short_label  = short_label?.trim()  || null
+    if (description  !== undefined) updates.description  = description?.trim()  || null
+    if (color        !== undefined) updates.color        = color
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'No updatable fields provided' }, { status: 400 })

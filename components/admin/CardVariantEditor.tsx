@@ -72,10 +72,11 @@ export function CardVariantEditor({
   const [savingOrderId, setSavingOrderId] = useState<string | null>(null)
 
   // inline rename state for card-specific variants
-  const [editingCsVariantId,         setEditingCsVariantId]         = useState<string | null>(null)
-  const [editingCsVariantName,       setEditingCsVariantName]       = useState<string>('')
-  const [editingCsVariantShortLabel, setEditingCsVariantShortLabel] = useState<string>('')
-  const [savingRenameId,             setSavingRenameId]             = useState<string | null>(null)
+  const [editingCsVariantId,          setEditingCsVariantId]          = useState<string | null>(null)
+  const [editingCsVariantName,        setEditingCsVariantName]        = useState<string>('')
+  const [editingCsVariantShortLabel,  setEditingCsVariantShortLabel]  = useState<string>('')
+  const [editingCsVariantDescription, setEditingCsVariantDescription] = useState<string>('')
+  const [savingRenameId,              setSavingRenameId]              = useState<string | null>(null)
 
   // global variant promotion state
   const [promotingGlobalId, setPromotingGlobalId] = useState<string | null>(null)
@@ -208,6 +209,7 @@ export function CardVariantEditor({
   const handleRenameCardSpecific = async (variantId: string) => {
     const trimmedName  = editingCsVariantName.trim()
     const trimmedLabel = editingCsVariantShortLabel.trim()
+    const trimmedDesc  = editingCsVariantDescription.trim()
     if (!trimmedName) return
     setSavingRenameId(variantId)
     try {
@@ -218,6 +220,7 @@ export function CardVariantEditor({
           id:          variantId,
           name:        trimmedName,
           short_label: trimmedLabel || null,
+          description: trimmedDesc  || null,
         }),
       })
       if (!res.ok) {
@@ -227,13 +230,14 @@ export function CardVariantEditor({
       setCardSpecificVariants((prev) =>
         prev.map((v) =>
           v.id === variantId
-            ? { ...v, name: trimmedName, short_label: trimmedLabel || null }
+            ? { ...v, name: trimmedName, short_label: trimmedLabel || null, description: trimmedDesc || null }
             : v
         )
       )
       setEditingCsVariantId(null)
       setEditingCsVariantName('')
       setEditingCsVariantShortLabel('')
+      setEditingCsVariantDescription('')
       showMessage('success', `"${trimmedName}" saved.`)
     } catch (err: any) {
       showMessage('error', err.message || 'Failed to save variant')
@@ -454,13 +458,14 @@ export function CardVariantEditor({
                                   setEditingCsVariantId(null)
                                   setEditingCsVariantName('')
                                   setEditingCsVariantShortLabel('')
+                                  setEditingCsVariantDescription('')
                                 }
                               }}
                               placeholder="Variant name"
                               className="flex-1 bg-gray-600 border border-gray-500 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-purple-400"
                             />
                           </div>
-                          {/* Row 2: short label + save/cancel */}
+                          {/* Row 2: short label */}
                           <div className="flex items-center gap-2 pl-5">
                             <span className="text-xs text-gray-500 w-20 flex-shrink-0">Short label</span>
                             <input
@@ -472,11 +477,31 @@ export function CardVariantEditor({
                                   setEditingCsVariantId(null)
                                   setEditingCsVariantName('')
                                   setEditingCsVariantShortLabel('')
+                                  setEditingCsVariantDescription('')
                                 }
                               }}
                               placeholder="e.g. 1st, SW"
                               maxLength={10}
                               className="w-28 bg-gray-600 border border-gray-500 rounded px-2 py-1 text-white text-sm font-mono focus:outline-none focus:border-purple-400"
+                            />
+                          </div>
+                          {/* Row 3: description + save/cancel */}
+                          <div className="flex items-center gap-2 pl-5">
+                            <span className="text-xs text-gray-500 w-20 flex-shrink-0">Description</span>
+                            <input
+                              value={editingCsVariantDescription}
+                              onChange={e => setEditingCsVariantDescription(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter')  handleRenameCardSpecific(variant.id)
+                                if (e.key === 'Escape') {
+                                  setEditingCsVariantId(null)
+                                  setEditingCsVariantName('')
+                                  setEditingCsVariantShortLabel('')
+                                  setEditingCsVariantDescription('')
+                                }
+                              }}
+                              placeholder="Optional short description"
+                              className="flex-1 bg-gray-600 border border-gray-500 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-purple-400"
                             />
                             <button
                               onClick={() => handleRenameCardSpecific(variant.id)}
@@ -491,6 +516,7 @@ export function CardVariantEditor({
                                 setEditingCsVariantId(null)
                                 setEditingCsVariantName('')
                                 setEditingCsVariantShortLabel('')
+                                setEditingCsVariantDescription('')
                               }}
                               className="text-gray-500 hover:text-gray-300 text-xs px-1.5 py-1 transition-colors"
                               title="Cancel"
@@ -520,15 +546,16 @@ export function CardVariantEditor({
                             </div>
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0 ml-3">
-                            {/* Edit name + short label */}
+                            {/* Edit name, short label & description */}
                             <button
                               onClick={() => {
                                 setEditingCsVariantId(variant.id)
                                 setEditingCsVariantName(variant.name)
                                 setEditingCsVariantShortLabel(variant.short_label ?? '')
+                                setEditingCsVariantDescription(variant.description ?? '')
                               }}
                               className="text-gray-500 hover:text-gray-300 text-xs p-1 rounded transition-colors"
-                              title="Edit name & short label"
+                              title="Edit name, short label & description"
                             >
                               ✏️
                             </button>
