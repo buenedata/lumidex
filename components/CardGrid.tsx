@@ -823,10 +823,12 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
           const quickVariants     = cardQuickVariants.get(card.id) || []
           // Use user_card_variants as source of truth once loaded; fall back to
           // legacy user_cards only while the batch fetch is still in-flight.
-          const hasLoadedVariants = cardQuickVariants.has(card.id)
-          const isOwned           = hasLoadedVariants
-            ? quickVariants.some(v => v.quantity > 0)
-            : !!(userCard && userCard.quantity > 0)
+          // Always use the Zustand store's aggregate quantity for owned status.
+          // quickVariants only covers global variants (card-specific variant IDs are
+          // excluded from the batch fetch's .in('variant_id', variantIds) filter),
+          // so for cards like promos with card-specific variants all quantities would
+          // be 0 and the card would appear unowned even when it is owned.
+          const isOwned = !!(userCard && userCard.quantity > 0)
           const customVariantCount = cardCustomVariantCounts.get(card.id) ?? 0
           const typeGlowClass     = getTypeGlowClass(card.type)
           const shouldGrey        = greyOutUnowned && !isOwned

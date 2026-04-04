@@ -441,14 +441,18 @@ export async function POST(request: NextRequest) {
         return [...globalVariants, ...uniqueSpecific]
       }
 
-      // 5. User quantities
+      // 5. User quantities — include both global variant IDs and card-specific variant IDs
+      //    so that owned quantities are returned for all variant types.
+      const cardSpecificVariantIds = (cardSpecificRows ?? []).map((v: any) => v.id)
+      const allVariantIds = [...new Set([...variantIds, ...cardSpecificVariantIds])]
+
       if (userId) {
         const { data: userVariants, error: uvErr } = await supabaseAdmin
           .from('user_card_variants')
           .select('variant_id, quantity, card_id')
           .eq('user_id', userId)
           .in('card_id', cardIdList)
-          .in('variant_id', variantIds)
+          .in('variant_id', allVariantIds)
 
         if (uvErr) {
           console.error('[variants POST batch] user quantities:', uvErr)
