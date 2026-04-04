@@ -1,5 +1,5 @@
 import { CardSearchData, EbayPriceResult, VariantKey } from './types';
-import { buildSearchString, mapVariant } from './cardMatcher';
+import { buildEbaySearchString, mapVariant } from './cardMatcher';
 import { removeOutliers, average, median } from './priceNormalizer';
 
 const BUNDLE_KEYWORDS = ['lot', 'bundle', 'x10', 'x20', '100x'];
@@ -30,12 +30,14 @@ function isBundle(title: string): boolean {
 
 export async function fetchEbayRawPrices(card: CardSearchData): Promise<EbayPriceResult | null> {
   try {
-    const keywords = buildSearchString(card);
+    // buildEbaySearchString omits the internal set_id (e.g. "base1") which
+    // eBay sellers never use, improving match relevance significantly.
+    const keywords = buildEbaySearchString(card);
 
     const params = new URLSearchParams({
       'OPERATION-NAME': 'findCompletedItems',
       'SERVICE-VERSION': '1.0.0',
-      'SECURITY-APPNAME': process.env.EBAY_APP_ID ?? '',
+      'SECURITY-APPNAME': process.env.EBAY_CLIENT_ID ?? '',
       'RESPONSE-DATA-FORMAT': 'JSON',
       'REST-PAYLOAD': '',
       keywords,

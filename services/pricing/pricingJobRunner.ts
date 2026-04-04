@@ -10,8 +10,12 @@ import { NormalizedPricePoint } from './types'
 
 // ── ENV startup checks ────────────────────────────────────────────────────────
 
-if (!process.env.EBAY_APP_ID) {
-  console.error('[PricingJobRunner] Missing env: EBAY_APP_ID')
+if (!process.env.EBAY_CLIENT_ID) {
+  console.error('[PricingJobRunner] Missing env: EBAY_CLIENT_ID')
+}
+
+if (!process.env.EBAY_CLIENT_SECRET) {
+  console.warn('[PricingJobRunner] Missing env: EBAY_CLIENT_SECRET — OAuth token refresh will fail')
 }
 
 if (!process.env.POKEMON_TCG_API_KEY && !process.env.POKEMONTCG_API_KEY) {

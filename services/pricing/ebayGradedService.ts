@@ -1,5 +1,5 @@
 import { CardSearchData, EbayGradedResult } from './types';
-import { buildSearchString, mapVariant } from './cardMatcher';
+import { buildEbaySearchString, mapVariant } from './cardMatcher';
 import { removeOutliers, average, median } from './priceNormalizer';
 
 const PSA_GRADE_REGEX = /PSA\s?(\d+)/i;
@@ -33,13 +33,15 @@ interface GradeGroup {
 
 export async function fetchEbayGradedPrices(card: CardSearchData): Promise<EbayGradedResult[]> {
   try {
-    const baseKeywords = buildSearchString(card);
-    const keywords = `${baseKeywords} PSA`;
+    // buildEbaySearchString omits the internal set_id (e.g. "sv4pt5") which
+    // eBay sellers never use; "graded" narrows results to certified cards only.
+    const baseKeywords = buildEbaySearchString(card);
+    const keywords = `${baseKeywords} PSA graded`;
 
     const params = new URLSearchParams({
       'OPERATION-NAME': 'findCompletedItems',
       'SERVICE-VERSION': '1.0.0',
-      'SECURITY-APPNAME': process.env.EBAY_APP_ID ?? '',
+      'SECURITY-APPNAME': process.env.EBAY_CLIENT_ID ?? '',
       'RESPONSE-DATA-FORMAT': 'JSON',
       'REST-PAYLOAD': '',
       keywords,

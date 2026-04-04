@@ -151,6 +151,16 @@ create table if not exists public.user_achievements (
     unlocked_at    timestamp with time zone not null default timezone('utc'::text, now())
 );
 
+-- eBay OAuth token cache
+-- Single-row table keyed on 'client_credentials'. Written by lib/ebayAuth.ts.
+-- Survives serverless cold starts without re-fetching a token each invocation.
+create table if not exists public.ebay_oauth_tokens (
+    token_key    text primary key,        -- always 'client_credentials'
+    access_token text not null,
+    expires_at   timestamptz not null,
+    updated_at   timestamptz not null default now()
+);
+
 -- eBay webhook event log
 -- Stores raw payloads received from eBay Marketplace Account Deletion /
 -- notification subscriptions. Written server-side via service role only;

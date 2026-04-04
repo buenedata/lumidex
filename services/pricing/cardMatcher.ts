@@ -1,10 +1,24 @@
 import { VariantKey, VALID_VARIANT_KEYS } from './types';
 
 /**
- * Build a search string for a card to use in API/eBay queries
+ * Build a search string for a card to use in API/eBay queries.
+ * Includes the internal set_id (e.g. "sv4pt5") — suitable for TCGPlayer/PokemonTCG API calls.
  */
 export function buildSearchString(card: { name: string; set_id: string; number: string }): string {
   return `${card.name} ${card.set_id} ${card.number} pokemon`.trim();
+}
+
+/**
+ * Build an eBay-optimised search string.
+ * Omits the internal set_id (e.g. "sv4pt5") which eBay sellers never use.
+ * Adds "card" to filter out non-card merchandise.
+ *
+ * @example
+ *   buildEbaySearchString({ name: 'Charizard', number: '4' })
+ *   // → "Charizard 4 pokemon card"
+ */
+export function buildEbaySearchString(card: { name: string; number: string }): string {
+  return `${card.name} ${card.number} pokemon card`.trim();
 }
 
 /**
