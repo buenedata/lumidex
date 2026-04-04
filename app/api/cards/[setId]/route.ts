@@ -24,6 +24,7 @@ export async function GET(
       source_card_id: card.source_card_id ?? null,
       number: card.number || '',
       rarity: card.rarity || '',
+      type: (card as any).type ?? null,
     }))
 
     const response = NextResponse.json(transformedCards)

@@ -15,6 +15,7 @@ interface SetCard {
   image: string | null
   number: string
   rarity: string
+  type: string | null
 }
 
 interface CardVariantState {
@@ -57,7 +58,7 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
   const [cardVariantMap,  setCardVariantMap]  = useState<Record<string, CardVariantState>>({})
   const [isLoadingCards,  setIsLoadingCards]  = useState(false)
   const [rarityFilter,    setRarityFilter]    = useState<string>('all')
-  const [sortMode,        setSortMode]        = useState<'number' | 'name'>('number')
+  const [sortMode,        setSortMode]        = useState<'number' | 'name' | 'type'>('number')
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set())
 
   // ─── Inline per-card editor state ────────────────────────────────────────
@@ -167,6 +168,14 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
 
   const sortedFilteredCards = [...filteredCards].sort((a, b) => {
     if (sortMode === 'name') return a.name.localeCompare(b.name)
+    if (sortMode === 'type') {
+      // Trainer cards go last; all other types (Pokémon, Energy, etc.) go first
+      const aIsTrainer = a.type?.toLowerCase() === 'trainer' ? 1 : 0
+      const bIsTrainer = b.type?.toLowerCase() === 'trainer' ? 1 : 0
+      if (aIsTrainer !== bIsTrainer) return aIsTrainer - bIsTrainer
+      // Tie-break by card number
+      return (parseInt(a.number) || 0) - (parseInt(b.number) || 0)
+    }
     // Sort by card number — parse the numeric prefix (e.g. "128/217" → 128)
     const numA = parseInt(a.number) || 0
     const numB = parseInt(b.number) || 0
@@ -485,11 +494,12 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
                 {/* Sort order */}
                 <select
                   value={sortMode}
-                  onChange={e => setSortMode(e.target.value as 'number' | 'name')}
+                  onChange={e => setSortMode(e.target.value as 'number' | 'name' | 'type')}
                   className="text-xs bg-gray-700 border border-gray-600 text-white rounded px-2 py-1 focus:outline-none focus:border-purple-500"
                 >
                   <option value="number">Sort: Number</option>
                   <option value="name">Sort: Name</option>
+                  <option value="type">Sort: Type</option>
                 </select>
               </div>
 
