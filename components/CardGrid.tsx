@@ -814,6 +814,12 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   // Derived: variants already loaded for the selected card (used in inline modal)
   const modalAllVariants = selectedCard ? (cardVariants.get(selectedCard.id) || []) : []
 
+  // Shared colour map used by both the card-grid dots and the modal variant rows
+  const colorMap = {
+    green: 'bg-green-500', blue: 'bg-blue-500', purple: 'bg-purple-500',
+    red: 'bg-red-500', pink: 'bg-pink-500', yellow: 'bg-yellow-500', gray: 'bg-gray-500',
+    orange: 'bg-orange-500', teal: 'bg-teal-500',
+  } as const
 
   return (
     <>
@@ -844,11 +850,6 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
             ? filteredQuick
             : filteredQuick.filter(v => v.card_id == null)
           const showStarButton = specificQuick.length > 1
-          const colorMap = {
-            green: 'bg-green-500', blue: 'bg-blue-500', purple: 'bg-purple-500',
-            red: 'bg-red-500', pink: 'bg-pink-500', yellow: 'bg-yellow-500', gray: 'bg-gray-500',
-            orange: 'bg-orange-500', teal: 'bg-teal-500',
-          } as const
 
           return (
             <div
