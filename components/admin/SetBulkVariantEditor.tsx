@@ -58,7 +58,8 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
   const [cardVariantMap,  setCardVariantMap]  = useState<Record<string, CardVariantState>>({})
   const [isLoadingCards,  setIsLoadingCards]  = useState(false)
   const [rarityFilter,    setRarityFilter]    = useState<string>('all')
-  const [sortMode,        setSortMode]        = useState<'number' | 'name' | 'type'>('number')
+  const [typeFilter,      setTypeFilter]      = useState<'all' | 'pokemon' | 'trainer'>('all')
+  const [sortMode,        setSortMode]        = useState<'number' | 'name'>('number')
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set())
 
   // ─── Inline per-card editor state ────────────────────────────────────────
@@ -162,20 +163,19 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
   // ─── Card list helpers ────────────────────────────────────────────────────
   const allRarities = Array.from(new Set(setCards.map(c => c.rarity).filter(Boolean))).sort()
 
-  const filteredCards = rarityFilter === 'all'
+  const rarityFilteredCards = rarityFilter === 'all'
     ? setCards
     : setCards.filter(c => c.rarity === rarityFilter)
 
+  const filteredCards =
+    typeFilter === 'trainer'
+      ? rarityFilteredCards.filter(c => c.type?.toLowerCase() === 'trainer')
+      : typeFilter === 'pokemon'
+        ? rarityFilteredCards.filter(c => c.type?.toLowerCase() !== 'trainer')
+        : rarityFilteredCards
+
   const sortedFilteredCards = [...filteredCards].sort((a, b) => {
     if (sortMode === 'name') return a.name.localeCompare(b.name)
-    if (sortMode === 'type') {
-      // Trainer cards go last; all other types (Pokémon, Energy, etc.) go first
-      const aIsTrainer = a.type?.toLowerCase() === 'trainer' ? 1 : 0
-      const bIsTrainer = b.type?.toLowerCase() === 'trainer' ? 1 : 0
-      if (aIsTrainer !== bIsTrainer) return aIsTrainer - bIsTrainer
-      // Tie-break by card number
-      return (parseInt(a.number) || 0) - (parseInt(b.number) || 0)
-    }
     // Sort by card number — parse the numeric prefix (e.g. "128/217" → 128)
     const numA = parseInt(a.number) || 0
     const numB = parseInt(b.number) || 0
@@ -494,13 +494,30 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
                 {/* Sort order */}
                 <select
                   value={sortMode}
-                  onChange={e => setSortMode(e.target.value as 'number' | 'name' | 'type')}
+                  onChange={e => setSortMode(e.target.value as 'number' | 'name')}
                   className="text-xs bg-gray-700 border border-gray-600 text-white rounded px-2 py-1 focus:outline-none focus:border-purple-500"
                 >
                   <option value="number">Sort: Number</option>
                   <option value="name">Sort: Name</option>
-                  <option value="type">Sort: Type</option>
                 </select>
+              </div>
+
+              {/* Type filter pills */}
+              <div className="flex gap-1.5 mt-2">
+                {(['all', 'pokemon', 'trainer'] as const).map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => { setTypeFilter(t); setSelectedCardIds(new Set()) }}
+                    className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-colors ${
+                      typeFilter === t
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
+                    }`}
+                  >
+                    {t === 'all' ? 'All types' : t === 'pokemon' ? 'Pokémon' : 'Trainer'}
+                  </button>
+                ))}
               </div>
 
               {/* Card rows */}
