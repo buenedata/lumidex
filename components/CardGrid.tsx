@@ -239,7 +239,7 @@ function CardGlareImage({
   // preserveAspectRatio="none" stretches the SVG to exact card pixel dimensions.
   const reverseHoloSvg = encodeURIComponent(
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none">` +
-    `<path fill-rule="evenodd" fill="white" d="M0 0 H100 V100 H0 Z M7.5 16 H92.5 V53 H7.5 Z"/>` +
+    `<path fill-rule="evenodd" fill="white" d="M0 0 H100 V100 H0 Z M7.5 12 H92.5 V51 H7.5 Z"/>` +
     `</svg>`
   )
   const reverseHoloMaskStyle: React.CSSProperties = {
