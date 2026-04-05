@@ -22,6 +22,34 @@ export function buildEbaySearchString(card: { name: string; number: string }): s
 }
 
 /**
+ * Returns true if an eBay listing title appears to be for the specified card number.
+ *
+ * eBay's fuzzy search often returns higher-profile cards with the same name but a
+ * different collector number (e.g. searching for "Yanmega EX 3/244" may return
+ * "Yanmega EX 228/182 SIR" because short numbers carry little search weight).
+ * This filter rejects those mismatches by checking the numeric part of the card
+ * number against the "/" notation that collectors always include in listing titles.
+ *
+ * Handles zero-padded variants automatically:
+ *   card "3"   → matches "3/244", "03/244", "003/244"  — rejects "228/182", "103/244"
+ *   card "228" → matches "228/182"                      — rejects "3/244"
+ *
+ * If the card number is non-numeric (e.g. promo "SWSH001") the function always
+ * returns true because we cannot reliably validate those formats.
+ */
+export function titleMatchesCardNumber(title: string, cardNumber: string): boolean {
+  const numPart = cardNumber.split('/')[0].trim();
+  const num = parseInt(numPart, 10);
+  if (isNaN(num)) return true; // non-numeric number — skip validation
+
+  // Match the card number at a word boundary, optionally zero-padded, followed by "/"
+  // (the slash is the key — every collector writes "3/244" or "228/182" in listings).
+  // \b0*N\/ catches "3/", "03/", "003/" for N=3 but NOT "103/" or "228/".
+  const regex = new RegExp(`\\b0*${num}\\/`);
+  return regex.test(title.toLowerCase());
+}
+
+/**
  * Normalize an API variant key to a valid DB variant key.
  *
  * Rules:

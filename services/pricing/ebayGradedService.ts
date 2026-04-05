@@ -11,7 +11,7 @@
 
 import { getEbayAppToken } from '@/lib/ebayAuth';
 import { CardSearchData, EbayGradedResult, GradingCompany } from './types';
-import { buildEbaySearchString, mapVariant } from './cardMatcher';
+import { buildEbaySearchString, mapVariant, titleMatchesCardNumber } from './cardMatcher';
 import { removeOutliers, average, median } from './priceNormalizer';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -338,13 +338,29 @@ export async function fetchEbayGradedPrices(card: CardSearchData): Promise<EbayG
     return [];
   }
 
-  // Apply PSA and CGC regexes to the shared item list.
+  // Reject listings for a different card number.
+  // eBay's fuzzy search can return a same-named card with a different collector
+  // number (e.g. Yanmega EX 228/182 SIR instead of Yanmega EX 3/244) when the
+  // target number is short and carries little search weight. Filter those out
+  // before parsing grades so we never store prices for the wrong card.
+  const filteredItems = items.filter(item =>
+    titleMatchesCardNumber(item.title ?? '', card.number)
+  );
+
+  if (!filteredItems.length) {
+    console.log(
+      `[ebayGradedService] No items matched card number "${card.number}" for card "${card.id}" — skipping (likely dominated by a same-name variant)`
+    );
+    return [];
+  }
+
+  // Apply PSA and CGC regexes to the filtered item list.
   // Grades outside GRADES_OF_INTEREST (< 9) are ignored in parseGradeGroups.
   const allResults: EbayGradedResult[] = [];
   const companyEntries = Object.entries(COMPANY_CONFIG) as [GradingCompany, NonNullable<typeof COMPANY_CONFIG[GradingCompany]>][];
 
   for (const [company, config] of companyEntries) {
-    const gradeGroups = parseGradeGroups(items, config.regex);
+    const gradeGroups = parseGradeGroups(filteredItems, config.regex);
     if (!gradeGroups.size) continue;
 
     const results = gradeGroupsToResults(card.id, company, gradeGroups);
