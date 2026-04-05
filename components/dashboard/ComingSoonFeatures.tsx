@@ -39,18 +39,6 @@ const FEATURES: Feature[] = [
     bgTint:      'bg-price/[0.04]',
     glowColour:  'rgba(52,211,153,0.18)',
   },
-  {
-    title:       'TCG News',
-    tagline:     'Stay in the loop',
-    description:
-      'Set reveals, tournament results, new products and market trends — all curated in one place for trainers like you.',
-    emoji:       '📰',
-    href:        '/news',
-    badgeColour: 'text-sky-400',
-    borderColour:'border-sky-400/30',
-    bgTint:      'bg-sky-400/[0.04]',
-    glowColour:  'rgba(56,189,248,0.18)',
-  },
 ]
 
 interface FeatureCardProps {
@@ -145,7 +133,7 @@ export default function ComingSoonFeatures() {
         </span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {FEATURES.map(feature => (
           <FeatureCard key={feature.href} feature={feature} />
         ))}
