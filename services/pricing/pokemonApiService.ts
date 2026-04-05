@@ -13,10 +13,20 @@ interface TcgPlayerPrices {
 }
 
 interface CardMarketPrices {
+  // Normal variant prices
   averageSellPrice?: number | null;
   lowPrice?: number | null;
   trendPrice?: number | null;
+  avg1?: number | null;
+  avg7?: number | null;
   avg30?: number | null;
+  // Reverse holo variant prices (separate listing on CardMarket)
+  reverseHoloSell?:   number | null;
+  reverseHoloLow?:    number | null;
+  reverseHoloTrend?:  number | null;
+  reverseHoloAvg1?:   number | null;
+  reverseHoloAvg7?:   number | null;
+  reverseHoloAvg30?:  number | null;
 }
 
 interface PokemonApiResponse {
@@ -27,6 +37,7 @@ interface PokemonApiResponse {
       prices?: TcgPlayerPrices;
     };
     cardmarket?: {
+      url?: string;
       updatedAt?: string;
       prices?: CardMarketPrices;
     };
@@ -101,25 +112,42 @@ export async function fetchPokemonApiPrices(card: CardSearchData): Promise<Pokem
   }
 
   // --- CardMarket prices ---
-  const cmPrices = data?.data?.cardmarket?.prices;
+  const cmSection = data?.data?.cardmarket;
+  const cmPrices  = cmSection?.prices;
+  const cmUrl     = cmSection?.url ?? null;
+
   if (cmPrices && typeof cmPrices === 'object') {
-    const price = cmPrices.averageSellPrice ?? null;
-    if (price && price > 0) {
-      const point: RawPricePoint = {
+    // Normal variant price
+    const normalPrice = cmPrices.averageSellPrice ?? null;
+    if (normalPrice && normalPrice > 0) {
+      points.push({
         cardId: card.id,
         source: 'cardmarket',
         variantKey: 'normal',
-        price,
+        price: normalPrice,
         currency: 'EUR',
         isGraded: false,
-      };
-      points.push(point);
+      });
     } else {
       console.warn(
-        `[pokemonApiService] Skipping CardMarket price for card ${card.api_id} — averageSellPrice missing or zero`
+        `[pokemonApiService] Skipping CM normal price for card ${card.api_id} — averageSellPrice missing or zero`
       );
+    }
+
+    // Reverse holo variant price (separate CardMarket listing)
+    // Prefer reverseHoloSell (avg sell) — mirrors how dextcg.com reads CM data
+    const reversePrice = cmPrices.reverseHoloSell ?? cmPrices.reverseHoloTrend ?? null;
+    if (reversePrice && reversePrice > 0) {
+      points.push({
+        cardId: card.id,
+        source: 'cardmarket',
+        variantKey: 'reverse',
+        price: reversePrice,
+        currency: 'EUR',
+        isGraded: false,
+      });
     }
   }
 
-  return { cardId: card.id, points };
+  return { cardId: card.id, points, cmUrl };
 }

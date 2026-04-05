@@ -63,23 +63,27 @@ export function formatPrice(usdAmount: number, toCurrency: string): string {
 // ── DB row shape ──────────────────────────────────────────────────────────────
 
 interface CardPriceRow {
-  card_id:          string
-  tcgp_normal:      number | null
-  tcgp_reverse_holo:number | null
-  tcgp_holo:        number | null
-  tcgp_1st_edition: number | null
-  tcgp_market:      number | null
-  tcgp_psa10:       number | null
-  tcgp_psa9:        number | null
-  tcgp_bgs95:       number | null
-  tcgp_bgs9:        number | null
-  tcgp_cgc10:       number | null
-  cm_avg_sell:      number | null
-  cm_low:           number | null
-  cm_trend:         number | null
-  cm_avg_30d:       number | null
-  api_card_id:      string | null
-  fetched_at:       string
+  card_id:           string
+  tcgp_normal:       number | null
+  tcgp_reverse_holo: number | null
+  tcgp_holo:         number | null
+  tcgp_1st_edition:  number | null
+  tcgp_market:       number | null
+  tcgp_psa10:        number | null
+  tcgp_psa9:         number | null
+  tcgp_bgs95:        number | null
+  tcgp_bgs9:         number | null
+  tcgp_cgc10:        number | null
+  cm_avg_sell:       number | null
+  cm_low:            number | null
+  cm_trend:          number | null
+  cm_avg_30d:        number | null
+  /** CardMarket avg sell price for the reverse holo variant (EUR) */
+  cm_reverse_holo:   number | null
+  /** Direct URL to this card on CardMarket */
+  cm_url:            string | null
+  api_card_id:       string | null
+  fetched_at:        string
 }
 
 export interface CardGradedPrices {

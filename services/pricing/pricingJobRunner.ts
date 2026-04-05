@@ -108,10 +108,11 @@ export async function syncSingleCard(cardId: string): Promise<SyncSingleCardResu
 
   console.log(`[PricingJobRunner] syncSingleCard: found card "${card.name}" (${card.id})`)
 
-  // Step 2a — Pokemon TCG API prices
+  // Step 2a — Pokemon TCG API prices (TCGPlayer + CardMarket; cmUrl carried separately)
   console.log(`[PricingJobRunner] syncSingleCard: fetching Pokémon TCG API prices…`)
   const apiResult = await fetchPokemonApiPrices(card)
   const apiPoints = normalizePoints(apiResult.points)
+  const cmUrl     = apiResult.cmUrl ?? null
   console.log(`[PricingJobRunner] syncSingleCard: Pokémon TCG API → ${apiPoints.length} points`)
 
   // Step 2b — eBay raw sold prices
@@ -153,11 +154,12 @@ export async function syncSingleCard(cardId: string): Promise<SyncSingleCardResu
   await savePricePoints(allPoints)
   await savePriceHistory(allPoints)
 
-  // Step 4 — Aggregate into card_prices cache
+  // Step 4 — Aggregate into card_prices cache; merge cm_url from API response
   console.log(`[PricingJobRunner] syncSingleCard: aggregating prices for card ${cardId}…`)
   let aggregated = false
   try {
     const aggregateResult = await aggregatePricesForCard(cardId)
+    if (cmUrl) aggregateResult.cm_url = cmUrl
     await writeCardPriceCache(aggregateResult)
     aggregated = true
     console.log(`[PricingJobRunner] syncSingleCard: aggregation complete`)

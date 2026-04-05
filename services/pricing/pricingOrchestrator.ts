@@ -159,11 +159,13 @@ async function processSingleSet(
     const allPoints: NormalizedPricePoint[] = []
     let errors = 0
     const processedCardIds: string[] = []
+    // cardId → CardMarket URL (from API response, not stored in price_points)
+    const cmUrlMap = new Map<string, string>()
 
     const results = await mapConcurrent(cards, concurrency, async (card) => {
       const apiResult = await fetchPokemonApiPrices(card)
       const apiPoints = normalizePoints(apiResult.points)
-      return { card, apiPoints }
+      return { card, apiPoints, cmUrl: apiResult.cmUrl ?? null }
     })
 
     for (const result of results) {
@@ -174,6 +176,7 @@ async function processSingleSet(
       }
       allPoints.push(...result.apiPoints)
       processedCardIds.push(result.card.id)
+      if (result.cmUrl) cmUrlMap.set(result.card.id, result.cmUrl)
     }
 
     // Batch write all price points for the whole set at once
@@ -184,8 +187,11 @@ async function processSingleSet(
       ])
 
       // Aggregate each card concurrently (DB fan-out, not HTTP)
+      // Merge in cmUrl from the API response — it is not stored in price_points
       await mapConcurrent(processedCardIds, 10, async (cardId) => {
         const agg = await aggregatePricesForCard(cardId)
+        const cmUrl = cmUrlMap.get(cardId)
+        if (cmUrl) agg.cm_url = cmUrl
         await writeCardPriceCache(agg)
       })
     }
@@ -210,8 +216,10 @@ async function processSingleSet(
 
     try {
       // a. Pokemon TCG API prices (TCGPlayer + CardMarket in one call)
+      // cmUrl comes from the API response body and is not stored in price_points
       const apiResult = await fetchPokemonApiPrices(card)
       const apiPoints = normalizePoints(apiResult.points)
+      const cmUrl     = apiResult.cmUrl ?? null
 
       // b. eBay raw ungraded sold prices (optional — currently not aggregated into card_prices)
       let ebayPoints: NormalizedPricePoint[] = []
@@ -256,8 +264,9 @@ async function processSingleSet(
       await savePricePoints(allPoints)
       await savePriceHistory(allPoints)
 
-      // e. Aggregate into card_prices cache
+      // e. Aggregate into card_prices cache; merge in cm_url from API response
       const aggregated = await aggregatePricesForCard(card.id)
+      if (cmUrl) aggregated.cm_url = cmUrl
       await writeCardPriceCache(aggregated)
 
       processedCardIds.push(card.id)
@@ -452,6 +461,7 @@ export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Pro
     try {
       const apiResult = await fetchPokemonApiPrices(card)
       const apiPoints = normalizePoints(apiResult.points)
+      const cmUrl     = apiResult.cmUrl ?? null
 
       let ebayPoints: NormalizedPricePoint[] = []
       if (includeEbayRaw) {
@@ -493,6 +503,7 @@ export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Pro
       await savePriceHistory(allPoints)
 
       const aggregated = await aggregatePricesForCard(card.id)
+      if (cmUrl) aggregated.cm_url = cmUrl
       await writeCardPriceCache(aggregated)
 
       processedCardIds.push(card.id)

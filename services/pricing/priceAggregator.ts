@@ -79,15 +79,24 @@ export async function aggregatePricesForCard(cardId: string): Promise<CardPriceU
   const tcgp_psa9  = average(tcgpPsa9Prices)
 
   // ── CardMarket ungraded (normal variant) ─────────────────────────────────
-  const cmRows = rows
+  const cmNormalRows = rows
     .filter(r => r.source === 'cardmarket' && !r.is_graded && r.variant_key === 'normal')
     .sort((a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime())
 
-  const cmPrices = cmRows.map(r => r.price as number)
+  const cmNormalPrices = cmNormalRows.map(r => r.price as number)
 
-  const cm_avg_sell = average(cmPrices)
-  const cm_low      = minimum(cmPrices)
-  const cm_trend    = cmRows.length > 0 ? (cmRows[0].price as number) : null
+  const cm_avg_sell = average(cmNormalPrices)
+  const cm_low      = minimum(cmNormalPrices)
+  const cm_trend    = cmNormalRows.length > 0 ? (cmNormalRows[0].price as number) : null
+
+  // ── CardMarket ungraded (reverse holo variant) ────────────────────────────
+  const cmReverseRows = rows
+    .filter(r => r.source === 'cardmarket' && !r.is_graded && r.variant_key === 'reverse')
+    .sort((a, b) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime())
+
+  const cmReversePrices = cmReverseRows.map(r => r.price as number)
+
+  const cm_reverse_holo = average(cmReversePrices)
 
   return {
     cardId,
@@ -100,7 +109,9 @@ export async function aggregatePricesForCard(cardId: string): Promise<CardPriceU
     cm_avg_sell,
     cm_low,
     cm_trend,
+    cm_reverse_holo,
     // cm_avg_30d not computed here — requires wider time window; leave undefined
+    // cm_url is not in price_points; it is set directly by the job runner
   }
 }
 
@@ -119,7 +130,7 @@ export async function writeCardPriceCache(update: CardPriceUpdate): Promise<void
     fetched_at: new Date().toISOString(),
   }
 
-  if (update.tcgp_normal      !== undefined) payload.tcgp_normal      = update.tcgp_normal
+  if (update.tcgp_normal       !== undefined) payload.tcgp_normal       = update.tcgp_normal
   if (update.tcgp_reverse_holo !== undefined) payload.tcgp_reverse_holo = update.tcgp_reverse_holo
   if (update.tcgp_holo         !== undefined) payload.tcgp_holo         = update.tcgp_holo
   if (update.tcgp_1st_edition  !== undefined) payload.tcgp_1st_edition  = update.tcgp_1st_edition
@@ -130,6 +141,8 @@ export async function writeCardPriceCache(update: CardPriceUpdate): Promise<void
   if (update.cm_low            !== undefined) payload.cm_low            = update.cm_low
   if (update.cm_trend          !== undefined) payload.cm_trend          = update.cm_trend
   if (update.cm_avg_30d        !== undefined) payload.cm_avg_30d        = update.cm_avg_30d
+  if (update.cm_reverse_holo   !== undefined) payload.cm_reverse_holo   = update.cm_reverse_holo
+  if (update.cm_url            !== undefined) payload.cm_url            = update.cm_url
 
   const { error } = await supabase
     .from('card_prices')

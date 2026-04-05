@@ -40,6 +40,8 @@ export async function GET(
       cm_low,
       cm_trend,
       cm_avg_30d,
+      cm_reverse_holo,
+      cm_url,
       tcgp_updated_at,
       cm_updated_at,
       fetched_at

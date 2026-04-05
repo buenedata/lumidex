@@ -31,6 +31,10 @@ interface CardPriceRow {
   cm_low:            number | null
   cm_trend:          number | null
   cm_avg_30d:        number | null
+  /** CardMarket avg sell price for the reverse holo variant (EUR) */
+  cm_reverse_holo:   number | null
+  /** Direct URL to this card's CardMarket product page */
+  cm_url:            string | null
   tcgp_updated_at:   string | null
   cm_updated_at:     string | null
   fetched_at:        string
@@ -1395,14 +1399,30 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                         </div>
 
                         {/* CardMarket prices */}
-                        {(row.cm_avg_sell != null || row.cm_trend != null) && (
+                        {(row.cm_avg_sell != null || row.cm_trend != null || row.cm_reverse_holo != null) && (
                           <div>
-                            <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">CardMarket</h3>
+                            <div className="flex items-center justify-between mb-2">
+                              <h3 className="text-xs font-semibold text-muted uppercase tracking-wider">CardMarket</h3>
+                              {row.cm_url && (
+                                <a
+                                  href={row.cm_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-secondary hover:text-primary transition-colors flex items-center gap-1"
+                                >
+                                  View on CardMarket
+                                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14V3zm-1 2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8h-2v8H5V7h8V5z"/>
+                                  </svg>
+                                </a>
+                              )}
+                            </div>
                             <div className="space-y-1.5">
                               {[
-                                { label: 'Avg Sell',   val: row.cm_avg_sell != null ? formatPrice(row.cm_avg_sell * EUR_TO_USD, effectiveCurrency) : null },
-                                { label: 'Trend',      val: row.cm_trend    != null ? formatPrice(row.cm_trend    * EUR_TO_USD, effectiveCurrency) : null },
-                                { label: '30-day Avg', val: row.cm_avg_30d  != null ? formatPrice(row.cm_avg_30d  * EUR_TO_USD, effectiveCurrency) : null },
+                                { label: 'Normal · Avg Sell',  val: row.cm_avg_sell      != null ? formatPrice(row.cm_avg_sell      * EUR_TO_USD, effectiveCurrency) : null },
+                                { label: 'Reverse · Avg Sell', val: row.cm_reverse_holo  != null ? formatPrice(row.cm_reverse_holo  * EUR_TO_USD, effectiveCurrency) : null },
+                                { label: 'Trend',              val: row.cm_trend         != null ? formatPrice(row.cm_trend         * EUR_TO_USD, effectiveCurrency) : null },
+                                { label: '30-day Avg',         val: row.cm_avg_30d       != null ? formatPrice(row.cm_avg_30d       * EUR_TO_USD, effectiveCurrency) : null },
                               ].filter(r => r.val != null).map(r => (
                                 <div key={r.label} className="flex items-center justify-between text-sm bg-elevated rounded-lg px-3 py-2 border border-subtle">
                                   <span className="text-secondary">{r.label}</span>
@@ -1597,26 +1617,60 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                             </div>
                           </div>
 
-                          {/* Market Price — same source/value as shown under the card in the grid */}
-                          <div className="w-20 text-center shrink-0">
-                            <div className="text-price font-medium text-sm">
-                              {(() => {
-                                // Prefer the pre-computed grid price (tcgp_market or CM equivalent)
-                                const gridPrice = cardPricesUSD?.[selectedCard.id]
-                                if (gridPrice != null) return formatPrice(gridPrice, effectiveCurrency)
-                                // Fallback: derive from the full price row if available
-                                const priceRow = cardPriceCache.get(selectedCard.id)
-                                if (!priceRow) return isLoadingPrice ? '…' : '—'
-                                let price: number | null = null
-                                if (priceSource === 'cardmarket') {
-                                  const eur = priceRow.cm_avg_sell ?? priceRow.cm_trend ?? null
-                                  price = eur != null ? Math.round(eur * EUR_TO_USD * 100) / 100 : null
-                                } else {
-                                  price = priceRow.tcgp_market ?? null
-                                }
-                                return price != null ? formatPrice(price, effectiveCurrency) : '—'
-                              })()}
+                          {/* Market Price — variant-specific (Normal / Reverse Holo / Holo) */}
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <div className="w-20 text-center">
+                              <div className="text-price font-medium text-sm">
+                                {(() => {
+                                  // Always use the per-variant price from the full price row so that
+                                  // Normal and Reverse Holo show different values.
+                                  // cardPricesUSD is the set-grid "best price" (tcgp_market or CM
+                                  // equivalent) — it is the same for every variant and must NOT be
+                                  // used here.
+                                  const priceRow = cardPriceCache.get(selectedCard.id)
+                                  if (!priceRow) return isLoadingPrice ? '…' : '—'
+
+                                  const vName     = variant.name.toLowerCase()
+                                  const isReverse = vName.includes('reverse')
+                                  const isHolo    = vName.includes('holo') && !isReverse
+
+                                  let price: number | null = null
+                                  if (priceSource === 'cardmarket') {
+                                    // CardMarket stores separate prices for normal and reverse holo
+                                    const eur = isReverse
+                                      ? (priceRow.cm_reverse_holo ?? null)
+                                      : (priceRow.cm_avg_sell ?? priceRow.cm_trend ?? null)
+                                    price = eur != null ? Math.round(eur * EUR_TO_USD * 100) / 100 : null
+                                  } else {
+                                    // TCGPlayer per-variant columns
+                                    price = isReverse ? (priceRow.tcgp_reverse_holo ?? null)
+                                          : isHolo    ? (priceRow.tcgp_holo         ?? null)
+                                          :             (priceRow.tcgp_normal        ?? priceRow.tcgp_market ?? null)
+                                  }
+                                  return price != null ? formatPrice(price, effectiveCurrency) : '—'
+                                })()}
+                              </div>
                             </div>
+
+                            {/* CardMarket external link — shown when cm_url is available */}
+                            {(() => {
+                              const priceRow = cardPriceCache.get(selectedCard.id)
+                              if (!priceRow?.cm_url) return null
+                              return (
+                                <a
+                                  href={priceRow.cm_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  title="View on CardMarket"
+                                  className="shrink-0 text-muted hover:text-primary transition-colors"
+                                  onClick={e => e.stopPropagation()}
+                                >
+                                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                                    <path d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14V3zm-1 2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8h-2v8H5V7h8V5z"/>
+                                  </svg>
+                                </a>
+                              )
+                            })()}
                           </div>
 
                           {/* Quantity Controls */}

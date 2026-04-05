@@ -37,6 +37,8 @@ export interface CardSearchData {
 export interface PokemonApiPriceResult {
   cardId: string;
   points: RawPricePoint[];
+  /** Direct URL to the card's CardMarket product page, if present in the API response */
+  cmUrl?: string | null;
 }
 
 // Result from ebayService
@@ -79,4 +81,8 @@ export interface CardPriceUpdate {
   cm_low?: number | null;
   cm_trend?: number | null;
   cm_avg_30d?: number | null;
+  /** CardMarket avg sell price for the reverse holo variant (EUR) */
+  cm_reverse_holo?: number | null;
+  /** Direct URL to this card on CardMarket */
+  cm_url?: string | null;
 }
