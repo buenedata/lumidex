@@ -179,6 +179,19 @@ export function CardImageUploadModal({ card, isOpen, onClose, onUploadSuccess, o
     e.preventDefault()
     setDragOver(false)
 
+    // ── Priority 1: raw image file ────────────────────────────────────────
+    // Chrome/Firefox include the image binary in dataTransfer.files when
+    // dragging an <img> element, even across tabs. Prefer this over URL
+    // extraction because link-wrapped images (e.g. dext cards inside <a>
+    // tags) put the *page* href in text/uri-list — not the image src — which
+    // causes the proxy to get back HTML instead of an image.
+    const droppedFile = e.dataTransfer.files[0]
+    if (droppedFile) {
+      handleFileSelect(droppedFile)
+      return
+    }
+
+    // ── Priority 2: URI string (bookmark bar, plain-image drag, etc.) ─────
     const items = Array.from(e.dataTransfer.items)
     const uriItem =
       items.find((i) => i.kind === 'string' && i.type === 'text/uri-list') ||
@@ -194,7 +207,7 @@ export function CardImageUploadModal({ card, isOpen, onClose, onUploadSuccess, o
         if (!imageUrl) {
           setUploadState((prev) => ({
             ...prev,
-            error: 'Could not detect an https image URL from the drag. Try using "Browse Files" instead.',
+            error: 'Could not detect an image URL from the drag. Try right-clicking the image → "Copy image address" and pasting below.',
           }))
           return
         }
@@ -208,17 +221,17 @@ export function CardImageUploadModal({ card, isOpen, onClose, onUploadSuccess, o
           handleFileSelect(file)
         } catch (err) {
           setFetchingUrl(false)
+          const msg = err instanceof Error ? err.message : String(err)
+          const isHtmlResponse = msg.includes('text/html')
           setUploadState((prev) => ({
             ...prev,
-            error: `URL fetch failed: ${err instanceof Error ? err.message : err}`,
+            error: isHtmlResponse
+              ? 'The drag gave a page link, not an image. Right-click the card image → "Copy image address", then paste the URL below.'
+              : `URL fetch failed: ${msg}`,
           }))
         }
       })
-      return
     }
-
-    const file = e.dataTransfer.files[0]
-    if (file) handleFileSelect(file)
   }
 
   /** Load an image from the URL input via proxy, populating selectedFile for normal upload. */
