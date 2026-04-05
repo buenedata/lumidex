@@ -4,7 +4,6 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { PokemonCard, PokemonSet, CollectionGoal, PriceSource } from '@/types'
 import { getCardPricesForSet, getSealedProductsForSet, buildCardPriceMap, type SetProductPrice } from '@/lib/pricing'
 import Link from 'next/link'
-import Image from 'next/image'
 import { notFound } from 'next/navigation'
 import SetPageCards from '@/components/SetPageCards'
 
@@ -186,13 +185,11 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
         {/* Blurred background */}
         {set.logo_url && (
           <div className="absolute inset-0">
-            <Image
-                src={set.logo_url}
-                alt=""
-                fill
-                sizes="100vw"
-                className="object-cover blur-2xl scale-110 opacity-20"
-              />
+            <img
+              src={set.logo_url}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-20"
+            />
           </div>
         )}
         {/* Gradient overlays */}
@@ -216,11 +213,9 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
         <div className="relative z-10 h-full max-w-screen-2xl mx-auto px-6 flex items-end pb-6 gap-6">
           {/* Set logo */}
           {set.logo_url && (
-            <Image
+            <img
               src={set.logo_url}
               alt={set.name}
-              width={180}
-              height={90}
               style={{ width: 'auto', height: 'auto', maxHeight: '5rem' }}
               className="object-contain drop-shadow-2xl shrink-0"
             />
@@ -237,12 +232,10 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
               </h1>
               {set.symbol_url && (
                 <div className="relative w-8 h-8 rounded bg-black/40 backdrop-blur-sm p-0.5 flex items-center justify-center shrink-0">
-                  <Image
+                  <img
                     src={set.symbol_url}
                     alt={`${set.name} symbol`}
-                    fill
-                    sizes="32px"
-                    className="object-contain"
+                    className="w-full h-full object-contain"
                   />
                 </div>
               )}
