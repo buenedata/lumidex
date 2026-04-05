@@ -93,7 +93,8 @@ export default function AdminPricesPage() {
   })
   const [bulkAutoLoop, setBulkAutoLoop] = useState(true)
   const [bulkMsg,      setBulkMsg]      = useState('')
-  const bulkRunningRef = useRef(false)
+  const bulkRunningRef  = useRef(false)
+  const bulkAbortRef    = useRef<AbortController | null>(null)
 
   // ── Auth guard ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -371,11 +372,23 @@ export default function AdminPricesPage() {
 
     try {
       while (remaining > 0 && bulkRunningRef.current) {
-        const res = await fetch('/api/admin/sync/prices/bulk', {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ forceAll, concurrency: 5 }),
-        })
+        // Fresh AbortController for each request so Stop cancels the in-flight call
+        const controller = new AbortController()
+        bulkAbortRef.current = controller
+
+        let res: Response
+        try {
+          res = await fetch('/api/admin/sync/prices/bulk', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ forceAll, concurrency: 5, setsPerRun: 3 }),
+            signal:  controller.signal,
+          })
+        } catch (err) {
+          // Aborted by Stop button — exit cleanly
+          if ((err as Error).name === 'AbortError') break
+          throw err
+        }
 
         if (!res.ok) {
           const data = await res.json().catch(() => ({}))
@@ -383,11 +396,11 @@ export default function AdminPricesPage() {
         }
 
         const data = await res.json() as {
-          setsProcessed: number
-          remaining:     number
+          setsProcessed:  number
+          remaining:      number
           cardsProcessed: number
-          errors:        number
-          message:       string
+          errors:         number
+          message:        string
         }
 
         totalRuns++
@@ -405,11 +418,11 @@ export default function AdminPricesPage() {
         })
         setBulkMsg(data.message ?? '')
 
-        // Stop looping if auto-loop is off
-        if (!bulkAutoLoop) break
+        // Stop looping if auto-loop is off or user clicked Stop
+        if (!bulkAutoLoop || !bulkRunningRef.current) break
 
-        // Tiny delay between runs so the browser stays responsive
-        if (remaining > 0) await new Promise(r => setTimeout(r, 500))
+        // Short pause between runs so the browser stays responsive
+        if (remaining > 0) await new Promise(r => setTimeout(r, 300))
       }
 
       setBulkStatus(remaining > 0 ? 'idle' : 'done')
@@ -422,14 +435,17 @@ export default function AdminPricesPage() {
       setBulkStatus('error')
       setBulkMsg(err instanceof Error ? err.message : 'Bulk seed failed')
     } finally {
-      bulkRunningRef.current = false
+      bulkRunningRef.current  = false
+      bulkAbortRef.current    = null
     }
   }
 
   function stopBulkSeed() {
     bulkRunningRef.current = false
+    bulkAbortRef.current?.abort()
+    bulkAbortRef.current = null
     setBulkStatus('idle')
-    setBulkMsg(prev => prev ? `Stopped. ${prev}` : 'Stopped.')
+    setBulkMsg('Stopped.')
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────

@@ -18,7 +18,9 @@ import { updatePricesBatch } from '@/services/pricing/pricingOrchestrator'
  *
  * Body (all optional):
  *   forceAll    boolean  — process every set, ignoring prices_last_synced_at (default: false)
- *   concurrency number   — cards processed in parallel (default: 5)
+ *   concurrency number   — cards processed in parallel per set (default: 5)
+ *   setsPerRun  number   — max sets to process per call (default: 3)
+ *                          Keep low so the client receives progress updates quickly.
  *
  * Response:
  *   setsQueued     — how many sets were ready to process this run
@@ -43,11 +45,13 @@ export async function POST(req: NextRequest) {
   // 2. Parse body
   let forceAll    = false
   let concurrency = 5
+  let setsPerRun  = 3
 
   try {
     const body = await req.json()
     forceAll    = body.forceAll    === true
     concurrency = typeof body.concurrency === 'number' ? body.concurrency : 5
+    setsPerRun  = typeof body.setsPerRun  === 'number' ? body.setsPerRun  : 3
   } catch {
     // body is optional
   }
@@ -71,13 +75,17 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  const setIds = dueSets.map(s => s.set_id)
+  // Slice: only process setsPerRun sets this call; the rest are "remaining"
+  const setsToProcess = dueSets.slice(0, setsPerRun)
+  const setIds        = setsToProcess.map(s => s.set_id)
+  // remaining = sets that are due but won't be processed this call
+  const remainingAfterRun = Math.max(0, dueSets.length - setsPerRun)
+
   const tierSummary = `${dueSets.filter(s => s.tier === 'recent').length} recent, ${dueSets.filter(s => s.tier === 'older').length} older`
 
   console.log(
-    `[admin/sync/prices/bulk] Starting bulk seed: ` +
-    `${setIds.length} sets (${tierSummary}), ` +
-    `concurrency=${concurrency}, forceAll=${forceAll}`
+    `[admin/sync/prices/bulk] Run: ${setIds.length}/${dueSets.length} sets this call ` +
+    `(${tierSummary}), concurrency=${concurrency}, forceAll=${forceAll}`
   )
 
   // 4. Run the fast TCG-API-only pipeline
@@ -90,18 +98,19 @@ export async function POST(req: NextRequest) {
       timeBudgetMs:   270_000,
     })
 
-    const remaining = result.setsSkippedDueToTimeout
+    // Recalculate remaining: any sets skipped due to timeout are also remaining
+    const remaining = remainingAfterRun + result.setsSkippedDueToTimeout
 
     return NextResponse.json({
       ok:            true,
-      setsQueued:    setIds.length,
+      setsQueued:    dueSets.length,
       setsProcessed: result.setsProcessed,
       remaining,
       cardsProcessed: result.processed,
       errors:        result.errors,
       message: remaining > 0
-        ? `${result.setsProcessed} sets done. Call again to process ${remaining} more.`
-        : `All ${result.setsProcessed} sets seeded successfully.`,
+        ? `${result.setsProcessed} sets done. ${remaining} remaining — continuing…`
+        : `All sets seeded! ${result.setsProcessed} sets · ${result.processed} cards updated.`,
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
