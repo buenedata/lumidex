@@ -86,21 +86,36 @@ interface CardGridProps {
 }
 
 // ── Standalone component — zero React state, RAF-gated DOM writes for buttery 3D tilt ──
-// variantSrc: when truthy, cross-fades over the base image (used for hover variant images).
+//
+// variantSrc    – when truthy, cross-fades a variant image over the base image.
+// holoEffect    – drives a pure-CSS rainbow foil effect:
+//   'reverse-holo' → shimmer on the card border/background, NOT the inner frame artwork
+//   'holo'         → shimmer ONLY inside the inner frame artwork area
+//
+// Both effects are updated every rAF frame from mouse position so the rainbow slides
+// naturally as the cursor moves — no state, no re-renders.
 function CardGlareImage({
   src,
   variantSrc,
+  holoEffect,
   alt,
 }: {
   src: string | null | undefined
   variantSrc?: string | null
+  holoEffect?: 'reverse-holo' | 'holo' | null
   alt?: string
 }) {
   const cardRef  = useRef<HTMLDivElement>(null)
   const glareRef = useRef<HTMLDivElement>(null)
+  const holoRef  = useRef<HTMLDivElement>(null)
   const rafRef   = useRef<number | null>(null)
 
-  // Track the image URL currently rendered in the variant layer so we can fade out smoothly.
+  // Mirror the prop into a ref so the RAF closure always sees the current value
+  // without needing to re-create the RAF callback on every render.
+  const holoEffectRef = useRef<'reverse-holo' | 'holo' | null>(null)
+  useEffect(() => { holoEffectRef.current = holoEffect ?? null }, [holoEffect])
+
+  // ── Variant image cross-fade ─────────────────────────────────────────────
   const [displayedVariantSrc, setDisplayedVariantSrc] = useState<string | null>(null)
   const [variantOpacity, setVariantOpacity]           = useState(0)
   const fadeOutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -109,36 +124,29 @@ function CardGlareImage({
     if (fadeOutTimerRef.current) clearTimeout(fadeOutTimerRef.current)
 
     if (variantSrc) {
-      // Preload so the browser has the image ready before the opacity tick.
       const img = new window.Image()
       img.src = variantSrc
       const reveal = () => {
         setDisplayedVariantSrc(variantSrc)
-        // One rAF so the img is in the DOM before we flip opacity → CSS transition fires.
         requestAnimationFrame(() => setVariantOpacity(1))
       }
-      if (img.complete) {
-        reveal()
-      } else {
-        img.onload = reveal
-        img.onerror = reveal // show even if load fails (onError on the <img> will swap to backside)
-      }
+      if (img.complete) reveal()
+      else { img.onload = reveal; img.onerror = reveal }
     } else {
-      // Fade out: drop opacity then clear the src so the element is removed.
       setVariantOpacity(0)
       fadeOutTimerRef.current = setTimeout(() => setDisplayedVariantSrc(null), 320)
     }
   }, [variantSrc])
 
-  // Cancel any pending RAF / timers when unmounted.
+  // Cancel pending RAF / timers on unmount
   useEffect(() => () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
     if (fadeOutTimerRef.current) clearTimeout(fadeOutTimerRef.current)
   }, [])
 
+  // ── RAF mouse-move handler ───────────────────────────────────────────────
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!cardRef.current || !glareRef.current) return
-    // Capture before RAF (synthetic events are pooled)
     const clientX = e.clientX
     const clientY = e.clientY
     const rect    = e.currentTarget.getBoundingClientRect()
@@ -149,31 +157,84 @@ function CardGlareImage({
       const x = (clientX - rect.left) / rect.width   // 0 → 1
       const y = (clientY - rect.top)  / rect.height  // 0 → 1
 
-      const rotateY =  (x - 0.5) * 20   // −10 … +10 deg
-      const rotateX = -(y - 0.5) * 15   // +7.5 … −7.5 deg
+      const rotateY =  (x - 0.5) * 20
+      const rotateX = -(y - 0.5) * 15
 
-      // No transition while tracking — card follows cursor at native frame rate
+      // 3D tilt
       cardRef.current.style.transition = 'none'
       cardRef.current.style.transform  =
         `perspective(800px) rotateX(${rotateX}deg) rotateY(${rotateY}deg)`
 
+      // White glare spot
       glareRef.current.style.opacity    = '1'
       glareRef.current.style.background =
         `radial-gradient(circle at ${x * 100}% ${y * 100}%, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.08) 35%, rgba(255,255,255,0) 65%)`
+
+      // ── Holographic rainbow layer ──────────────────────────────────────
+      if (holoRef.current && holoEffectRef.current) {
+        // Hue sweeps across the spectrum as the mouse moves left → right.
+        // Gradient angle rotates slightly with both x and y for a live foil feel.
+        const hue   = (x * 300 + 30) % 360
+        const angle = 90 + x * 180 + y * 30
+        const h = (offset: number) => `hsla(${(hue + offset) % 360},100%,65%,0.55)`
+        holoRef.current.style.opacity         = '1'
+        holoRef.current.style.backgroundImage =
+          `linear-gradient(${angle}deg,${h(0)} 0%,${h(60)} 20%,${h(120)} 40%,${h(180)} 60%,${h(240)} 80%,${h(300)} 100%)`
+      } else if (holoRef.current) {
+        holoRef.current.style.opacity = '0'
+      }
     })
   }
 
   const handleMouseLeave = () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
     if (!cardRef.current || !glareRef.current) return
-    // Spring back to flat with premium easing
     cardRef.current.style.transition = 'transform 600ms cubic-bezier(0.16,1,0.3,1)'
     cardRef.current.style.transform  = 'perspective(800px) rotateX(0deg) rotateY(0deg)'
     glareRef.current.style.opacity   = '0'
+    if (holoRef.current) holoRef.current.style.opacity = '0'
+  }
+
+  // ── Static mask / clip styles for each holo effect ──────────────────────
+  //
+  // Pokémon card anatomy (389 × 543 px, ~10 % border):
+  //   Border band  ≈ 9 % left/right, 12 % top, 8 % bottom
+  //   Inner frame  ≈ inset(12% 9% 8% 9%)   ← artwork + text boxes
+  //
+  // reverse-holo: rainbow covers the BORDER — inner frame is masked out via
+  //   CSS mask-composite (two solid-black layers; inner one subtracted).
+  //
+  // holo: rainbow covers only the INNER FRAME via clip-path inset().
+
+  const reverseHoloMaskStyle: React.CSSProperties = {
+    // Two mask layers: full card (100%×100%) minus inner frame (82%×80% centred)
+    WebkitMaskImage:     'linear-gradient(#000,#000), linear-gradient(#000,#000)',
+    maskImage:           'linear-gradient(#000,#000), linear-gradient(#000,#000)',
+    WebkitMaskSize:      '100% 100%, 82% 80%',
+    maskSize:            '100% 100%, 82% 80%',
+    WebkitMaskPosition:  '0 0, 9% 12%',
+    maskPosition:        '0 0, 9% 12%',
+    WebkitMaskRepeat:    'no-repeat',
+    maskRepeat:          'no-repeat',
+    // Subtract the inner layer from the outer → only the border strip remains
+    WebkitMaskComposite: 'destination-out',
+    maskComposite:       'subtract',
+  }
+
+  const holoMaskStyle: React.CSSProperties = {
+    clipPath: 'inset(12% 9% 8% 9% round 4px)',
+  }
+
+  const holoLayerStyle: React.CSSProperties = {
+    mixBlendMode: 'color-dodge',
+    opacity: 0,
+    transition: 'opacity 250ms ease',
+    backgroundSize: '200% 200%',
+    ...(holoEffect === 'reverse-holo' ? reverseHoloMaskStyle : {}),
+    ...(holoEffect === 'holo'         ? holoMaskStyle        : {}),
   }
 
   return (
-    // Padding gives rotated corners room to breathe without clipping into the right panel
     <div
       style={{ padding: 20, flexShrink: 0 }}
       onMouseMove={handleMouseMove}
@@ -183,42 +244,40 @@ function CardGlareImage({
         ref={cardRef}
         className="w-[389px] h-[543px] bg-elevated rounded-xl overflow-hidden relative cursor-crosshair"
         style={{ willChange: 'transform' }}
-        // NOTE: no transformStyle:'preserve-3d' — we only tilt the card surface itself,
-        //       not its children, so the tilt stays visually contained.
       >
-        {/* Base image — always present underneath */}
+        {/* Base image */}
         <img
           src={src || '/pokemon_card_backside.png'}
           alt={alt ?? 'Pokemon card'}
           className="absolute inset-0 w-full h-full object-cover"
           onError={(e) => {
             const t = e.currentTarget
-            if (!t.src.endsWith('/pokemon_card_backside.png')) {
-              t.src = '/pokemon_card_backside.png'
-            }
+            if (!t.src.endsWith('/pokemon_card_backside.png')) t.src = '/pokemon_card_backside.png'
           }}
         />
 
-        {/* Variant image — cross-fades over base when a hover image is available */}
+        {/* Variant image — cross-fades for card-specific uploaded images */}
         {displayedVariantSrc && (
           <img
             src={displayedVariantSrc}
             alt={alt ?? 'Pokemon card variant'}
             className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-            style={{
-              opacity: variantOpacity,
-              transition: 'opacity 300ms ease-in-out',
-            }}
+            style={{ opacity: variantOpacity, transition: 'opacity 300ms ease-in-out' }}
             onError={(e) => {
               const t = e.currentTarget
-              if (!t.src.endsWith('/pokemon_card_backside.png')) {
-                t.src = '/pokemon_card_backside.png'
-              }
+              if (!t.src.endsWith('/pokemon_card_backside.png')) t.src = '/pokemon_card_backside.png'
             }}
           />
         )}
 
-        {/* Holographic glare overlay — sits above both images */}
+        {/* Holographic rainbow layer — shown for Reverse Holo / Holo variants */}
+        <div
+          ref={holoRef}
+          className="absolute inset-0 pointer-events-none transform-gpu"
+          style={{ zIndex: 8, ...holoLayerStyle }}
+        />
+
+        {/* White glare spot — sits above everything */}
         <div
           ref={glareRef}
           className="absolute inset-0 pointer-events-none z-10 transform-gpu"
@@ -1018,6 +1077,21 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       ? hoveredVariant.variant_image_url
       : null
 
+  // CSS holographic effect for global variants — no uploaded image required.
+  // Reverse Holo → shimmer on the card border/background, NOT the inner artwork frame.
+  // Holo         → shimmer only inside the inner artwork frame.
+  // Only applied when no uploaded variant image is already handling the visual swap.
+  const getHoloEffect = (name: string): 'reverse-holo' | 'holo' | null => {
+    const n = name.toLowerCase()
+    if (n.includes('reverse')) return 'reverse-holo'
+    if (n.includes('holo') || n.includes('holofoil')) return 'holo'
+    return null
+  }
+  const holoEffect: 'reverse-holo' | 'holo' | null =
+    hoveredVariant && !variantImageSrc
+      ? getHoloEffect(hoveredVariant.name)
+      : null
+
   return (
     <>
       <div className="flex flex-wrap gap-4">
@@ -1196,6 +1270,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
               <CardGlareImage
                 src={selectedCard.image_url}
                 variantSrc={variantImageSrc}
+                holoEffect={holoEffect}
                 alt={selectedCard.name ?? undefined}
               />
               {/* Artist credit — displayed below card image */}
