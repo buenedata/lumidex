@@ -17,7 +17,7 @@ import { updatePricesBatch } from '@/services/pricing/pricingOrchestrator'
  *       - Current series + previous series → 24-hour update interval
  *       - All older series → 48-hour update interval
  *  3. Processes them in order within a 270-second time budget.
- *     eBay graded prices (PSA / CGC / ACE) are always included.
+ *     eBay graded prices (PSA 9/10 and CGC 9/10) are always included.
  *  4. After each set completes, sets.prices_last_synced_at is updated
  *     so that set is skipped by subsequent runs until its interval elapses.
  *

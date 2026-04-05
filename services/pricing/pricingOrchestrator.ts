@@ -128,7 +128,7 @@ async function processSingleSet(
 
   let query = supabase
     .from('cards')
-    .select('id, name, set_id, number, api_id')
+    .select('id, name, set_id, number, api_id, rarity')
     .eq('set_id', setId)
 
   if (limit !== undefined) {
@@ -429,7 +429,7 @@ export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Pro
 
   let query = supabase
     .from('cards')
-    .select('id, name, set_id, number, api_id')
+    .select('id, name, set_id, number, api_id, rarity')
 
   if (limit !== undefined) {
     query = query.limit(limit)

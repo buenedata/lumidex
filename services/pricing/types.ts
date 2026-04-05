@@ -31,6 +31,9 @@ export interface CardSearchData {
   set_id: string;
   number: string;
   api_id?: string | null;
+  /** Rarity string from the DB (e.g. 'Common', 'Uncommon', 'Rare Holo'). Used to skip
+   *  eBay graded searches for low-value cards that are never graded in practice. */
+  rarity?: string | null;
 }
 
 // Result from pokemonApiService

@@ -28,6 +28,13 @@ export const MIN_ITEMS_PER_GRADE = 1;   // 1 allows low-volume sets to register 
 const GRADES_OF_INTEREST = new Set([9, 10]);
 
 /**
+ * Cards with these rarities are almost never graded — skipping the eBay search
+ * for them saves ~(n_commons + n_uncommons) × ~800ms per set sync.
+ * Typically 50–70% of cards in a set are Common or Uncommon.
+ */
+const LOW_RARITY_SKIP = new Set(['common', 'uncommon']);
+
+/**
  * Maximum eBay sold listings to consider per (company, grade) combination.
  * 3 data points is enough to produce a reliable average for display purposes.
  * Keeping this low prevents high-volume cards from accumulating more data than needed.
@@ -292,6 +299,13 @@ export async function probeEbayGradedSearch(
  * should skip the card gracefully in that case.
  */
 export async function fetchEbayGradedPrices(card: CardSearchData): Promise<EbayGradedResult[]> {
+  // Skip Common and Uncommon cards — graded versions have negligible market value
+  // and eBay almost never has sold listings for them at PSA/CGC 9 or 10.
+  // This can skip 50–70% of cards in a typical set, saving significant sync time.
+  if (card.rarity && LOW_RARITY_SKIP.has(card.rarity.toLowerCase())) {
+    return [];
+  }
+
   const baseKeywords = buildEbaySearchString(card);
   // Single broad query — catches PSA and CGC in one round-trip
   // We request only 20 items: 2 companies × 2 grades × 3 max + buffer

@@ -95,7 +95,7 @@ export async function syncSingleCard(cardId: string): Promise<SyncSingleCardResu
   const supabase = await createSupabaseServerClient()
   const { data: card, error: dbError } = await supabase
     .from('cards')
-    .select('id, name, number, set_id, api_id, language')
+    .select('id, name, number, set_id, api_id, language, rarity')
     .eq('id', cardId)
     .single()
 
