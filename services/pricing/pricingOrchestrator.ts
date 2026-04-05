@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
+import { supabaseAdmin } from '@/lib/supabase'
 import { fetchPokemonApiPrices } from './pokemonApiService'
 import { fetchEbayRawPrices } from './ebayService'
 import { fetchEbayGradedPrices } from './ebayGradedService'
@@ -372,7 +373,8 @@ export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Pro
 
       // Mark this set as synced
       const now = new Date().toISOString()
-      const { error: updateErr } = await supabase
+      // Use supabaseAdmin (service role) for the sets write — anon key is blocked by RLS
+      const { error: updateErr } = await supabaseAdmin
         .from('sets')
         .update({ prices_last_synced_at: now })
         .eq('set_id', setId)

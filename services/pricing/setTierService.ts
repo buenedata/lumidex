@@ -16,7 +16,9 @@
  *   4. Older sets  — most overdue first
  */
 
-import { createSupabaseServerClient } from '@/lib/supabaseServer'
+// Use supabaseAdmin (service role) for all reads so that RLS never blocks
+// reading prices_last_synced_at or writing it back.
+import { supabaseAdmin } from '@/lib/supabase'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -64,9 +66,7 @@ function isDue(tier: SetTier, lastSynced: string | null): boolean {
  * exhausted — remaining sets will be picked up in the next cron run.
  */
 export async function getSetsForPricing(): Promise<SetForPricing[]> {
-  const supabase = await createSupabaseServerClient()
-
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('sets')
     .select('set_id, series, release_date, prices_last_synced_at')
     .order('release_date', { ascending: false })
@@ -154,9 +154,7 @@ export async function getSetsForPricing(): Promise<SetForPricing[]> {
  * in one pass, regardless of whether they were recently synced.
  */
 export async function getAllSetsForBulkSeed(): Promise<SetForPricing[]> {
-  const supabase = await createSupabaseServerClient()
-
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('sets')
     .select('set_id, series, release_date, prices_last_synced_at')
     .order('release_date', { ascending: false })
@@ -220,9 +218,7 @@ export async function getAllSetsForBulkSeed(): Promise<SetForPricing[]> {
  * Useful for display in admin UI or logging.
  */
 export async function getRecentSeriesNames(): Promise<string[]> {
-  const supabase = await createSupabaseServerClient()
-
-  const { data, error } = await supabase
+  const { data, error } = await supabaseAdmin
     .from('sets')
     .select('series, release_date')
 
