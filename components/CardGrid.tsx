@@ -86,13 +86,55 @@ interface CardGridProps {
 }
 
 // ── Standalone component — zero React state, RAF-gated DOM writes for buttery 3D tilt ──
-function CardGlareImage({ src, alt }: { src: string | null | undefined; alt?: string }) {
+// variantSrc: when truthy, cross-fades over the base image (used for hover variant images).
+function CardGlareImage({
+  src,
+  variantSrc,
+  alt,
+}: {
+  src: string | null | undefined
+  variantSrc?: string | null
+  alt?: string
+}) {
   const cardRef  = useRef<HTMLDivElement>(null)
   const glareRef = useRef<HTMLDivElement>(null)
   const rafRef   = useRef<number | null>(null)
 
-  // Cancel any pending RAF when unmounted
-  useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }, [])
+  // Track the image URL currently rendered in the variant layer so we can fade out smoothly.
+  const [displayedVariantSrc, setDisplayedVariantSrc] = useState<string | null>(null)
+  const [variantOpacity, setVariantOpacity]           = useState(0)
+  const fadeOutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    if (fadeOutTimerRef.current) clearTimeout(fadeOutTimerRef.current)
+
+    if (variantSrc) {
+      // Preload so the browser has the image ready before the opacity tick.
+      const img = new window.Image()
+      img.src = variantSrc
+      const reveal = () => {
+        setDisplayedVariantSrc(variantSrc)
+        // One rAF so the img is in the DOM before we flip opacity → CSS transition fires.
+        requestAnimationFrame(() => setVariantOpacity(1))
+      }
+      if (img.complete) {
+        reveal()
+      } else {
+        img.onload = reveal
+        img.onerror = reveal // show even if load fails (onError on the <img> will swap to backside)
+      }
+    } else {
+      // Fade out: drop opacity then clear the src so the element is removed.
+      setVariantOpacity(0)
+      fadeOutTimerRef.current = setTimeout(() => setDisplayedVariantSrc(null), 320)
+    }
+  }, [variantSrc])
+
+  // Cancel any pending RAF / timers when unmounted.
+  useEffect(() => () => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    if (fadeOutTimerRef.current) clearTimeout(fadeOutTimerRef.current)
+  }, [])
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!cardRef.current || !glareRef.current) return
@@ -144,6 +186,7 @@ function CardGlareImage({ src, alt }: { src: string | null | undefined; alt?: st
         // NOTE: no transformStyle:'preserve-3d' — we only tilt the card surface itself,
         //       not its children, so the tilt stays visually contained.
       >
+        {/* Base image — always present underneath */}
         <img
           src={src || '/pokemon_card_backside.png'}
           alt={alt ?? 'Pokemon card'}
@@ -155,7 +198,27 @@ function CardGlareImage({ src, alt }: { src: string | null | undefined; alt?: st
             }
           }}
         />
-        {/* Holographic glare overlay */}
+
+        {/* Variant image — cross-fades over base when a hover image is available */}
+        {displayedVariantSrc && (
+          <img
+            src={displayedVariantSrc}
+            alt={alt ?? 'Pokemon card variant'}
+            className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+            style={{
+              opacity: variantOpacity,
+              transition: 'opacity 300ms ease-in-out',
+            }}
+            onError={(e) => {
+              const t = e.currentTarget
+              if (!t.src.endsWith('/pokemon_card_backside.png')) {
+                t.src = '/pokemon_card_backside.png'
+              }
+            }}
+          />
+        )}
+
+        {/* Holographic glare overlay — sits above both images */}
         <div
           ref={glareRef}
           className="absolute inset-0 pointer-events-none z-10 transform-gpu"
@@ -249,6 +312,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const [isLoadingFriends, setIsLoadingFriends]         = useState(false)
   // Per-variant input text while the user is typing a quantity directly
   const [variantInputValues, setVariantInputValues]     = useState<Map<string, string>>(new Map())
+  // Which variant row the user is currently hovering in the modal (drives image swap)
+  const [hoveredVariantId, setHoveredVariantId]         = useState<string | null>(null)
   // Admin: floating popup edit state for variant editing
   const [editingVariantId, setEditingVariantId]   = useState<string | null>(null)
   const [editForm,         setEditForm]            = useState({ name: '', description: '', color: 'gray', sortOrder: 0 })
@@ -512,6 +577,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
               sort_order: v.sort_order,
               card_id: v.card_id ?? null,
               is_quick_add: v.is_quick_add ?? false,
+              variant_image_url: v.variant_image_url ?? null,
             }))
           newQuickVariants.set(cardId, quickVariants)
 
@@ -934,6 +1000,24 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     orange: 'bg-orange-500', teal: 'bg-teal-500',
   } as const
 
+  // Derive the variant image src for the modal card image hover swap.
+  // Must be computed here (outside JSX) so the value is a stable ReactNode-safe string.
+  // Falls back to null when:
+  //   – no variant is hovered, or
+  //   – the hovered variant has no stored image, or
+  //   – the hovered variant IS the quick-add default (card already shows that image).
+  const defaultVariantId =
+    selectedCard?.default_variant_id ??
+    filteredVariants.find(v => v.is_quick_add)?.id ??
+    null
+  const hoveredVariant = hoveredVariantId
+    ? filteredVariants.find(v => v.id === hoveredVariantId) ?? null
+    : null
+  const variantImageSrc: string | null =
+    hoveredVariant?.variant_image_url && hoveredVariant.id !== defaultVariantId
+      ? hoveredVariant.variant_image_url
+      : null
+
   return (
     <>
       <div className="flex flex-wrap gap-4">
@@ -1102,7 +1186,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       
       <Modal
         isOpen={!!selectedCard}
-        onClose={() => setSelectedCard(null)}
+        onClose={() => { setSelectedCard(null); setHoveredVariantId(null) }}
         maxWidth="5xl"
       >
         {selectedCard && (
@@ -1111,6 +1195,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
             <div className="flex-shrink-0 flex flex-col">
               <CardGlareImage
                 src={selectedCard.image_url}
+                variantSrc={variantImageSrc}
                 alt={selectedCard.name ?? undefined}
               />
               {/* Artist credit — displayed below card image */}
@@ -1435,7 +1520,12 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
                   <div className="space-y-2">
                     {filteredVariants.map(variant => (
-                      <div key={variant.id} className="relative bg-elevated rounded-lg p-3 hover:bg-card-item transition-colors border border-subtle">
+                        <div
+                          key={variant.id}
+                          className="relative bg-elevated rounded-lg p-3 hover:bg-card-item transition-colors border border-subtle"
+                          onMouseEnter={() => setHoveredVariantId(variant.id)}
+                          onMouseLeave={() => setHoveredVariantId(null)}
+                        >
                         <div className="flex items-center gap-2">
                           {/* Admin: pencil edit button */}
                           {isAdmin && (

@@ -160,6 +160,8 @@ export interface Variant {
   created_at: string;
   // Card-specific variant: null/undefined means global variant
   card_id?: string | null;
+  /** Per-card variant image URL (from card_variant_images table). Populated by /api/variants. */
+  variant_image_url?: string | null;
 }
 
 export interface UserCardVariant {
@@ -201,6 +203,8 @@ export interface QuickAddVariant {
   card_id?: string | null;
   /** When true, double-clicking the card image adds this variant. Only one variant per card should have this set. */
   is_quick_add?: boolean;
+  /** Per-card variant image URL (from card_variant_images table). Used for the hover image swap in the modal. */
+  variant_image_url?: string | null;
 }
 
 // Color mapping for UI

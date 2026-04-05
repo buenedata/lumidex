@@ -253,6 +253,21 @@ export async function GET(request: NextRequest) {
       const filteredIds = new Set(filteredVariants.map((v: Variant) => v.id))
       const uniqueSpecific = cardSpecificVariants.filter((v: Variant) => !filteredIds.has(v.id))
       filteredVariants = [...filteredVariants, ...uniqueSpecific]
+
+      // Attach variant_image_url from card_variant_images for the hover swap feature.
+      const { data: cviRows } = await supabaseAdmin
+        .from('card_variant_images')
+        .select('variant_id, image_url')
+        .eq('card_id', cardId)
+
+      const singleVariantImageMap = new Map<string, string>(
+        (cviRows ?? []).map((r: { variant_id: string; image_url: string }) => [r.variant_id, r.image_url])
+      )
+
+      filteredVariants = filteredVariants.map((v: Variant) => ({
+        ...v,
+        variant_image_url: singleVariantImageMap.get(v.id) ?? null,
+      }))
     }
 
     if (userId) {
@@ -413,6 +428,19 @@ export async function POST(request: NextRequest) {
         })
       }
 
+      // 4b. Fetch variant-specific images for all requested cards (hover swap feature)
+      const { data: batchCviRows } = await supabaseAdmin
+        .from('card_variant_images')
+        .select('card_id, variant_id, image_url')
+        .in('card_id', cardIdList)
+
+      // Build nested map: cardId → variantId → image_url
+      const batchVariantImageMap: Record<string, Record<string, string>> = {}
+      batchCviRows?.forEach((r: { card_id: string; variant_id: string; image_url: string }) => {
+        if (!batchVariantImageMap[r.card_id]) batchVariantImageMap[r.card_id] = {}
+        batchVariantImageMap[r.card_id][r.variant_id] = r.image_url
+      })
+
       const variantsForCard = (cId: string): Variant[] => {
         const overrideIds = overrideMap[cId]
         const specific    = cardSpecificMap[cId] ?? []
@@ -468,7 +496,11 @@ export async function POST(request: NextRequest) {
         const grouped: Record<string, VariantWithQuantity[]> = {}
         cardIdList.forEach(cId => {
           const q = quantityMap[cId] || {}
-          grouped[cId] = variantsForCard(cId).map((v: Variant) => ({ ...v, quantity: q[v.id] || 0 }))
+          grouped[cId] = variantsForCard(cId).map((v: Variant) => ({
+            ...v,
+            quantity: q[v.id] || 0,
+            variant_image_url: batchVariantImageMap[cId]?.[v.id] ?? null,
+          }))
         })
 
         const r = NextResponse.json(grouped)
@@ -478,7 +510,11 @@ export async function POST(request: NextRequest) {
 
       const grouped: Record<string, VariantWithQuantity[]> = {}
       cardIdList.forEach(cId => {
-        grouped[cId] = variantsForCard(cId).map((v: Variant) => ({ ...v, quantity: 0 }))
+        grouped[cId] = variantsForCard(cId).map((v: Variant) => ({
+          ...v,
+          quantity: 0,
+          variant_image_url: batchVariantImageMap[cId]?.[v.id] ?? null,
+        }))
       })
       const r = NextResponse.json(grouped)
       r.headers.set('Cache-Control', 'no-store')

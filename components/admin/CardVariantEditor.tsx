@@ -82,6 +82,10 @@ export function CardVariantEditor({
   // global variant promotion state
   const [promotingGlobalId, setPromotingGlobalId] = useState<string | null>(null)
 
+  // Variant image state — maps variantId → image URL (or null when none stored)
+  const [variantImages, setVariantImages]       = useState<Record<string, string | null>>({})
+  const [uploadingImageId, setUploadingImageId] = useState<string | null>(null)
+
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const showMessage = (type: 'success' | 'error', text: string) => {
@@ -125,6 +129,23 @@ export function CardVariantEditor({
   useEffect(() => {
     loadOverrides()
   }, [loadOverrides])
+
+  // Load existing variant images for this card so thumbnails render on mount.
+  // Uses the variants API which now joins card_variant_images.
+  const loadVariantImages = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/variants?cardId=${selectedCard.id}`)
+      if (!res.ok) return
+      const variants: Array<{ id: string; variant_image_url?: string | null }> = await res.json()
+      const imageMap: Record<string, string | null> = {}
+      variants.forEach(v => { imageMap[v.id] = v.variant_image_url ?? null })
+      setVariantImages(imageMap)
+    } catch { /* non-critical */ }
+  }, [selectedCard.id])
+
+  useEffect(() => {
+    loadVariantImages()
+  }, [loadVariantImages])
 
   const toggleVariant = (variantId: string) => {
     setSelectedIds((prev) => {
@@ -289,6 +310,48 @@ export function CardVariantEditor({
       showMessage('error', err.message || 'Failed to promote variant')
     } finally {
       setPromotingGlobalId(null)
+    }
+  }
+
+  /** Upload a variant-specific hover image and store it in card_variant_images. */
+  const handleUploadVariantImage = async (variantId: string, file: File) => {
+    setUploadingImageId(variantId)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('cardId', selectedCard.id)
+      fd.append('variantId', variantId)
+      const res = await fetch('/api/upload-variant-image', { method: 'POST', body: fd })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Upload failed')
+      }
+      const { imageUrl } = await res.json()
+      setVariantImages(prev => ({ ...prev, [variantId]: imageUrl }))
+      showMessage('success', 'Variant image uploaded! Hover effect active.')
+    } catch (err: any) {
+      showMessage('error', err.message || 'Upload failed')
+    } finally {
+      setUploadingImageId(null)
+    }
+  }
+
+  /** Remove a variant-specific hover image (deletes the card_variant_images row). */
+  const handleRemoveVariantImage = async (variantId: string) => {
+    if (!confirm('Remove variant image? Hovering this variant will no longer swap the card image.')) return
+    try {
+      const res = await fetch(
+        `/api/upload-variant-image?cardId=${selectedCard.id}&variantId=${variantId}`,
+        { method: 'DELETE' },
+      )
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'Remove failed')
+      }
+      setVariantImages(prev => ({ ...prev, [variantId]: null }))
+      showMessage('success', 'Variant image removed.')
+    } catch (err: any) {
+      showMessage('error', err.message || 'Remove failed')
     }
   }
 
@@ -616,6 +679,58 @@ export function CardVariantEditor({
                           </div>
                         </div>
                       )}
+
+                      {/* ── Variant hover image ──────────────────────────── */}
+                      <div className="border-t border-gray-700/60 px-3 py-2 bg-gray-800/20 flex items-center gap-3">
+                        {variantImages[variant.id] ? (
+                          <img
+                            src={variantImages[variant.id]!}
+                            alt={`${variant.name} hover image`}
+                            className="w-8 h-[44px] object-cover rounded border border-gray-600 flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="w-8 h-[44px] rounded border border-dashed border-gray-600 bg-gray-700/40 flex items-center justify-center flex-shrink-0 text-gray-600 text-[10px]">
+                            🖼
+                          </div>
+                        )}
+                        <div className="flex flex-col gap-1 min-w-0">
+                          <span className="text-[10px] text-gray-500 leading-tight">
+                            Shown in modal when hovering this variant
+                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <label
+                              htmlFor={`cs-img-${variant.id}`}
+                              className={`cursor-pointer text-xs px-2 py-0.5 rounded border transition-colors ${
+                                uploadingImageId === variant.id
+                                  ? 'text-gray-500 border-gray-700 opacity-60 cursor-not-allowed'
+                                  : 'text-purple-400 border-purple-700/60 hover:text-purple-300 hover:border-purple-500 bg-purple-900/10 hover:bg-purple-900/20'
+                              }`}
+                            >
+                              {uploadingImageId === variant.id ? '⏳ Uploading…' : '📷 Upload image'}
+                            </label>
+                            <input
+                              id={`cs-img-${variant.id}`}
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              disabled={uploadingImageId === variant.id}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) handleUploadVariantImage(variant.id, file)
+                                e.target.value = ''
+                              }}
+                            />
+                            {variantImages[variant.id] && (
+                              <button
+                                onClick={() => handleRemoveVariantImage(variant.id)}
+                                className="text-xs text-red-400 hover:text-red-300 transition-colors"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   )
                 })}
@@ -839,8 +954,38 @@ export function CardVariantEditor({
                         </div>
                       </label>
 
-                      {/* Right: customize + quick-add badge + default radio */}
+                      {/* Right: image upload + customize + quick-add badge + default radio */}
                       <div className="flex items-center gap-3 ml-3 flex-shrink-0">
+                        {/* Hover image upload (mini) */}
+                        {checked && (
+                          <>
+                            <label
+                              htmlFor={`gl-img-${variant.id}`}
+                              className={`cursor-pointer text-xs px-1.5 py-0.5 rounded border transition-colors ${
+                                uploadingImageId === variant.id
+                                  ? 'text-gray-500 border-gray-700 opacity-60 cursor-not-allowed'
+                                  : variantImages[variant.id]
+                                    ? 'text-green-400 border-green-700/60 hover:text-green-300 hover:border-green-500'
+                                    : 'text-gray-500 border-gray-700 hover:text-purple-300 hover:border-purple-500'
+                              }`}
+                              title={variantImages[variant.id] ? 'Replace hover image' : 'Upload hover image for modal swap'}
+                            >
+                              {uploadingImageId === variant.id ? '⏳' : (variantImages[variant.id] ? '🖼✓' : '📷')}
+                            </label>
+                            <input
+                              id={`gl-img-${variant.id}`}
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              disabled={uploadingImageId === variant.id}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0]
+                                if (file) handleUploadVariantImage(variant.id, file)
+                                e.target.value = ''
+                              }}
+                            />
+                          </>
+                        )}
                         {/* Customize short label for this card only (enabled variants only) */}
                         {checked && (
                           <button
