@@ -330,6 +330,46 @@ export async function deleteVariant(variantId: string) {
 }
 
 /**
+ * Remove a GLOBAL variant from a single card's availability list,
+ * WITHOUT deleting the variant itself from the catalog.
+ *
+ * This is the safe alternative to deleteVariant() when operating from the
+ * card modal — it only removes the card_variant_availability link so the
+ * global variant is no longer offered for that card.  All other cards that
+ * use the same global variant are unaffected.
+ *
+ * For CARD-SPECIFIC variants (variants.card_id IS NOT NULL), call
+ * deleteVariant() instead — there's no shared catalog entry to protect.
+ */
+export async function removeVariantFromCard(variantId: string, cardId: string) {
+  try {
+    await requireAdmin()
+
+    if (!variantId || !cardId) {
+      return { success: false, error: 'variantId and cardId are required' }
+    }
+
+    const supabase = getAdminSupabaseClient()
+
+    const { error } = await supabase
+      .from('card_variant_availability')
+      .delete()
+      .eq('variant_id', variantId)
+      .eq('card_id', cardId)
+
+    if (error) {
+      throw new Error(`Failed to remove variant from card: ${error.message}`)
+    }
+
+    revalidatePath('/admin/variants')
+    return { success: true, message: 'Variant removed from this card' }
+  } catch (error: any) {
+    console.error('removeVariantFromCard error:', error)
+    return { success: false, error: error.message || 'Failed to remove variant from card' }
+  }
+}
+
+/**
  * Approve a variant suggestion.
  *
  * Suggestions are always card-specific (they carry a card_id). Approving one

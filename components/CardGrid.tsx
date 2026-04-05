@@ -10,7 +10,7 @@ import Modal from '@/components/ui/Modal'
 import VariantSuggestionModal from '@/components/VariantSuggestionModal'
 import { formatPrice, EUR_TO_USD } from '@/lib/pricing'
 import type { PriceChartRange } from '@/components/PriceChart'
-import { updateVariant, deleteVariant } from '@/app/admin/variants/actions'
+import { updateVariant, deleteVariant, removeVariantFromCard } from '@/app/admin/variants/actions'
 
 // Recharts has SSR issues — load only on client
 const PriceChart = dynamic(() => import('@/components/PriceChart'), { ssr: false })
@@ -308,10 +308,23 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     setEditingVariantId(null)
   }
 
-  // Admin: delete variant and remove from local state
+  // Admin: remove variant from a card.
+  // - Global variants (card_id IS NULL): only remove the card_variant_availability
+  //   link for this card — never delete the global variant definition.
+  // - Card-specific variants (card_id = this card): delete the variant entirely.
   async function handleVariantDelete(variantId: string) {
+    if (!selectedCard) return
     setIsSavingEdit(true)
-    const result = await deleteVariant(variantId)
+
+    // Determine if global or card-specific by checking the cached variant list
+    const modalAllVariants = cardVariants.get(selectedCard.id) ?? []
+    const variantObj = modalAllVariants.find(v => v.id === variantId)
+    const isGlobal = !variantObj?.card_id
+
+    const result = isGlobal
+      ? await removeVariantFromCard(variantId, selectedCard.id)
+      : await deleteVariant(variantId)
+
     setIsSavingEdit(false)
     if (!result.success) {
       setVariantEditError(result.error ?? 'Failed to delete')
@@ -1619,14 +1632,14 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                                   disabled={isSavingEdit}
                                   className="py-1 px-2 rounded bg-red-600 text-white text-xs font-medium hover:bg-red-700 disabled:opacity-50"
                                 >
-                                  {isSavingEdit ? '…' : 'Yes, delete'}
+                                  {isSavingEdit ? '…' : variant.card_id ? 'Yes, delete' : 'Yes, remove'}
                                 </button>
                               ) : (
                                 <button
                                   onClick={() => setConfirmDeleteId(variant.id)}
                                   disabled={isSavingEdit}
                                   className="py-1 px-2 rounded bg-elevated border border-red-600/40 text-red-400 text-xs hover:bg-red-600/10 disabled:opacity-50"
-                                  title="Delete variant"
+                                  title={variant.card_id ? 'Delete this card-specific variant' : 'Remove from this card only'}
                                 >
                                   🗑
                                 </button>
