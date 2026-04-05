@@ -52,7 +52,8 @@ export function getAvailableVariants(card: PokemonCard, setTotal: number): strin
     variants = ["holo rare"]
   }
   // Holo cards get holo rare + reverse holo (NO normal)
-  else if (rarity.includes("holo")) {
+  // Note: "Non-Holo Rare" contains "holo" so we must exclude it explicitly
+  else if (rarity.includes("holo") && !rarity.includes("non-holo")) {
     variants.push("holo rare")
     variants.push("reverse holo")
   }

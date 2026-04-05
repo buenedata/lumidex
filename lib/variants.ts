@@ -130,7 +130,8 @@ export function getAvailableVariantIds(
   }
 
   // Holo rarity cards get holo + reverse (NO normal)
-  if (rarity.includes("holo")) {
+  // Note: "Non-Holo Rare" contains "holo" so we must exclude it explicitly
+  if (rarity.includes("holo") && !rarity.includes("non-holo")) {
     return [variantIdMap['reverse holo'], variantIdMap['holo']].filter(Boolean);
   }
 
@@ -164,7 +165,8 @@ export function getAvailableVariants(
   }
 
   // Holo rarity cards get holo + reverse (NO normal)
-  if (rarity.includes("holo")) {
+  // Note: "Non-Holo Rare" contains "holo" so we must exclude it explicitly
+  if (rarity.includes("holo") && !rarity.includes("non-holo")) {
     return ["reverse", "holo"];
   }
 
