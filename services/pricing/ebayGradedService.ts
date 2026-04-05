@@ -20,16 +20,31 @@ const BROWSE_BASE    = 'https://api.ebay.com/buy/browse/v1/item_summary/search';
 const MARKETPLACE_ID = 'EBAY_US';
 
 export const MIN_ITEMS_PER_GRADE = 1;   // 1 allows low-volume sets to register prices
-const MIN_GRADE  = 1;
-const MAX_GRADE  = 10;
+
+/**
+ * Only parse grades in this set. We focus on the two most-valuable tiers:
+ * PSA 10, PSA 9, CGC 10, CGC 9. All other grades are ignored to keep sync fast.
+ */
+const GRADES_OF_INTEREST = new Set([9, 10]);
+
+/**
+ * Maximum eBay sold listings to consider per (company, grade) combination.
+ * 3 data points is enough to produce a reliable average for display purposes.
+ * Keeping this low prevents high-volume cards from accumulating more data than needed.
+ */
+const MAX_ITEMS_PER_GRADE = 3;
+
 const MIN_PRICE  = 0.10;
 const MAX_PRICE  = 5000;
 
-// Per-company search suffix and grade-extraction regex
-const COMPANY_CONFIG: Record<GradingCompany, { suffix: string; regex: RegExp }> = {
-  PSA: { suffix: 'PSA graded',  regex: /PSA\s*(\d+)/i },
-  CGC: { suffix: 'CGC graded',  regex: /CGC\s*(\d+)/i },
-  ACE: { suffix: 'ACE Grade',   regex: /ACE\s*Grade\s*(\d+)/i },
+/**
+ * Companies we actively track. ACE is omitted — the volume of ACE listings
+ * on eBay is too low to produce reliable price signals for most cards.
+ * Only PSA and CGC are included.
+ */
+const COMPANY_CONFIG: Partial<Record<GradingCompany, { suffix: string; regex: RegExp }>> = {
+  PSA: { suffix: 'PSA graded', regex: /PSA\s*(\d+)/i },
+  CGC: { suffix: 'CGC graded', regex: /CGC\s*(\d+)/i },
 };
 
 // ── Browse API types ──────────────────────────────────────────────────────────
@@ -122,7 +137,8 @@ function parseGradeGroups(
     if (!gradeMatch) continue;
 
     const grade = parseInt(gradeMatch[1], 10);
-    if (isNaN(grade) || grade < MIN_GRADE || grade > MAX_GRADE) continue;
+    // Only process the grades we care about (9 and 10)
+    if (isNaN(grade) || !GRADES_OF_INTEREST.has(grade)) continue;
 
     const rawPrice = item.price?.value;
     if (!rawPrice) continue;
@@ -132,6 +148,10 @@ function parseGradeGroups(
 
     if (!groups.has(grade)) groups.set(grade, { prices: [], titles: [] });
     const group = groups.get(grade)!;
+
+    // Cap at MAX_ITEMS_PER_GRADE — stop collecting once we have enough data points
+    if (group.prices.length >= MAX_ITEMS_PER_GRADE) continue;
+
     group.prices.push(price);
     group.titles.push(title);
   }
@@ -211,7 +231,8 @@ export async function probeEbayGradedSearch(
 ): Promise<EbayGradedProbeResult> {
   const baseKeywords   = buildEbaySearchString(card);
   // Probe uses PSA as the representative company
-  const config         = COMPANY_CONFIG['PSA'];
+  // Non-null assertion is safe: PSA is always present in COMPANY_CONFIG
+  const config         = COMPANY_CONFIG['PSA']!;
   const searchKeywords = `${baseKeywords} ${config.suffix}`;
 
   let httpStatus   = 0;
@@ -242,7 +263,7 @@ export async function probeEbayGradedSearch(
     currency: item.price?.currency ?? null,
   }));
 
-  const gradeGroups = parseGradeGroups(items, config.regex);
+  const gradeGroups = parseGradeGroups(items, config!.regex);
 
   const parsedGrades: Record<number, { priceCount: number; avg: number | null }> = {};
   for (const [grade, group] of gradeGroups.entries()) {
@@ -261,22 +282,24 @@ export async function probeEbayGradedSearch(
 // ── Main export ───────────────────────────────────────────────────────────────
 
 /**
- * Fetch eBay last-sold graded prices for PSA, CGC and ACE — one Browse API
- * call per card. A single query `"${name} ${number} pokemon card graded"` is
- * broad enough to capture all three companies because eBay returns the 50 most
- * recent sold graded listings regardless of company. All three company regexes
- * are then applied to the shared result set.
+ * Fetch eBay last-sold graded prices for PSA and CGC — one Browse API call per card.
  *
- * This is 3× faster than running separate per-company searches.
+ * A single query `"${name} ${number} pokemon card graded"` captures both companies
+ * in one round-trip. Only grades 9 and 10 are extracted (GRADES_OF_INTEREST), and
+ * at most MAX_ITEMS_PER_GRADE (3) data points per (company, grade) combination.
+ *
+ * Returns an empty array immediately if eBay returns no listings — the caller
+ * should skip the card gracefully in that case.
  */
 export async function fetchEbayGradedPrices(card: CardSearchData): Promise<EbayGradedResult[]> {
   const baseKeywords = buildEbaySearchString(card);
-  // Single broad query — catches PSA, CGC, and ACE listings in one round-trip
-  const keywords     = `${baseKeywords} graded`;
+  // Single broad query — catches PSA and CGC in one round-trip
+  // We request only 20 items: 2 companies × 2 grades × 3 max + buffer
+  const keywords = `${baseKeywords} graded`;
 
   let items: BrowseItemSummary[];
   try {
-    const result = await searchBrowseCompletedItems(keywords);
+    const result = await searchBrowseCompletedItems(keywords, 20);
     items = result.items;
   } catch (err) {
     console.warn(
@@ -287,13 +310,14 @@ export async function fetchEbayGradedPrices(card: CardSearchData): Promise<EbayG
   }
 
   if (!items.length) {
-    console.warn(`[ebayGradedService] No graded results found for card "${card.id}"`);
+    // No results at all — skip this card without logging a warning (common for low-value commons)
     return [];
   }
 
-  // Run all three company regexes over the same item list
+  // Apply PSA and CGC regexes to the shared item list.
+  // Grades outside GRADES_OF_INTEREST (< 9) are ignored in parseGradeGroups.
   const allResults: EbayGradedResult[] = [];
-  const companyEntries = Object.entries(COMPANY_CONFIG) as [GradingCompany, typeof COMPANY_CONFIG[GradingCompany]][];
+  const companyEntries = Object.entries(COMPANY_CONFIG) as [GradingCompany, NonNullable<typeof COMPANY_CONFIG[GradingCompany]>][];
 
   for (const [company, config] of companyEntries) {
     const gradeGroups = parseGradeGroups(items, config.regex);
@@ -301,7 +325,7 @@ export async function fetchEbayGradedPrices(card: CardSearchData): Promise<EbayG
 
     const results = gradeGroupsToResults(card.id, company, gradeGroups);
     if (results.length > 0) {
-      console.log(`[ebayGradedService] ${company}: ${results.length} grade(s) for card "${card.id}"`);
+      console.log(`[ebayGradedService] ${company}: ${results.length} grade(s) found for card "${card.id}"`);
       allResults.push(...results);
     }
   }
