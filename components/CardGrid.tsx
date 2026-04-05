@@ -98,11 +98,14 @@ function CardGlareImage({
   src,
   variantSrc,
   holoEffect,
+  isFullArt,
   alt,
 }: {
   src: string | null | undefined
   variantSrc?: string | null
   holoEffect?: 'reverse-holo' | 'holo' | null
+  /** True for full-art / special-illustration prints — shimmer covers full card face */
+  isFullArt?: boolean
   alt?: string
 }) {
   const cardRef  = useRef<HTMLDivElement>(null)
@@ -145,12 +148,11 @@ function CardGlareImage({
   useEffect(() => {
     if (!holoRef.current) return
     if (holoEffect) {
-      // Visible centred rainbow — live-updated if the mouse enters the card.
-      // Use 0.75 alpha so it's clearly visible with mix-blend-mode: screen.
-      const h = (off: number) => `hsla(${off % 360},100%,60%,0.75)`
+      // Resting centred rainbow at reduced opacity — raised to full on mouse-move.
+      const h = (off: number) => `hsla(${off % 360},80%,65%,0.40)`
       holoRef.current.style.backgroundImage =
         `linear-gradient(135deg,${h(0)} 0%,${h(60)} 17%,${h(120)} 34%,${h(180)} 51%,${h(240)} 68%,${h(300)} 85%,${h(360)} 100%)`
-      holoRef.current.style.opacity = '1'
+      holoRef.current.style.opacity = '0.25'
     } else {
       holoRef.current.style.opacity = '0'
     }
@@ -193,7 +195,7 @@ function CardGlareImage({
         // Hue sweeps left→right; gradient angle rotates with both axes.
         const hue   = (x * 300 + 30) % 360
         const angle = 90 + x * 180 + y * 30
-        const h = (off: number) => `hsla(${(hue + off) % 360},100%,60%,0.75)`
+        const h = (off: number) => `hsla(${(hue + off) % 360},80%,65%,0.40)`
         holoRef.current.style.opacity         = '1'
         holoRef.current.style.backgroundImage =
           `linear-gradient(${angle}deg,${h(0)} 0%,${h(60)} 17%,${h(120)} 34%,${h(180)} 51%,${h(240)} 68%,${h(300)} 85%,${h(360)} 100%)`
@@ -209,38 +211,50 @@ function CardGlareImage({
     cardRef.current.style.transition = 'transform 600ms cubic-bezier(0.16,1,0.3,1)'
     cardRef.current.style.transform  = 'perspective(800px) rotateX(0deg) rotateY(0deg)'
     glareRef.current.style.opacity   = '0'
-    if (holoRef.current) holoRef.current.style.opacity = '0'
+    // Keep a gentle resting glow for always-on holo/reverse-holo cards;
+    // fully hide only when there is no current effect.
+    if (holoRef.current) holoRef.current.style.opacity = holoEffectRef.current ? '0.25' : '0'
   }
 
   // ── Static mask / clip styles for each holo effect ──────────────────────
+  // ── Reverse-holo: SVG data-URI mask (universally supported) ─────────────
   //
-  // Pokémon card anatomy (389 × 543 px, ~10 % border):
-  //   Border band  ≈ 9 % left/right, 12 % top, 8 % bottom
-  //   Inner frame  ≈ inset(12% 9% 8% 9%)   ← artwork + text boxes
+  // On a real reverse-holo card the foil is the CARD BACKGROUND — it shimmers
+  // through the name plate, attack rows, border etc., but NOT through the solid
+  // artwork photo box.  We mask out only the illustration rectangle:
   //
-  // reverse-holo: rainbow covers the BORDER — inner frame is masked out via
-  //   CSS mask-composite (two solid-black layers; inner one subtracted).
+  //   Name / HP bar    0 – 16%  of card height
+  //   Artwork photo   16 – 53%  → height = 37%, width = 85% (7.5% margin each side)
+  //   Text / attacks  53 – 100%
   //
-  // holo: rainbow covers only the INNER FRAME via clip-path inset().
-
+  // SVG: white = show shimmer, black = hide shimmer (artwork-box-only cutout).
+  // preserveAspectRatio="none" stretches the SVG to exact card dimensions.
+  const reverseHoloSvg = encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none">` +
+    `<rect width="100" height="100" fill="white"/>` +
+    `<rect x="7.5" y="16" width="85" height="37" rx="2" fill="black"/>` +
+    `</svg>`
+  )
   const reverseHoloMaskStyle: React.CSSProperties = {
-    // Two mask layers: full card (100%×100%) minus inner frame (82%×80% centred)
-    WebkitMaskImage:     'linear-gradient(#000,#000), linear-gradient(#000,#000)',
-    maskImage:           'linear-gradient(#000,#000), linear-gradient(#000,#000)',
-    WebkitMaskSize:      '100% 100%, 82% 80%',
-    maskSize:            '100% 100%, 82% 80%',
-    WebkitMaskPosition:  '0 0, 9% 12%',
-    maskPosition:        '0 0, 9% 12%',
-    WebkitMaskRepeat:    'no-repeat',
-    maskRepeat:          'no-repeat',
-    // Subtract the inner layer from the outer → only the border strip remains
-    WebkitMaskComposite: 'destination-out',
-    maskComposite:       'subtract',
+    WebkitMaskImage:  `url("data:image/svg+xml,${reverseHoloSvg}")`,
+    maskImage:        `url("data:image/svg+xml,${reverseHoloSvg}")`,
+    WebkitMaskSize:   '100% 100%',
+    maskSize:         '100% 100%',
+    WebkitMaskRepeat: 'no-repeat',
+    maskRepeat:       'no-repeat',
   }
 
-  const holoMaskStyle: React.CSSProperties = {
-    clipPath: 'inset(12% 9% 8% 9% round 4px)',
-  }
+  // ── Holo: clip shimmer to artwork window (standard) or full card (full-art) ──
+  //
+  // Standard frame: artwork occupies 16%–53% vertically, 8% margin each side.
+  //   inset(top right bottom left) = inset(16% 8% 42% 8%)
+  //   Bottom inset = 100 - 53 - (bottom text area) ≈ 42% clears attacks/weakness.
+  //
+  // Full-art (Rare Ultra, Rainbow, SIR etc.): artwork fills the whole card face,
+  //   so shimmer should cover end-to-end with only a 1% safety margin.
+  const holoMaskStyle: React.CSSProperties = isFullArt
+    ? { clipPath: 'inset(1% 1% 1% 1% round 8px)' }
+    : { clipPath: 'inset(16% 8% 42% 8% round 3px)' }
 
   const holoLayerStyle: React.CSSProperties = {
     // 'screen' adds the rainbow on top of the card image reliably — more visible
@@ -1104,6 +1118,24 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     return null
   }
 
+  // Returns true for special-print rarities where the artwork fills the whole card
+  // face (Full Art, Rainbow, Special Illustration, Secret Rare, Hyper Rare).
+  // Used to skip the artwork-window clip-path and let the holo shimmer cover the
+  // full card instead — matching how real foil full-art cards look.
+  // Keep in sync with https://pokemontcg.io/docs#rarity
+  const isFullArtCard = (rarity: string | null | undefined): boolean => {
+    if (!rarity) return false
+    const r = rarity.toLowerCase()
+    return (
+      r.includes('rare ultra')           ||  // Full Art EX / GX / V / VMAX
+      r.includes('rare rainbow')         ||  // Rainbow Rare (older naming)
+      r.includes('rare secret')          ||  // Secret Rare
+      r.includes('special illustration') ||  // Special Illustration Rare (SIR)
+      r.includes('illustration rare')    ||  // Illustration Rare (IR)
+      r.includes('hyper rare')               // Hyper Rare / ACE SPEC ultra
+    )
+  }
+
   // Base effect: driven by the card's quick-add / default variant — ALWAYS ON when
   // the card is naturally a holo or reverse-holo card (e.g. a card where the only
   // variant is "Holo Rare" should permanently show the holo shimmer).
@@ -1299,6 +1331,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                 src={selectedCard.image_url}
                 variantSrc={variantImageSrc}
                 holoEffect={holoEffect}
+                isFullArt={isFullArtCard(selectedCard.rarity)}
                 alt={selectedCard.name ?? undefined}
               />
               {/* Artist credit — displayed below card image */}
