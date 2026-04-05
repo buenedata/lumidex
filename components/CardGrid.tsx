@@ -1419,13 +1419,16 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                             </div>
                             <div className="space-y-1.5">
                               {[
-                                { label: 'Normal · Avg Sell',  val: row.cm_avg_sell      != null ? formatPrice(row.cm_avg_sell      * EUR_TO_USD, effectiveCurrency) : null },
-                                { label: 'Reverse · Avg Sell', val: row.cm_reverse_holo  != null ? formatPrice(row.cm_reverse_holo  * EUR_TO_USD, effectiveCurrency) : null },
-                                { label: 'Trend',              val: row.cm_trend         != null ? formatPrice(row.cm_trend         * EUR_TO_USD, effectiveCurrency) : null },
-                                { label: '30-day Avg',         val: row.cm_avg_30d       != null ? formatPrice(row.cm_avg_30d       * EUR_TO_USD, effectiveCurrency) : null },
+                                { label: 'Normal · Avg Sell',  dot: '#10b981', val: row.cm_avg_sell      != null ? formatPrice(row.cm_avg_sell      * EUR_TO_USD, effectiveCurrency) : null },
+                                { label: 'Reverse · Avg Sell', dot: '#3b82f6', val: row.cm_reverse_holo  != null ? formatPrice(row.cm_reverse_holo  * EUR_TO_USD, effectiveCurrency) : null },
+                                { label: 'Trend',              dot: '#a855f7', val: row.cm_trend         != null ? formatPrice(row.cm_trend         * EUR_TO_USD, effectiveCurrency) : null },
+                                { label: '30-day Avg',         dot: '#f59e0b', val: row.cm_avg_30d       != null ? formatPrice(row.cm_avg_30d       * EUR_TO_USD, effectiveCurrency) : null },
                               ].filter(r => r.val != null).map(r => (
                                 <div key={r.label} className="flex items-center justify-between text-sm bg-elevated rounded-lg px-3 py-2 border border-subtle">
-                                  <span className="text-secondary">{r.label}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: r.dot }} />
+                                    <span className="text-secondary">{r.label}</span>
+                                  </div>
                                   <span className="font-semibold tabular-nums text-success">{r.val}</span>
                                 </div>
                               ))}
