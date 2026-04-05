@@ -1380,7 +1380,20 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
                         {/* TCGPlayer variant prices */}
                         <div>
-                          <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">Current Prices · TCGPlayer</h3>
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-xs font-semibold text-muted uppercase tracking-wider">Current Prices · TCGPlayer</h3>
+                            <a
+                              href={`https://www.tcgplayer.com/search/pokemon/product?productLineName=pokemon&q=${encodeURIComponent(selectedCard.name ?? '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-secondary hover:text-primary transition-colors flex items-center gap-1"
+                            >
+                              View on TCGPlayer
+                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14V3zm-1 2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8h-2v8H5V7h8V5z"/>
+                              </svg>
+                            </a>
+                          </div>
                           {variantRows.length === 0 ? (
                             <p className="text-muted text-xs">No variant prices available.</p>
                           ) : (
