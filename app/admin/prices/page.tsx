@@ -416,7 +416,12 @@ export default function AdminPricesPage() {
           errors:         totalErrors,
           totalRuns,
         })
-        setBulkMsg(data.message ?? '')
+        // Use cumulative totals in the status message, not the per-batch count
+        setBulkMsg(
+          remaining > 0
+            ? `${totalSetsProcessed} sets done, ${remaining} remaining — continuing…`
+            : `All sets seeded! ${totalSetsProcessed} sets · ${totalCardsProcessed} cards updated.`
+        )
 
         // Stop looping if auto-loop is off or user clicked Stop
         if (!bulkAutoLoop || !bulkRunningRef.current) break
