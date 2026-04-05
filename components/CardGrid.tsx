@@ -1031,7 +1031,6 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
           const buttonsToRender = specificQuick.length <= 1
             ? filteredQuick
             : filteredQuick.filter(v => v.card_id == null)
-          const showStarButton = specificQuick.length > 1
 
           return (
             <div
@@ -1064,12 +1063,23 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                   }}
                 />
 
+                {/* +N badge — card-specific variants indicator */}
+                {customVariantCount > 0 && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleCardClick(card) }}
+                    title={`${customVariantCount} card-specific variant${customVariantCount > 1 ? 's' : ''} — open to manage`}
+                    className="absolute top-2 right-2 z-20 flex items-center justify-center bg-accent text-white text-[10px] font-bold leading-none px-1.5 py-0.5 rounded-full shadow-md ring-1 ring-white/20 transition-all duration-200 hover:scale-110 hover:bg-accent-hover"
+                  >
+                    +{customVariantCount}
+                  </button>
+                )}
+
                 {/* Hover overlay */}
                 <div className="absolute inset-0 z-10" />
               </div>
 
               {/* ── Variant dots row — below image, normal flow ── */}
-              {(buttonsToRender.length > 0 || showStarButton) && (
+              {buttonsToRender.length > 0 && (
                 <div
                   className="w-[220px] flex gap-1 flex-wrap justify-center px-2 pt-1.5"
                   onClick={e => e.stopPropagation()}
@@ -1107,16 +1117,6 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                     </button>
                   ))}
 
-                  {/* Grey ★ — only when 2+ card-specific variants; clicking opens the modal */}
-                  {showStarButton && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleCardClick(card) }}
-                      title={`${specificQuick.length} card-specific variants — open card to manage`}
-                      className="w-6 h-6 rounded flex items-center justify-center text-xs font-bold border border-black/30 shadow-sm bg-gray-500 text-white hover:scale-110 transition-transform cursor-pointer"
-                    >
-                      ★
-                    </button>
-                  )}
                 </div>
               )}
 
