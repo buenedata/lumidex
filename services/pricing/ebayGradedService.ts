@@ -261,46 +261,50 @@ export async function probeEbayGradedSearch(
 // ── Main export ───────────────────────────────────────────────────────────────
 
 /**
- * Fetch eBay last-sold graded prices for a card from PSA, CGC and ACE.
- * All 3 company searches run in parallel (Promise.all) — same accuracy,
- * ~3× faster than sequential (one eBay round-trip instead of three).
+ * Fetch eBay last-sold graded prices for PSA, CGC and ACE — one Browse API
+ * call per card. A single query `"${name} ${number} pokemon card graded"` is
+ * broad enough to capture all three companies because eBay returns the 50 most
+ * recent sold graded listings regardless of company. All three company regexes
+ * are then applied to the shared result set.
+ *
+ * This is 3× faster than running separate per-company searches.
  */
 export async function fetchEbayGradedPrices(card: CardSearchData): Promise<EbayGradedResult[]> {
-  const baseKeywords    = buildEbaySearchString(card);
-  const companyEntries  = Object.entries(COMPANY_CONFIG) as [GradingCompany, typeof COMPANY_CONFIG[GradingCompany]][];
+  const baseKeywords = buildEbaySearchString(card);
+  // Single broad query — catches PSA, CGC, and ACE listings in one round-trip
+  const keywords     = `${baseKeywords} graded`;
 
-  const perCompanyResults = await Promise.all(
-    companyEntries.map(async ([company, config]) => {
-      const keywords = `${baseKeywords} ${config.suffix}`;
-      try {
-        const { items } = await searchBrowseCompletedItems(keywords);
+  let items: BrowseItemSummary[];
+  try {
+    const result = await searchBrowseCompletedItems(keywords);
+    items = result.items;
+  } catch (err) {
+    console.warn(
+      `[ebayGradedService] Browse API call failed for card "${card.id}":`,
+      err instanceof Error ? err.message : err
+    );
+    return [];
+  }
 
-        if (!items.length) {
-          console.warn(`[ebayGradedService] No ${company} graded results for card "${card.id}"`);
-          return [] as EbayGradedResult[];
-        }
+  if (!items.length) {
+    console.warn(`[ebayGradedService] No graded results found for card "${card.id}"`);
+    return [];
+  }
 
-        const gradeGroups = parseGradeGroups(items, config.regex);
+  // Run all three company regexes over the same item list
+  const allResults: EbayGradedResult[] = [];
+  const companyEntries = Object.entries(COMPANY_CONFIG) as [GradingCompany, typeof COMPANY_CONFIG[GradingCompany]][];
 
-        if (!gradeGroups.size) {
-          console.warn(`[ebayGradedService] No parseable ${company} grades for card "${card.id}"`);
-          return [] as EbayGradedResult[];
-        }
+  for (const [company, config] of companyEntries) {
+    const gradeGroups = parseGradeGroups(items, config.regex);
+    if (!gradeGroups.size) continue;
 
-        const results = gradeGroupsToResults(card.id, company, gradeGroups);
-        if (results.length > 0) {
-          console.log(`[ebayGradedService] ${company}: ${results.length} grade(s) for card "${card.id}"`);
-        }
-        return results;
-      } catch (err) {
-        console.warn(
-          `[ebayGradedService] ${company} search failed for card "${card.id}":`,
-          err instanceof Error ? err.message : err
-        );
-        return [] as EbayGradedResult[];
-      }
-    })
-  );
+    const results = gradeGroupsToResults(card.id, company, gradeGroups);
+    if (results.length > 0) {
+      console.log(`[ebayGradedService] ${company}: ${results.length} grade(s) for card "${card.id}"`);
+      allResults.push(...results);
+    }
+  }
 
-  return perCompanyResults.flat();
+  return allResults;
 }
