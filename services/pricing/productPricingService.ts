@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
+import { supabaseAdmin } from '@/lib/supabase'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -44,14 +45,77 @@ function normaliseProductType(raw: string | null | undefined): string | null {
   return 'Other'
 }
 
+/**
+ * Extract TCGPlayer price data from a raw product object.
+ * Tries every field-name variant observed across tcggo.com API versions.
+ */
+function extractTcgpPrices(p: RawProduct): {
+  market: number | null
+  low:    number | null
+  high:   number | null
+  url:    string | null
+} {
+  // Nested tcgplayer / tcg object
+  const tcgp = p.tcgplayer ?? p.tcg ?? p.tcgp ?? p.tcg_player ?? null
+
+  const market = safePrice(
+    tcgp?.market     ?? tcgp?.marketPrice  ?? tcgp?.market_price ??
+    p.tcgp_market    ?? p.market_price     ?? p.marketPrice      ?? null,
+  )
+  const low = safePrice(
+    tcgp?.low        ?? tcgp?.lowPrice     ?? tcgp?.low_price    ??
+    p.tcgp_low       ?? p.low_price        ?? null,
+  )
+  const high = safePrice(
+    tcgp?.high       ?? tcgp?.highPrice    ?? tcgp?.high_price   ??
+    p.tcgp_high      ?? p.high_price       ?? null,
+  )
+  const url: string | null = tcgp?.url ?? tcgp?.link ?? p.tcgp_url ?? p.tcg_url ?? null
+
+  return { market, low, high, url }
+}
+
+/**
+ * Extract CardMarket price data from a raw product object.
+ * Tries every field-name variant observed across tcggo.com API versions,
+ * including a generic `prices` / `price` object that may contain CM data.
+ */
+function extractCmPrices(p: RawProduct): {
+  avgSell: number | null
+  trend:   number | null
+  url:     string | null
+} {
+  // Nested cardmarket / cm object
+  const cm     = p.cardmarket ?? p.cm ?? p.card_market ?? null
+  // Generic prices object (tcggo.com sometimes wraps all prices here)
+  const prices = p.prices ?? p.price ?? null
+
+  const avgSell = safePrice(
+    cm?.avg_sell         ?? cm?.averageSellPrice  ?? cm?.average_sell_price ?? cm?.avg     ??
+    prices?.avg_sell     ?? prices?.averageSellPrice                                        ??
+    prices?.trendPrice   ?? prices?.trend_price                                             ??
+    p.cm_avg_sell        ?? p.avg_sell            ?? null,
+  )
+  const trend = safePrice(
+    cm?.trend            ?? cm?.trendPrice        ?? cm?.trend_price        ??
+    prices?.trend        ?? prices?.trendPrice    ?? prices?.trend_price    ??
+    p.cm_trend           ?? p.trend               ?? null,
+  )
+  const url: string | null = cm?.url ?? cm?.link ?? p.cm_url ?? null
+
+  return { avgSell, trend, url }
+}
+
 // ── Service ───────────────────────────────────────────────────────────────────
 
 /**
  * Fetch sealed product pricing for a Pokémon TCG episode from the
  * cardmarket-api-tcg RapidAPI endpoint and upsert into `set_products`.
  *
+ * Also persists the episodeId back to `sets.api_set_id` so the nightly
+ * cron can automatically re-sync product prices without admin input.
+ *
  * Uses the same RAPIDAPI_KEY env var as the discover endpoint.
- * Uses the same createSupabaseServerClient pattern as the rest of the pipeline.
  */
 export async function importProductPricing(
   opts: ProductPricingOptions,
@@ -94,6 +158,15 @@ export async function importProductPricing(
     rawProducts = json.data ?? json.products ?? json.results ?? (Array.isArray(json) ? json : [])
 
     console.log(`[ProductPricingService] Episode ${episodeId}: received ${rawProducts.length} products`)
+
+    // Log the first product's shape so field-name mismatches surface in logs
+    if (rawProducts.length > 0) {
+      const sample = rawProducts[0]
+      console.log(
+        `[ProductPricingService] Episode ${episodeId}: first product keys → ` +
+        JSON.stringify(Object.keys(sample)),
+      )
+    }
   } catch (err) {
     console.error(`[ProductPricingService] Network error for episode ${episodeId}:`, err)
     return { productCount: 0, errors: 1 }
@@ -105,6 +178,7 @@ export async function importProductPricing(
 
   // ── 2. Map to set_products rows ────────────────────────────────────────────
   const now = new Date().toISOString()
+  let allNullPriceCount = 0
 
   const rows = rawProducts
     .filter((p): p is RawProduct => p != null && typeof p === 'object')
@@ -121,36 +195,43 @@ export async function importProductPricing(
         p.type ?? p.product_type ?? p.category ?? p.productType ?? null,
       )
 
-      // TCGPlayer prices — look for nested objects or flat fields
-      const tcgp  = p.tcgplayer ?? p.tcg ?? null
-      const tcgpMarket = safePrice(tcgp?.market  ?? p.tcgp_market  ?? null)
-      const tcgpLow    = safePrice(tcgp?.low     ?? p.tcgp_low     ?? null)
-      const tcgpHigh   = safePrice(tcgp?.high    ?? p.tcgp_high    ?? null)
-      const tcgpUrl: string | null = tcgp?.url ?? p.tcgp_url ?? null
+      // Price extraction (expanded to cover more API field-name variants)
+      const tcgp = extractTcgpPrices(p)
+      const cm   = extractCmPrices(p)
 
-      // CardMarket prices
-      const cm       = p.cardmarket ?? p.cm ?? null
-      const cmAvgSell = safePrice(cm?.avg_sell   ?? cm?.averageSellPrice ?? p.cm_avg_sell ?? null)
-      const cmTrend   = safePrice(cm?.trend      ?? cm?.trendPrice       ?? p.cm_trend   ?? null)
-      const cmUrl: string | null = cm?.url ?? p.cm_url ?? null
+      // Warn when a product has all-null prices — helps diagnose field-name drift
+      if (
+        tcgp.market === null && tcgp.low === null && tcgp.high === null &&
+        cm.avgSell  === null && cm.trend  === null
+      ) {
+        allNullPriceCount++
+      }
 
       return {
         set_id:         setId,
         api_product_id: apiProductId,
         name,
         product_type:   productType,
-        tcgp_market:    tcgpMarket,
-        tcgp_low:       tcgpLow,
-        tcgp_high:      tcgpHigh,
-        tcgp_url:       tcgpUrl,
-        cm_avg_sell:    cmAvgSell,
-        cm_trend:       cmTrend,
-        cm_url:         cmUrl,
+        tcgp_market:    tcgp.market,
+        tcgp_low:       tcgp.low,
+        tcgp_high:      tcgp.high,
+        tcgp_url:       tcgp.url,
+        cm_avg_sell:    cm.avgSell,
+        cm_trend:       cm.trend,
+        cm_url:         cm.url,
         fetched_at:     now,
       }
     })
     // Skip rows with no api_product_id — upsert conflict key would be null
     .filter((r) => r.api_product_id != null)
+
+  if (allNullPriceCount > 0) {
+    console.warn(
+      `[ProductPricingService] Episode ${episodeId}: ${allNullPriceCount}/${rows.length} products ` +
+      'have ALL price fields null — the API may be returning prices under unexpected field names. ' +
+      'Use GET /api/prices/discover?probe=products&episodeId=' + String(episodeId) + ' to inspect.',
+    )
+  }
 
   if (rows.length === 0) {
     console.warn(
@@ -177,6 +258,25 @@ export async function importProductPricing(
   console.log(
     `[ProductPricingService] Episode ${episodeId}: upserted ${rows.length} products for set "${setId}"`,
   )
+
+  // ── 4. Persist the episodeId on the sets row so the cron can re-use it ─────
+  // Use supabaseAdmin (service role) so RLS on the sets table doesn't block this write.
+  const { error: setUpdateErr } = await supabaseAdmin
+    .from('sets')
+    .update({ api_set_id: String(episodeId) })
+    .eq('set_id', setId)
+
+  if (setUpdateErr) {
+    // Non-fatal: log but don't fail the import
+    console.warn(
+      `[ProductPricingService] Could not persist api_set_id for set "${setId}":`,
+      setUpdateErr.message,
+    )
+  } else {
+    console.log(
+      `[ProductPricingService] Persisted api_set_id=${episodeId} on sets row for "${setId}"`,
+    )
+  }
 
   return { productCount: rows.length, errors: 0 }
 }

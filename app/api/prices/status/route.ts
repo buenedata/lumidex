@@ -87,6 +87,13 @@ export async function GET(request: NextRequest) {
 
     if (prodErr) throw prodErr
 
+    // api_set_id — stored when product prices are first imported
+    const { data: setRow } = await supabaseAdmin
+      .from('sets')
+      .select('api_set_id')
+      .eq('set_id', setId)
+      .single()
+
     return NextResponse.json({
       stats: {
         set_id:        setId,
@@ -94,6 +101,7 @@ export async function GET(request: NextRequest) {
         priced_count:  pricedCount,
         product_count: productCount ?? 0,
         last_synced:   lastSynced,
+        api_set_id:    setRow?.api_set_id ?? null,
       },
     })
   } catch (err) {

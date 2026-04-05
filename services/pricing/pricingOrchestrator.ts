@@ -8,6 +8,7 @@ import { savePricePoints, savePriceHistory } from './priceRepository'
 import { upsertGradedPrices, deleteGradedPricesForCard } from './gradedPriceRepository'
 import { aggregatePricesForCard, writeCardPriceCache } from './priceAggregator'
 import { findUndervaluedCards } from './undervaluedDetector'
+import { importProductPricing } from './productPricingService'
 import { NormalizedPricePoint } from './types'
 
 export const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
@@ -386,6 +387,34 @@ export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Pro
             err instanceof Error ? err.message : String(err)
           )
         }
+      }
+
+      // Sync sealed-product prices if the set has a stored api_set_id
+      try {
+        const { data: setRow } = await supabaseAdmin
+          .from('sets')
+          .select('api_set_id')
+          .eq('set_id', setId)
+          .single()
+
+        if (setRow?.api_set_id) {
+          console.log(
+            `[PricingOrchestrator] Set "${setId}": syncing product prices ` +
+            `(api_set_id=${setRow.api_set_id})…`
+          )
+          const productResult = await importProductPricing({
+            episodeId: setRow.api_set_id,
+            setId,
+          })
+          console.log(
+            `[PricingOrchestrator] Set "${setId}": ${productResult.productCount} products synced`,
+          )
+        }
+      } catch (err) {
+        console.error(
+          `[PricingOrchestrator] Product pricing failed for set "${setId}":`,
+          err instanceof Error ? err.message : String(err),
+        )
       }
 
       // Mark this set as synced

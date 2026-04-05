@@ -31,6 +31,47 @@ export async function GET(request: NextRequest) {
   const probe = request.nextUrl.searchParams.get('probe')
   const name  = request.nextUrl.searchParams.get('name')?.trim() ?? ''
 
+  // ── Probe: raw products response to inspect price field names ─────────────
+  if (probe === 'products') {
+    const episodeId = request.nextUrl.searchParams.get('episodeId')
+    if (!episodeId) {
+      return NextResponse.json({ error: 'episodeId query param required for probe=products' })
+    }
+    const url = `https://${EPISODES_HOST}/pokemon/episodes/${encodeURIComponent(episodeId)}/products`
+    try {
+      const res  = await fetch(url, {
+        headers: { 'x-rapidapi-key': key, 'x-rapidapi-host': EPISODES_HOST, 'Content-Type': 'application/json' },
+        cache: 'no-store',
+      })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const json = await res.json() as Record<string, any>
+      const products = json.data ?? json.products ?? json.results ?? (Array.isArray(json) ? json : [])
+      const first = products[0] ?? null
+      return NextResponse.json({
+        probe:            'products',
+        episodeId,
+        httpStatus:       res.status,
+        topKeys:          Object.keys(json),
+        productCount:     products.length,
+        firstProduct:     first,
+        firstProductKeys: first ? Object.keys(first) : [],
+        // Drill into any nested price/tcgplayer/cardmarket objects so field names are visible
+        priceSubKeys: first
+          ? {
+              tcgplayer:  first.tcgplayer  ? Object.keys(first.tcgplayer)  : null,
+              tcg:        first.tcg        ? Object.keys(first.tcg)        : null,
+              cardmarket: first.cardmarket ? Object.keys(first.cardmarket) : null,
+              cm:         first.cm         ? Object.keys(first.cm)         : null,
+              prices:     first.prices     ? Object.keys(first.prices)     : null,
+              price:      first.price      ? Object.keys(first.price)      : null,
+            }
+          : null,
+      })
+    } catch (e) {
+      return NextResponse.json({ probe: 'products', error: String(e) })
+    }
+  }
+
   // ── Probe: raw episodes response to inspect pagination structure ──────────
   if (probe === 'episodes') {
     try {

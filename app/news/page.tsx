@@ -44,7 +44,7 @@ const ALL_STORIES: Story[] = [
     id: 'new-set-reveal',
     category: 'Sets',
     categoryIcon: '🔥',
-    title: "Scarlet & Violet — what's coming next?",
+    title: "Mega Evolution — what's coming next?",
     description:
       'The upcoming expansion is set to shake up both the competitive and collector meta. Here is everything we know so far.',
     href: '#',

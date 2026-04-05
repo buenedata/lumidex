@@ -14,6 +14,7 @@ interface SetStats {
   priced_count:  number
   product_count: number
   last_synced:   string | null
+  api_set_id:    string | null
 }
 
 type SyncStatus = 'idle' | 'syncing' | 'done' | 'error'
@@ -112,12 +113,19 @@ export default function AdminPricesPage() {
       const res = await fetch(`/api/prices/status?setId=${encodeURIComponent(setId)}`)
       if (res.ok) {
         const json = await res.json()
-        setStats(json.stats ?? null)
+        const s: SetStats | null = json.stats ?? null
+        setStats(s)
+
+        // Auto-populate the episode ID when the set already has one saved
+        if (s?.api_set_id) {
+          setApiSetIdInput(s.api_set_id)
+          setIncludeProducts(true)
+        }
       }
     } finally {
       setStatsLoading(false)
     }
-  }, [])
+  }, [setApiSetIdInput, setIncludeProducts])
 
   // ── Set selection ──────────────────────────────────────────────────────────
   const handleSetSelect = useCallback((setId: string, setName: string) => {
@@ -564,6 +572,9 @@ export default function AdminPricesPage() {
                 <span className="text-gray-600 font-normal ml-1">
                   — tcggo.com calls sets &quot;episodes&quot; and IDs them as integers (e.g. 396)
                 </span>
+                {stats?.api_set_id && stats.api_set_id === apiSetIdInput.trim() && (
+                  <span className="ml-2 text-xs text-emerald-500 font-normal">✓ saved</span>
+                )}
               </label>
                 <button
                   onClick={() => selectedSetName && discoverApiSetId(selectedSetName)}

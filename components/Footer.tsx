@@ -39,7 +39,7 @@ export default function Footer() {
             {/* Social icons */}
             <div className="flex items-center gap-3 mt-1">
               <a
-                href="https://www.instagram.com/lumidex"
+                href="https://www.instagram.com/lumidex.app/"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Instagram"
@@ -52,7 +52,7 @@ export default function Footer() {
                 </svg>
               </a>
               <a
-                href="https://www.facebook.com/lumidex"
+                href="https://www.facebook.com/profile.php?id=61575439778957"
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Facebook"

@@ -28,6 +28,7 @@ create table if not exists public.sets (
     "setComplete" integer,
     release_date date,
     logo_url    text,
+    api_set_id  text,              -- tcggo.com RapidAPI episode ID (used for product pricing)
     created_at  timestamp without time zone default now()
 );
 
