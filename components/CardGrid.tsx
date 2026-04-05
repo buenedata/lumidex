@@ -261,7 +261,7 @@ function CardGlareImage({
   //   so shimmer should cover end-to-end with only a 1% safety margin.
   const holoMaskStyle: React.CSSProperties = isFullArt
     ? { clipPath: 'inset(1% 1% 1% 1% round 8px)' }
-    : { clipPath: 'inset(16% 8% 42% 8% round 3px)' }
+    : { clipPath: 'inset(12% 8% 49% 8% round 3px)' }
 
   const holoLayerStyle: React.CSSProperties = {
     // 'screen' adds the rainbow on top of the card image reliably — more visible
