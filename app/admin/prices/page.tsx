@@ -519,7 +519,7 @@ export default function AdminPricesPage() {
                   className="w-4 h-4 rounded accent-purple-500 cursor-default"
                 />
                 <span className="text-sm text-gray-300">
-                  Card prices <span className="text-gray-500">(eBay + Pokémon TCG API)</span>
+                  Card prices <span className="text-gray-500">(Pokémon TCG API — TCGPlayer &amp; CardMarket)</span>
                 </span>
                 <span className="ml-auto text-xs text-gray-600 italic">always included</span>
               </label>
@@ -533,7 +533,7 @@ export default function AdminPricesPage() {
                   className="w-4 h-4 rounded accent-purple-500"
                 />
                 <span className="text-sm text-gray-300">
-                  Graded card prices <span className="text-gray-500">(PSA / BGS eBay sold)</span>
+                  Graded card prices <span className="text-gray-500">(PSA 9/10 · CGC 9/10 · eBay last sold)</span>
                 </span>
               </label>
 

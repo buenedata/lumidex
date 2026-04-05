@@ -35,6 +35,16 @@ const GRADES_OF_INTEREST = new Set([9, 10]);
 const LOW_RARITY_SKIP = new Set(['common', 'uncommon']);
 
 /**
+ * Returns true when the card's rarity means we will skip the eBay graded search.
+ * Exported so the orchestrator can skip the post-call sleep for these cards too —
+ * an unlaunched eBay call needs no rate-limit delay.
+ */
+export function isRaritySkippedForGraded(rarity: string | null | undefined): boolean {
+  if (!rarity) return false;
+  return LOW_RARITY_SKIP.has(rarity.toLowerCase());
+}
+
+/**
  * Maximum eBay sold listings to consider per (company, grade) combination.
  * 3 data points is enough to produce a reliable average for display purposes.
  * Keeping this low prevents high-volume cards from accumulating more data than needed.

@@ -2,7 +2,7 @@ import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import { supabaseAdmin } from '@/lib/supabase'
 import { fetchPokemonApiPrices } from './pokemonApiService'
 import { fetchEbayRawPrices } from './ebayService'
-import { fetchEbayGradedPrices } from './ebayGradedService'
+import { fetchEbayGradedPrices, isRaritySkippedForGraded } from './ebayGradedService'
 import { normalizePoints } from './priceNormalizer'
 import { savePricePoints, savePriceHistory } from './priceRepository'
 import { upsertGradedPrices } from './gradedPriceRepository'
@@ -272,8 +272,11 @@ async function processSingleSet(
       processedCardIds.push(card.id)
       processed++
 
-      // f. Polite delay — needed when making eBay Browse API calls
-      await sleep(200)
+      // f. Polite delay — only needed when an actual eBay Browse API call was made.
+      // Common/Uncommon cards are skipped by fetchEbayGradedPrices with no API call,
+      // so they incur no delay. This can eliminate 50-70% of the sleep overhead.
+      const madeEbayCall = includeEbayRaw || (includeGraded && !isRaritySkippedForGraded(card.rarity))
+      if (madeEbayCall) await sleep(200)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       console.error(`[PricingOrchestrator] [${setId}] Error on card ${card.name} (${card.id}):`, message)
