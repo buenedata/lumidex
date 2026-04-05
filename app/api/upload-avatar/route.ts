@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import { supabaseAdmin } from '@/lib/supabase'
+import { checkAndUnlockAchievements } from '@/lib/achievements'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
 const MAX_SIZE_BYTES = 2 * 1024 * 1024 // 2 MB
@@ -77,6 +78,11 @@ export async function POST(request: NextRequest) {
     console.error('[upload-avatar] DB update error:', updateError)
     return NextResponse.json({ error: 'Failed to update profile' }, { status: 500 })
   }
+
+  // Fire-and-forget: check & unlock any newly earned achievements (Picture Perfect)
+  checkAndUnlockAchievements(user.id, supabaseAdmin).catch(err =>
+    console.error('[upload-avatar] achievement check failed:', err)
+  )
 
   return NextResponse.json({ avatarUrl })
 }

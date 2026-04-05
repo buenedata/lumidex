@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import { supabaseAdmin } from '@/lib/supabase'
+import { checkAndUnlockAchievements } from '@/lib/achievements'
 
 /**
  * /api/wanted-cards
@@ -67,6 +68,11 @@ export async function POST(request: NextRequest) {
     console.error('[wanted-cards POST] DB error:', error)
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
+
+  // Fire-and-forget: check & unlock any newly earned achievements
+  checkAndUnlockAchievements(user.id, supabaseAdmin).catch(err =>
+    console.error('[wanted-cards] achievement check failed:', err)
+  )
 
   return NextResponse.json({ isWanted: true })
 }

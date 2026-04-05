@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { checkAndUnlockAchievements } from '@/lib/achievements'
 
 /**
  * GET /api/user-sealed-products?userId=<uuid>
@@ -87,6 +88,11 @@ export async function POST(request: NextRequest) {
       console.error('[user-sealed-products] UPSERT error:', error)
       return NextResponse.json({ error: 'Failed to update sealed product' }, { status: 500 })
     }
+
+    // Fire-and-forget: check & unlock any newly earned achievements
+    checkAndUnlockAchievements(userId, supabaseAdmin).catch(err =>
+      console.error('[user-sealed-products] achievement check failed:', err)
+    )
 
     return NextResponse.json({
       message: 'Sealed product updated',

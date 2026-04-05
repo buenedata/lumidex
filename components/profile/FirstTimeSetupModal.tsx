@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button'
 import SettingsForm, { SettingsValues, defaultSettings } from './SettingsForm'
 import AvatarUpload from './AvatarUpload'
 import BannerUpload from './BannerUpload'
+import { checkAndUnlockAchievements } from '@/lib/achievements'
 
 interface FirstTimeSetupModalProps {
   userId: string
@@ -81,6 +82,11 @@ export default function FirstTimeSetupModal({
       setError('Failed to save settings. Please try again.')
       return
     }
+
+    // Fire-and-forget: unlock Identity achievement (and any others now applicable)
+    checkAndUnlockAchievements(userId).catch(err =>
+      console.error('[FirstTimeSetupModal] achievement check failed:', err)
+    )
 
     onComplete(skipAll ? defaultSettings : values, avatarUrl, bannerUrl)
   }
