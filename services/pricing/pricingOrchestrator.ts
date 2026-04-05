@@ -11,54 +11,125 @@ import { NormalizedPricePoint } from './types'
 
 export const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-interface UpdatePricesBatchOptions {
-  limit?: number
+// ── Default settings ──────────────────────────────────────────────────────────
+
+/** Stop starting new sets if this many ms have elapsed (Vercel Pro limit is 300s). */
+const DEFAULT_TIME_BUDGET_MS = 270_000
+
+// ── Options ───────────────────────────────────────────────────────────────────
+
+export interface UpdatePricesBatchOptions {
+  /**
+   * Array of set_id strings to process.
+   * Each set is fetched and priced in priority order.
+   */
+  setIds?: string[]
+
+  /**
+   * Legacy single-set convenience kept for backwards compatibility with the
+   * admin /api/prices/sync route. Treated as setIds: [setId].
+   */
   setId?: string
+
+  limit?: number
+
+  /**
+   * Include eBay graded price lookups (PSA / CGC / ACE via eBay Browse API).
+   * Saved to card_graded_prices. Adds ~600ms per card.
+   * Default: true (included in nightly cron).
+   * Set false for fast bulk seed (TCG-API-only mode).
+   */
   includeGraded?: boolean
+
+  /**
+   * Include eBay raw (ungraded) last-sold price lookups.
+   *
+   * NOTE: eBay raw prices are saved to price_points but are currently NOT
+   * aggregated into card_prices or price_history — they do not affect any
+   * displayed prices. Skipping this call saves ~600ms per card with no
+   * visible impact.
+   *
+   * Default: false (skipped in all batch modes).
+   */
+  includeEbayRaw?: boolean
+
+  /**
+   * Number of cards to process concurrently within a set.
+   * Use 1 for any run that includes eBay calls (rate-limit safety).
+   * Use 5+ for TCG-API-only runs (concurrent fetches are safe).
+   * Default: auto — 1 if eBay is enabled, 5 if TCG-API-only.
+   */
+  concurrency?: number
+
+  /**
+   * Maximum milliseconds to spend before stopping (leaves time for Vercel cleanup).
+   * Default: 270_000 (270s — Vercel Pro serverless limit is 300s).
+   */
+  timeBudgetMs?: number
+
   /** Optional SSE emit callback — called with progress events during the batch. */
   emit?: (payload: unknown) => void
 }
 
-interface BatchResult {
-  processed: number
-  errors: number
-  undervaluedFound: number
-  /** Total number of graded price points saved across all cards. */
-  gradedPointsSaved: number
+// ── Result ────────────────────────────────────────────────────────────────────
+
+export interface BatchResult {
+  processed:               number
+  errors:                  number
+  undervaluedFound:        number
+  gradedPointsSaved:       number
+  setsProcessed:           number
+  setsSkippedDueToTimeout: number
 }
 
-/**
- * Process a batch of cards through the full pricing pipeline:
- * 1. Fetch raw prices from Pokemon TCG API (tcgplayer + cardmarket)
- * 2. Fetch eBay raw sold listings
- * 3. Fetch eBay graded sold listings (PSA) — when includeGraded=true
- * 4. Normalize all prices to USD
- * 5. Save to price_points
- * 6. Save selected points to price_history
- * 7. Aggregate price_points → update card_prices cache
- * 8. Run undervalued detection
- */
-export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Promise<BatchResult> {
-  // When limit is undefined (no explicit cap) we fetch ALL cards for the set.
-  // Pass a numeric value only when the caller explicitly wants a smaller batch.
-  const limit = options?.limit   // undefined → no cap
-  const setId = options?.setId
-  const includeGraded = options?.includeGraded !== false
-  const emit = options?.emit ?? null
+// ── Concurrency helper ────────────────────────────────────────────────────────
 
-  // Step 1 — Load cards from DB
+/**
+ * Run an async function over an array with a maximum concurrency limit.
+ * Processes items in chunks of `concurrency` in parallel.
+ */
+async function mapConcurrent<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<Array<R | Error>> {
+  const results: Array<R | Error> = []
+  for (let i = 0; i < items.length; i += concurrency) {
+    const chunk = items.slice(i, i + concurrency)
+    const chunkResults = await Promise.allSettled(
+      chunk.map((item, j) => fn(item, i + j))
+    )
+    for (const r of chunkResults) {
+      results.push(r.status === 'fulfilled' ? r.value : r.reason as Error)
+    }
+  }
+  return results
+}
+
+// ── Core: process a single set ────────────────────────────────────────────────
+
+interface ProcessSetResult {
+  processed:        number
+  errors:           number
+  gradedPointsSaved: number
+  processedCardIds: string[]
+}
+
+async function processSingleSet(
+  setId:          string,
+  limit:          number | undefined,
+  includeGraded:  boolean,
+  includeEbayRaw: boolean,
+  concurrency:    number,
+  emit:           ((payload: unknown) => void) | null,
+): Promise<ProcessSetResult> {
   const supabase = await createSupabaseServerClient()
 
   let query = supabase
     .from('cards')
     .select('id, name, set_id, number, api_id')
+    .eq('set_id', setId)
 
-  if (setId) {
-    query = query.eq('set_id', setId)
-  }
-
-  // Only apply a row cap when an explicit limit was provided.
-  // Omitting .limit() fetches every card matching the filter (i.e. the full set).
   if (limit !== undefined) {
     query = query.limit(limit)
   }
@@ -66,57 +137,106 @@ export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Pro
   const { data: cards, error: dbError } = await query
 
   if (dbError) {
-    console.error('[PricingOrchestrator] Failed to load cards from DB:', dbError.message)
-    return { processed: 0, errors: 1, undervaluedFound: 0, gradedPointsSaved: 0 }
+    console.error(`[PricingOrchestrator] processSingleSet(${setId}): DB error:`, dbError.message)
+    return { processed: 0, errors: 1, gradedPointsSaved: 0, processedCardIds: [] }
   }
 
   if (!cards || cards.length === 0) {
-    console.log('[PricingOrchestrator] No cards found to process.')
-    return { processed: 0, errors: 0, undervaluedFound: 0, gradedPointsSaved: 0 }
+    console.log(`[PricingOrchestrator] processSingleSet(${setId}): no cards found.`)
+    return { processed: 0, errors: 0, gradedPointsSaved: 0, processedCardIds: [] }
   }
 
-  console.log(`[PricingOrchestrator] Starting batch: ${cards.length} cards (includeGraded=${includeGraded})`)
+  const mode = includeEbayRaw || includeGraded ? 'full' : 'fast'
+  console.log(
+    `[PricingOrchestrator] processSingleSet(${setId}): ` +
+    `${cards.length} cards, mode=${mode}, concurrency=${concurrency}, ` +
+    `includeGraded=${includeGraded}, includeEbayRaw=${includeEbayRaw}`
+  )
 
+  // ── FAST PATH: TCG-API-only, parallel processing, batch DB writes ────────────
+  if (!includeEbayRaw && !includeGraded) {
+    const allPoints: NormalizedPricePoint[] = []
+    let errors = 0
+    const processedCardIds: string[] = []
+
+    const results = await mapConcurrent(cards, concurrency, async (card) => {
+      const apiResult = await fetchPokemonApiPrices(card)
+      const apiPoints = normalizePoints(apiResult.points)
+      return { card, apiPoints }
+    })
+
+    for (const result of results) {
+      if (result instanceof Error) {
+        console.error(`[PricingOrchestrator] [${setId}] Fast-path card error:`, result.message)
+        errors++
+        continue
+      }
+      allPoints.push(...result.apiPoints)
+      processedCardIds.push(result.card.id)
+    }
+
+    // Batch write all price points for the whole set at once
+    if (allPoints.length > 0) {
+      await Promise.all([
+        savePricePoints(allPoints),
+        savePriceHistory(allPoints),
+      ])
+
+      // Aggregate each card concurrently (DB fan-out, not HTTP)
+      await mapConcurrent(processedCardIds, 10, async (cardId) => {
+        const agg = await aggregatePricesForCard(cardId)
+        await writeCardPriceCache(agg)
+      })
+    }
+
+    const processed = processedCardIds.length
+    console.log(
+      `[PricingOrchestrator] processSingleSet(${setId}) fast-path done: ` +
+      `${processed} processed, ${errors} errors, ${allPoints.length} price points`
+    )
+    return { processed, errors, gradedPointsSaved: 0, processedCardIds }
+  }
+
+  // ── FULL PATH: eBay-included, sequential processing (rate-limit safe) ────────
   let processed = 0
   let errors = 0
   let gradedPointsSaved = 0
   const processedCardIds: string[] = []
 
-  // Step 2 — Process each card sequentially
   for (let i = 0; i < cards.length; i++) {
     const card = cards[i]
-    console.log(`[PricingOrchestrator] Processing card ${i + 1}/${cards.length}: ${card.name}`)
+    console.log(`[PricingOrchestrator] [${setId}] Card ${i + 1}/${cards.length}: ${card.name}`)
 
     try {
-      // a. Pokemon API prices
+      // a. Pokemon TCG API prices (TCGPlayer + CardMarket in one call)
       const apiResult = await fetchPokemonApiPrices(card)
       const apiPoints = normalizePoints(apiResult.points)
 
-      // b. eBay raw prices
-      const ebayResult = await fetchEbayRawPrices(card)
+      // b. eBay raw ungraded sold prices (optional — currently not aggregated into card_prices)
       let ebayPoints: NormalizedPricePoint[] = []
-      if (ebayResult) {
-        ebayPoints = [{
-          cardId: card.id,
-          source: 'ebay',
-          variantKey: ebayResult.variantKey,
-          price: ebayResult.average,
-          priceUsd: ebayResult.average,
-          currency: 'USD',
-          isGraded: false,
-        }]
+      if (includeEbayRaw) {
+        const ebayResult = await fetchEbayRawPrices(card)
+        if (ebayResult) {
+          ebayPoints = [{
+            cardId:     card.id,
+            source:     'ebay',
+            variantKey: ebayResult.variantKey,
+            price:      ebayResult.average,
+            priceUsd:   ebayResult.average,
+            currency:   'USD',
+            isGraded:   false,
+          }]
+        }
       }
 
-      // c. eBay graded prices (if includeGraded) — saved to card_graded_prices, NOT price_points
+      // c. eBay graded sold prices (PSA/CGC/ACE) — saved to card_graded_prices
       if (includeGraded) {
         const gradedResults = await fetchEbayGradedPrices(card)
 
         if (gradedResults.length > 0) {
-          // Persist to dedicated card_graded_prices table (PSA/CGC/ACE)
           await upsertGradedPrices(gradedResults)
           gradedPointsSaved += gradedResults.length
 
-          // Emit per-card graded result for live UI feedback
           if (emit) {
             emit({
               type:         'graded_card',
@@ -130,7 +250,7 @@ export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Pro
         }
       }
 
-      // d. Combine raw (non-graded) points and save
+      // d. Combine ungraded points and save
       const allPoints = [...apiPoints, ...ebayPoints]
       await savePricePoints(allPoints)
       await savePriceHistory(allPoints)
@@ -142,32 +262,269 @@ export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Pro
       processedCardIds.push(card.id)
       processed++
 
-      // f. Small delay to be respectful to APIs
+      // f. Polite delay — needed when making eBay Browse API calls
       await sleep(200)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      console.error(`[PricingOrchestrator] Error processing card ${card.name} (${card.id}):`, message)
+      console.error(`[PricingOrchestrator] [${setId}] Error on card ${card.name} (${card.id}):`, message)
       errors++
     }
   }
 
-  // Step 3 — After all cards, run undervalued detection
+  return { processed, errors, gradedPointsSaved, processedCardIds }
+}
+
+// ── Public export ─────────────────────────────────────────────────────────────
+
+/**
+ * Process one or more sets through the full pricing pipeline.
+ *
+ * Performance characteristics:
+ *   TCG-API-only (includeEbayRaw=false, includeGraded=false):
+ *     ~5–10 seconds per 200-card set (parallel, batch DB writes)
+ *   Full with eBay graded (includeGraded=true):
+ *     ~3–4 minutes per 200-card set (sequential, eBay rate-limit safe)
+ *
+ * Sets are processed in the order given. After each set completes,
+ * sets.prices_last_synced_at is updated. Processing stops before starting
+ * a new set if the time budget is exceeded.
+ */
+export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Promise<BatchResult> {
+  const limit          = options?.limit
+  const includeGraded  = options?.includeGraded !== false
+  const includeEbayRaw = options?.includeEbayRaw === true   // default: SKIP eBay raw
+  const emit           = options?.emit ?? null
+  const timeBudgetMs   = options?.timeBudgetMs ?? DEFAULT_TIME_BUDGET_MS
+
+  // Auto-determine concurrency: parallel when no eBay calls, serial when eBay is involved
+  const hasEbay    = includeEbayRaw || includeGraded
+  const concurrency = options?.concurrency ?? (hasEbay ? 1 : 5)
+
+  // Resolve the list of set IDs to process
+  const rawSetIds: string[] | undefined =
+    options?.setIds && options.setIds.length > 0
+      ? options.setIds
+      : options?.setId
+        ? [options.setId]
+        : undefined
+
+  const startTime = Date.now()
+
+  console.log(
+    `[PricingOrchestrator] updatePricesBatch start — ` +
+    `sets=${rawSetIds?.length ?? 'all'}, ` +
+    `includeGraded=${includeGraded}, includeEbayRaw=${includeEbayRaw}, ` +
+    `concurrency=${concurrency}, budget=${timeBudgetMs}ms`
+  )
+
+  // ── Path A: setIds provided — process each set sequentially ─────────────────
+
+  if (rawSetIds && rawSetIds.length > 0) {
+    let totalProcessed       = 0
+    let totalErrors          = 0
+    let totalGradedPoints    = 0
+    let totalUndervalued     = 0
+    let setsProcessed        = 0
+    let setsSkipped          = 0
+
+    const supabase = await createSupabaseServerClient()
+
+    for (const setId of rawSetIds) {
+      const elapsed = Date.now() - startTime
+      if (elapsed >= timeBudgetMs) {
+        const remaining = rawSetIds.length - setsProcessed - setsSkipped
+        console.log(
+          `[PricingOrchestrator] Time budget reached (${elapsed}ms / ${timeBudgetMs}ms). ` +
+          `Skipping remaining ${remaining} sets.`
+        )
+        setsSkipped += remaining
+        break
+      }
+
+      console.log(
+        `[PricingOrchestrator] Starting set "${setId}" ` +
+        `(elapsed ${Math.round(elapsed / 1000)}s / budget ${Math.round(timeBudgetMs / 1000)}s)`
+      )
+
+      if (emit) {
+        emit({ type: 'set_start', setId, message: `Starting price sync for set "${setId}"…` })
+      }
+
+      const { processed, errors, gradedPointsSaved, processedCardIds } =
+        await processSingleSet(setId, limit, includeGraded, includeEbayRaw, concurrency, emit)
+
+      totalProcessed    += processed
+      totalErrors       += errors
+      totalGradedPoints += gradedPointsSaved
+
+      // Run undervalued detection for this set's cards
+      if (processedCardIds.length > 0) {
+        try {
+          const undervalued = await findUndervaluedCards(processedCardIds)
+          totalUndervalued += undervalued.length
+        } catch (err) {
+          console.error(
+            `[PricingOrchestrator] Undervalued detection failed for set "${setId}":`,
+            err instanceof Error ? err.message : String(err)
+          )
+        }
+      }
+
+      // Mark this set as synced
+      const now = new Date().toISOString()
+      const { error: updateErr } = await supabase
+        .from('sets')
+        .update({ prices_last_synced_at: now })
+        .eq('set_id', setId)
+
+      if (updateErr) {
+        console.error(
+          `[PricingOrchestrator] Failed to update prices_last_synced_at for "${setId}":`,
+          updateErr.message
+        )
+      } else {
+        console.log(`[PricingOrchestrator] Set "${setId}" synced at ${now}`)
+      }
+
+      setsProcessed++
+
+      if (emit) {
+        emit({ type: 'set_done', setId, processed, errors, gradedPointsSaved, syncedAt: now })
+      }
+    }
+
+    const totalElapsed = Date.now() - startTime
+    console.log(
+      `[PricingOrchestrator] Batch complete — ` +
+      `setsProcessed=${setsProcessed}, setsSkipped=${setsSkipped}, ` +
+      `cards=${totalProcessed}, errors=${totalErrors}, ` +
+      `graded=${totalGradedPoints}, undervalued=${totalUndervalued}, ` +
+      `elapsed=${totalElapsed}ms`
+    )
+
+    return {
+      processed:               totalProcessed,
+      errors:                  totalErrors,
+      undervaluedFound:        totalUndervalued,
+      gradedPointsSaved:       totalGradedPoints,
+      setsProcessed,
+      setsSkippedDueToTimeout: setsSkipped,
+    }
+  }
+
+  // ── Path B: no setIds — legacy all-cards pass (admin manual sync) ────────────
+
+  const supabase = await createSupabaseServerClient()
+
+  let query = supabase
+    .from('cards')
+    .select('id, name, set_id, number, api_id')
+
+  if (limit !== undefined) {
+    query = query.limit(limit)
+  }
+
+  const { data: cards, error: dbError } = await query
+
+  if (dbError) {
+    console.error('[PricingOrchestrator] Legacy path: failed to load cards:', dbError.message)
+    return { processed: 0, errors: 1, undervaluedFound: 0, gradedPointsSaved: 0, setsProcessed: 0, setsSkippedDueToTimeout: 0 }
+  }
+
+  if (!cards || cards.length === 0) {
+    console.log('[PricingOrchestrator] Legacy path: no cards found.')
+    return { processed: 0, errors: 0, undervaluedFound: 0, gradedPointsSaved: 0, setsProcessed: 0, setsSkippedDueToTimeout: 0 }
+  }
+
+  console.log(`[PricingOrchestrator] Legacy path: ${cards.length} cards (includeGraded=${includeGraded})`)
+
+  let processed = 0
+  let errors = 0
+  let gradedPointsSaved = 0
+  const processedCardIds: string[] = []
+
+  for (let i = 0; i < cards.length; i++) {
+    const card = cards[i]
+    console.log(`[PricingOrchestrator] Card ${i + 1}/${cards.length}: ${card.name}`)
+
+    try {
+      const apiResult = await fetchPokemonApiPrices(card)
+      const apiPoints = normalizePoints(apiResult.points)
+
+      let ebayPoints: NormalizedPricePoint[] = []
+      if (includeEbayRaw) {
+        const ebayResult = await fetchEbayRawPrices(card)
+        if (ebayResult) {
+          ebayPoints = [{
+            cardId:     card.id,
+            source:     'ebay',
+            variantKey: ebayResult.variantKey,
+            price:      ebayResult.average,
+            priceUsd:   ebayResult.average,
+            currency:   'USD',
+            isGraded:   false,
+          }]
+        }
+      }
+
+      if (includeGraded) {
+        const gradedResults = await fetchEbayGradedPrices(card)
+        if (gradedResults.length > 0) {
+          await upsertGradedPrices(gradedResults)
+          gradedPointsSaved += gradedResults.length
+
+          if (emit) {
+            emit({
+              type:         'graded_card',
+              cardId:       card.id,
+              cardName:     card.name,
+              gradesFound:  gradedResults.length,
+              pointsSaved:  gradedResults.length,
+              runningTotal: gradedPointsSaved,
+            })
+          }
+        }
+      }
+
+      const allPoints = [...apiPoints, ...ebayPoints]
+      await savePricePoints(allPoints)
+      await savePriceHistory(allPoints)
+
+      const aggregated = await aggregatePricesForCard(card.id)
+      await writeCardPriceCache(aggregated)
+
+      processedCardIds.push(card.id)
+      processed++
+
+      if (includeEbayRaw || includeGraded) await sleep(200)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error(`[PricingOrchestrator] Error on card ${card.name} (${card.id}):`, message)
+      errors++
+    }
+  }
+
   let undervaluedFound = 0
   if (processedCardIds.length > 0) {
     try {
       const undervalued = await findUndervaluedCards(processedCardIds)
       undervaluedFound = undervalued.length
-      console.log(`[PricingOrchestrator] Undervalued cards found: ${undervaluedFound}`)
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      console.error('[PricingOrchestrator] Error running undervalued detection:', message)
+      console.error('[PricingOrchestrator] Undervalued detection error:', err instanceof Error ? err.message : String(err))
     }
   }
 
   console.log(
-    `[PricingOrchestrator] Batch complete — processed: ${processed}, errors: ${errors}, ` +
-    `undervalued: ${undervaluedFound}, gradedPointsSaved: ${gradedPointsSaved}`
+    `[PricingOrchestrator] Legacy batch complete — ` +
+    `processed=${processed}, errors=${errors}, elapsed=${Date.now() - startTime}ms`
   )
 
-  return { processed, errors, undervaluedFound, gradedPointsSaved }
+  return {
+    processed,
+    errors,
+    undervaluedFound,
+    gradedPointsSaved,
+    setsProcessed:           0,
+    setsSkippedDueToTimeout: 0,
+  }
 }

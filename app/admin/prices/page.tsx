@@ -86,6 +86,15 @@ export default function AdminPricesPage() {
   const [singleCardState,  setSingleCardState]  = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [singleCardResult, setSingleCardResult] = useState<string>('')
 
+  // ── Bulk seed state ──────────────────────────────────────────────────────────
+  const [bulkStatus,   setBulkStatus]   = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [bulkProgress, setBulkProgress] = useState({
+    setsProcessed: 0, remaining: -1, cardsProcessed: 0, errors: 0, totalRuns: 0,
+  })
+  const [bulkAutoLoop, setBulkAutoLoop] = useState(true)
+  const [bulkMsg,      setBulkMsg]      = useState('')
+  const bulkRunningRef = useRef(false)
+
   // ── Auth guard ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isLoading) {
@@ -154,7 +163,7 @@ export default function AdminPricesPage() {
     setProbeLoading(true)
     setProbeResult(null)
     try {
-      const res = await fetch('/api/prices/discover?probe=cards')
+      const res = await fetch('/api/prices/discover?probe=episodes')
       const json = await res.json()
       setProbeResult(json)
     } catch (e) {
@@ -345,6 +354,82 @@ export default function AdminPricesPage() {
       setSingleCardState('error')
       setSingleCardResult('Network error')
     }
+  }
+
+  // ── Bulk Seed All Sets ─────────────────────────────────────────────────────
+  async function runBulkSeed(forceAll = false) {
+    if (bulkRunningRef.current) return
+    bulkRunningRef.current = true
+    setBulkStatus('running')
+    setBulkMsg('Starting bulk seed…')
+
+    let totalSetsProcessed  = 0
+    let totalCardsProcessed = 0
+    let totalErrors         = 0
+    let totalRuns           = 0
+    let remaining           = 1  // start > 0 so the loop runs at least once
+
+    try {
+      while (remaining > 0 && bulkRunningRef.current) {
+        const res = await fetch('/api/admin/sync/prices/bulk', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ forceAll, concurrency: 5 }),
+        })
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error((data as { error?: string }).error ?? `HTTP ${res.status}`)
+        }
+
+        const data = await res.json() as {
+          setsProcessed: number
+          remaining:     number
+          cardsProcessed: number
+          errors:        number
+          message:       string
+        }
+
+        totalRuns++
+        totalSetsProcessed  += data.setsProcessed
+        totalCardsProcessed += data.cardsProcessed
+        totalErrors         += data.errors
+        remaining            = data.remaining ?? 0
+
+        setBulkProgress({
+          setsProcessed:  totalSetsProcessed,
+          remaining,
+          cardsProcessed: totalCardsProcessed,
+          errors:         totalErrors,
+          totalRuns,
+        })
+        setBulkMsg(data.message ?? '')
+
+        // Stop looping if auto-loop is off
+        if (!bulkAutoLoop) break
+
+        // Tiny delay between runs so the browser stays responsive
+        if (remaining > 0) await new Promise(r => setTimeout(r, 500))
+      }
+
+      setBulkStatus(remaining > 0 ? 'idle' : 'done')
+      setBulkMsg(
+        remaining > 0
+          ? `Paused — ${remaining} sets still pending. Click "Continue" to resume.`
+          : `✅ All sets seeded! ${totalSetsProcessed} sets · ${totalCardsProcessed} cards updated.`
+      )
+    } catch (err) {
+      setBulkStatus('error')
+      setBulkMsg(err instanceof Error ? err.message : 'Bulk seed failed')
+    } finally {
+      bulkRunningRef.current = false
+    }
+  }
+
+  function stopBulkSeed() {
+    bulkRunningRef.current = false
+    setBulkStatus('idle')
+    setBulkMsg(prev => prev ? `Stopped. ${prev}` : 'Stopped.')
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -852,6 +937,96 @@ export default function AdminPricesPage() {
               </div>
             )
           })()}
+        </div>
+
+        {/* ── Bulk Seed All Sets ─────────────────────────────────────────── */}
+        <div className="mt-8 bg-gray-900 border border-gray-700 rounded-xl p-6 space-y-4">
+          <div>
+            <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+              <span>🚀</span> Bulk Seed All Sets
+            </h2>
+            <p className="text-xs text-gray-400 mt-1">
+              Populates TCGPlayer + CardMarket prices for <strong>every set</strong> using the
+              Pokémon TCG API. Runs 5 cards in parallel —
+              typically <strong>5–15 seconds per set</strong>.
+              eBay graded prices are added automatically by the nightly cron.
+            </p>
+          </div>
+
+          {/* Options */}
+          <label className="flex items-center gap-2 cursor-pointer select-none text-sm">
+            <input
+              type="checkbox"
+              checked={bulkAutoLoop}
+              onChange={e => setBulkAutoLoop(e.target.checked)}
+              disabled={bulkStatus === 'running'}
+              className="w-4 h-4 rounded accent-indigo-500"
+            />
+            <span className="text-gray-300">Auto-continue until all sets are done</span>
+          </label>
+
+          {/* Progress display */}
+          {(bulkStatus !== 'idle' || bulkProgress.totalRuns > 0) && (
+            <div className="bg-gray-800 rounded-lg p-3 space-y-1 text-xs font-mono">
+              {bulkMsg && (
+                <p className={
+                  bulkStatus === 'error'   ? 'text-red-400' :
+                  bulkStatus === 'done'    ? 'text-green-400' :
+                  bulkStatus === 'running' ? 'text-indigo-300 animate-pulse' :
+                  'text-gray-300'
+                }>
+                  {bulkMsg}
+                </p>
+              )}
+              {bulkProgress.totalRuns > 0 && (
+                <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-gray-400 pt-1">
+                  <span>Sets done: <span className="text-white">{bulkProgress.setsProcessed}</span></span>
+                  {bulkProgress.remaining >= 0 && (
+                    <span>Remaining: <span className={bulkProgress.remaining === 0 ? 'text-green-400' : 'text-amber-400'}>
+                      {bulkProgress.remaining}
+                    </span></span>
+                  )}
+                  <span>Cards: <span className="text-white">{bulkProgress.cardsProcessed}</span></span>
+                  {bulkProgress.errors > 0 && (
+                    <span>Errors: <span className="text-red-400">{bulkProgress.errors}</span></span>
+                  )}
+                  <span>API calls: <span className="text-white">{bulkProgress.totalRuns}</span></span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="flex flex-wrap gap-3">
+            {bulkStatus !== 'running' && (
+              <>
+                <button
+                  onClick={() => runBulkSeed(false)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  {bulkProgress.totalRuns === 0 ? '🚀 Seed All Sets' : '▶ Continue Seeding'}
+                </button>
+                <button
+                  onClick={() => {
+                    setBulkProgress({ setsProcessed: 0, remaining: -1, cardsProcessed: 0, errors: 0, totalRuns: 0 })
+                    runBulkSeed(true)
+                  }}
+                  className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium rounded-lg transition-colors"
+                  title="Force re-sync ALL sets even if recently priced"
+                >
+                  🔄 Force Reseed All
+                </button>
+              </>
+            )}
+            {bulkStatus === 'running' && (
+              <button
+                onClick={stopBulkSeed}
+                className="px-4 py-2 bg-red-700 hover:bg-red-600 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                ⏹ Stop
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Footer note */}
