@@ -2,9 +2,10 @@ import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import { updatePricesBatch } from './pricingOrchestrator'
 import { fetchPokemonApiPrices } from './pokemonApiService'
 import { fetchEbayRawPrices } from './ebayService'
-import { fetchEbayGradedPrices } from './ebayGradedService'
+import { fetchEbayGradedPrices, isRaritySkippedForGraded } from './ebayGradedService'
 import { normalizePoints } from './priceNormalizer'
 import { savePricePoints, savePriceHistory } from './priceRepository'
+import { upsertGradedPrices, deleteGradedPricesForCard } from './gradedPriceRepository'
 import { aggregatePricesForCard, writeCardPriceCache } from './priceAggregator'
 import { NormalizedPricePoint } from './types'
 
@@ -147,6 +148,15 @@ export async function syncSingleCard(cardId: string): Promise<SyncSingleCardResu
     gradingCompany: r.gradingCompany,
   }))
   console.log(`[PricingJobRunner] syncSingleCard: eBay graded → ${gradedPoints.length} points`)
+
+  // Sync card_graded_prices table: upsert new data or delete stale rows when
+  // the eBay call returned nothing for a non-skipped card (e.g. wrong-card filter
+  // removed all results from a previous bad sync).
+  if (gradedResults.length > 0) {
+    await upsertGradedPrices(gradedResults)
+  } else if (!isRaritySkippedForGraded(card.rarity)) {
+    await deleteGradedPricesForCard(card.id)
+  }
 
   // Step 3 — Save all points
   const allPoints = [...apiPoints, ...ebayPoints, ...gradedPoints]

@@ -5,7 +5,7 @@ import { fetchEbayRawPrices } from './ebayService'
 import { fetchEbayGradedPrices, isRaritySkippedForGraded } from './ebayGradedService'
 import { normalizePoints } from './priceNormalizer'
 import { savePricePoints, savePriceHistory } from './priceRepository'
-import { upsertGradedPrices } from './gradedPriceRepository'
+import { upsertGradedPrices, deleteGradedPricesForCard } from './gradedPriceRepository'
 import { aggregatePricesForCard, writeCardPriceCache } from './priceAggregator'
 import { findUndervaluedCards } from './undervaluedDetector'
 import { NormalizedPricePoint } from './types'
@@ -256,6 +256,11 @@ async function processSingleSet(
               runningTotal: gradedPointsSaved,
             })
           }
+        } else if (!isRaritySkippedForGraded(card.rarity)) {
+          // We made an eBay call but got zero valid results (e.g. all results were
+          // for a same-named card with a different collector number). Delete any
+          // stale graded rows that may have been stored from a previous bad sync.
+          await deleteGradedPricesForCard(card.id)
         }
       }
 
@@ -498,6 +503,8 @@ export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Pro
               runningTotal: gradedPointsSaved,
             })
           }
+        } else if (!isRaritySkippedForGraded(card.rarity)) {
+          await deleteGradedPricesForCard(card.id)
         }
       }
 

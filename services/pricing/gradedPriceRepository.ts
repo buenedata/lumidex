@@ -47,3 +47,29 @@ export async function upsertGradedPrices(results: EbayGradedResult[]): Promise<v
     }
   }
 }
+
+/**
+ * Delete all graded price rows for a single card.
+ * Called when a sync attempt returns zero results for a non-skipped card —
+ * this means any existing rows are stale (e.g. they were fetched for a
+ * same-named card with a different collector number) and must be removed.
+ *
+ * Logs errors but does not throw.
+ */
+export async function deleteGradedPricesForCard(cardId: string): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+
+  const { error } = await supabase
+    .from('card_graded_prices')
+    .delete()
+    .eq('card_id', cardId);
+
+  if (error) {
+    console.error(
+      `[gradedPriceRepository] deleteGradedPricesForCard: failed for card "${cardId}":`,
+      error.message
+    );
+  } else {
+    console.log(`[gradedPriceRepository] Deleted stale graded rows for card "${cardId}"`);
+  }
+}
