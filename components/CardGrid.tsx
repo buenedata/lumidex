@@ -1022,23 +1022,28 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
           const shouldGrey        = greyOutUnowned && !isOwned
 
           // Quick-add buttons: server already pre-filtered by override/rarity rules.
+          // Card-specific variants are never shown as dots — the +N badge on the image handles them.
           const filteredQuick = quickVariants
-          // Determine what to show in the button row:
-          //  - 0 card-specific variants → show all buttons normally
-          //  - 1 card-specific variant  → show it alongside global buttons normally (works like any button)
-          //  - 2+ card-specific variants → show only global buttons + grey ★ (opens modal)
-          const specificQuick = filteredQuick.filter(v => v.card_id != null)
-          const buttonsToRender = specificQuick.length <= 1
-            ? filteredQuick
-            : filteredQuick.filter(v => v.card_id == null)
+          const buttonsToRender = filteredQuick.filter(v => v.card_id == null)
 
           return (
             <div
               key={card.id}
               id={`card-${card.id}`}
-              className="group cursor-pointer flex-shrink-0 flex flex-col"
+              className="group relative cursor-pointer flex-shrink-0 flex flex-col"
               style={{ width: 220 }}
             >
+              {/* +N badge — overlaps top-right corner of card; outside overflow-hidden so it can protrude */}
+              {customVariantCount > 0 && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleCardClick(card) }}
+                  title={`${customVariantCount} card-specific variant${customVariantCount > 1 ? 's' : ''} — open to manage`}
+                  className="absolute -top-2.5 right-1.5 z-20 flex items-center justify-center bg-accent text-white text-[10px] font-bold leading-none px-1.5 py-0.5 rounded-full shadow-lg ring-1 ring-white/20 transition-all duration-200 hover:scale-110 hover:brightness-110 whitespace-nowrap"
+                >
+                  +{customVariantCount} variant{customVariantCount > 1 ? 's' : ''}
+                </button>
+              )}
+
               {/* ── Image area ── */}
               <div
                 className={`relative w-[220px] h-[308px] rounded-lg overflow-hidden border transition-all duration-200 cursor-pointer ${typeGlowClass} ${
@@ -1062,17 +1067,6 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                     }
                   }}
                 />
-
-                {/* +N badge — card-specific variants indicator */}
-                {customVariantCount > 0 && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleCardClick(card) }}
-                    title={`${customVariantCount} card-specific variant${customVariantCount > 1 ? 's' : ''} — open to manage`}
-                    className="absolute top-2 right-2 z-20 flex items-center justify-center bg-accent text-white text-[10px] font-bold leading-none px-1.5 py-0.5 rounded-full shadow-md ring-1 ring-white/20 transition-all duration-200 hover:scale-110 hover:bg-accent-hover"
-                  >
-                    +{customVariantCount}
-                  </button>
-                )}
 
                 {/* Hover overlay */}
                 <div className="absolute inset-0 z-10" />
