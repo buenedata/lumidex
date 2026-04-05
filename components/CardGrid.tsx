@@ -903,6 +903,29 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     if (user) fetchWantedCards()
   }
 
+  // Navigate to the previous / next card while the modal is open
+  const navigateCard = (dir: 1 | -1) => {
+    if (!selectedCard) return
+    const idx = cards.findIndex(c => c.id === selectedCard.id)
+    if (idx === -1) return
+    const next = cards[idx + dir]
+    if (!next) return
+    handleCardClick(next)
+  }
+
+  // Keyboard left / right arrow navigation inside the modal
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    if (!selectedCard) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft')  navigateCard(-1)
+      if (e.key === 'ArrowRight') navigateCard(1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCard, cards])
+
   // Single click on card image — open modal after short delay so double-click can cancel it
   const handleCardImageClick = (card: PokemonCard) => {
     if (clickTimerRef.current) return // already waiting; second click = dblclick path
@@ -1207,7 +1230,40 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                     #{(selectedCard.number || 'Unknown').split('/')[0]}/{setComplete ?? setTotal}
                   </p>
                 </div>
-                <div className="flex items-center">
+                <div className="flex items-center gap-0.5">
+                  {/* Prev / Next card navigation */}
+                  {(() => {
+                    const navIdx = cards.findIndex(c => c.id === selectedCard.id)
+                    return (
+                      <>
+                        <button
+                          onClick={() => navigateCard(-1)}
+                          disabled={navIdx <= 0}
+                          title="Previous card (←)"
+                          className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-[color:var(--color-bg-base)] disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                          </svg>
+                        </button>
+                        <span className="text-xs text-muted tabular-nums min-w-[3rem] text-center select-none">
+                          {navIdx + 1} / {cards.length}
+                        </span>
+                        <button
+                          onClick={() => navigateCard(1)}
+                          disabled={navIdx >= cards.length - 1}
+                          title="Next card (→)"
+                          className="p-1.5 rounded-lg text-muted hover:text-primary hover:bg-[color:var(--color-bg-base)] disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </button>
+                      </>
+                    )
+                  })()}
+                  {/* Divider */}
+                  <span className="w-px h-5 bg-subtle mx-1 shrink-0" />
                   {/* Wanted / Wishlist star — authenticated users only */}
                   {user && (
                     <button

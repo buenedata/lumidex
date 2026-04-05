@@ -2,7 +2,7 @@ import { getSetById, getCardsBySet, hasPromoCards } from '@/lib/db'
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import { supabaseAdmin } from '@/lib/supabase'
 import { PokemonCard, PokemonSet, CollectionGoal, PriceSource } from '@/types'
-import { getCardPricesForSet, getSealedProductsForSet, buildCardPriceMap, type SetProductPrice } from '@/lib/pricing'
+import { getCardPricesForSet, buildCardPriceMap } from '@/lib/pricing'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import SetPageCards from '@/components/SetPageCards'
@@ -31,7 +31,6 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
   let cardPricesUSD: Record<string, number> = {}
   let setTotalValue = 0
   let mostExpensive: PokemonCard | null = null
-  let sealedProducts: SetProductPrice[] = []
   let pricesAreLive = false
 
   try {
@@ -104,12 +103,7 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
   // ── Real price lookup ─────────────────────────────────────────────────────
   // Only real DB prices are used — cards without a price row show no price.
   try {
-    const [realPrices, products] = await Promise.all([
-      getCardPricesForSet(id, priceSource),
-      getSealedProductsForSet(id),
-    ])
-
-    sealedProducts = products
+    const realPrices = await getCardPricesForSet(id, priceSource)
     cardPricesUSD = buildCardPriceMap(cards, realPrices)
     pricesAreLive = Object.keys(cardPricesUSD).length > 0
   } catch (err) {
@@ -259,7 +253,6 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
         currency={currency}
         pricesAreLive={pricesAreLive}
         priceSource={priceSource}
-        sealedProducts={sealedProducts}
         statSeries={set.series ?? '—'}
         statReleased={
           set.release_date

@@ -55,26 +55,27 @@ export default function DashboardPage() {
               <div key={i} className="skeleton h-10 w-28 rounded-xl shrink-0" />
             ))}
           </div>
-          {/* Stats skeleton */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="skeleton h-20 rounded-xl" />
-            ))}
-          </div>
-          {/* Sets + spotlight skeleton */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="bg-surface border border-subtle rounded-xl overflow-hidden">
-                  <div className="skeleton h-32 w-full" />
-                  <div className="p-3 space-y-2">
-                    <div className="skeleton h-4 w-3/4 rounded" />
-                    <div className="skeleton h-3 w-1/2 rounded" />
-                  </div>
-                </div>
+          {/* Stats + Spotlight skeleton */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6 items-start">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="skeleton h-20 rounded-xl" />
               ))}
             </div>
-            <div className="skeleton h-96 rounded-2xl" />
+            <div className="skeleton h-64 rounded-2xl" />
+          </div>
+          {/* Sets skeleton — full width */}
+          <div className="skeleton h-12 rounded-xl" />
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="bg-surface border border-subtle rounded-xl overflow-hidden">
+                <div className="skeleton h-32 w-full" />
+                <div className="p-3 space-y-2">
+                  <div className="skeleton h-4 w-3/4 rounded" />
+                  <div className="skeleton h-3 w-1/2 rounded" />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -150,99 +151,95 @@ export default function DashboardPage() {
         {/* ── Stats + Sets content ─────────────────────────────────────── */}
         {userPokemonSets.length > 0 ? (
           <>
-            {/* Stats row */}
-            <DashboardStats
-              totalCards={totalCards}
-              setsTracked={setsTracked}
-              completedSets={completedSets}
-              setsAvailable={pokemonSets.size}
-            />
-
-            {/* Sets grid   Spotlight sidebar */}
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6 items-start">
-
-              {/* ── Your Sets (collapsible) ────────────────────────────── */}
-              <div>
-                {/* Accordion header — styled card so it's unmistakably clickable */}
-                <div className={`bg-surface border border-subtle rounded-xl overflow-hidden mb-4 transition-colors duration-150 ${setsExpanded ? 'border-accent/40' : 'hover:border-accent/30'}`}>
-                  <button
-                    type="button"
-                    onClick={() => setSetsExpanded(prev => !prev)}
-                    className="w-full flex items-center justify-between px-4 py-3 group"
-                  >
-                    {/* Left: title + pills */}
-                    <div className="flex items-center gap-2 min-w-0">
-                      {/* Animated chevron — left side, inside a small badge */}
-                      <span
-                        className={`shrink-0 w-6 h-6 rounded-md flex items-center justify-center bg-elevated border border-subtle text-muted transition-transform duration-200 ${setsExpanded ? 'rotate-180' : ''}`}
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
-                        </svg>
-                      </span>
-                      <h2
-                        className="text-lg font-semibold text-primary"
-                        style={{ fontFamily: 'var(--font-space-grotesk)' }}
-                      >
-                        Your Sets
-                      </h2>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-elevated border border-subtle text-secondary font-medium">
-                        {setsTracked} {setsTracked === 1 ? 'set' : 'sets'}
-                      </span>
-                      {completedSets > 0 && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-price/10 border border-price/30 text-price font-medium">
-                          ✓ {completedSets} complete
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Right: expand hint + add button */}
-                    <div className="flex items-center gap-2 shrink-0 ml-3">
-                      <span className="text-xs text-muted group-hover:text-secondary transition-colors duration-150 hidden sm:block">
-                        {setsExpanded ? 'Hide sets' : 'Show sets'}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={e => { e.stopPropagation(); setShowAddSet(true) }}
-                      >
-                        + Add Set
-                      </Button>
-                    </div>
-                  </button>
-                </div>
-
-                {/* Collapsible grid */}
-                {setsExpanded && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-                    {userPokemonSets.map(set => (
-                      <div key={set.id} className="relative">
-                        {/* "NEW" chip for recently added sets */}
-                        {isNewSet(set.id) && (
-                          <div className="absolute top-2 left-2 z-30">
-                            <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-accent text-white shadow-lg shadow-accent/30 tracking-wide">
-                              NEW
-                            </span>
-                          </div>
-                        )}
-                        <SetCard
-                          set={set}
-                          progress={calculateSetProgress(set.id)}
-                          onRemove={() => handleRemoveSet(set.id)}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* ── Collection Spotlight ───────────────────────────────── */}
+            {/* Stats + Spotlight sidebar — always visible, decoupled from Your Sets */}
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6 items-start mb-6">
+              <DashboardStats
+                totalCards={totalCards}
+                setsTracked={setsTracked}
+                completedSets={completedSets}
+                setsAvailable={pokemonSets.size}
+              />
               <div className="lg:sticky lg:top-20">
                 <CollectionSpotlight
                   sets={userPokemonSets}
                   getProgress={calculateSetProgress}
                 />
               </div>
+            </div>
+
+            {/* ── Your Sets (collapsible) — full width ─────────────────── */}
+            <div className="mb-6">
+              {/* Accordion header — styled card so it's unmistakably clickable */}
+              <div className={`bg-surface border border-subtle rounded-xl overflow-hidden mb-4 transition-colors duration-150 ${setsExpanded ? 'border-accent/40' : 'hover:border-accent/30'}`}>
+                <button
+                  type="button"
+                  onClick={() => setSetsExpanded(prev => !prev)}
+                  className="w-full flex items-center justify-between px-4 py-3 group"
+                >
+                  {/* Left: title + pills */}
+                  <div className="flex items-center gap-2 min-w-0">
+                    {/* Animated chevron */}
+                    <span
+                      className={`shrink-0 w-6 h-6 rounded-md flex items-center justify-center bg-elevated border border-subtle text-muted transition-transform duration-200 ${setsExpanded ? 'rotate-180' : ''}`}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </span>
+                    <h2
+                      className="text-lg font-semibold text-primary"
+                      style={{ fontFamily: 'var(--font-space-grotesk)' }}
+                    >
+                      Your Sets
+                    </h2>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-elevated border border-subtle text-secondary font-medium">
+                      {setsTracked} {setsTracked === 1 ? 'set' : 'sets'}
+                    </span>
+                    {completedSets > 0 && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-price/10 border border-price/30 text-price font-medium">
+                        ✓ {completedSets} complete
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Right: expand hint + add button */}
+                  <div className="flex items-center gap-2 shrink-0 ml-3">
+                    <span className="text-xs text-muted group-hover:text-secondary transition-colors duration-150 hidden sm:block">
+                      {setsExpanded ? 'Hide sets' : 'Show sets'}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={e => { e.stopPropagation(); setShowAddSet(true) }}
+                    >
+                      + Add Set
+                    </Button>
+                  </div>
+                </button>
+              </div>
+
+              {/* Collapsible grid */}
+              {setsExpanded && (
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+                  {userPokemonSets.map(set => (
+                    <div key={set.id} className="relative">
+                      {/* "NEW" chip for recently added sets */}
+                      {isNewSet(set.id) && (
+                        <div className="absolute top-2 left-2 z-30">
+                          <span className="inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-full bg-accent text-white shadow-lg shadow-accent/30 tracking-wide">
+                            NEW
+                          </span>
+                        </div>
+                      )}
+                      <SetCard
+                        set={set}
+                        progress={calculateSetProgress(set.id)}
+                        onRemove={() => handleRemoveSet(set.id)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </>
         ) : (

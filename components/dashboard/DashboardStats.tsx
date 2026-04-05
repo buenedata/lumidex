@@ -81,7 +81,7 @@ export default function DashboardStats({
   const completedBorder = completedSets >= 1 ? 'border-l-2 border-l-price' : 'border-l-2 border-l-purple-400'
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       <StatCard
         label="Cards Owned"
         value={totalCards.toLocaleString()}
