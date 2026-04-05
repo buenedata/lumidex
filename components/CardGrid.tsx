@@ -87,36 +87,19 @@ interface CardGridProps {
 
 // ── Standalone component — zero React state, RAF-gated DOM writes for buttery 3D tilt ──
 //
-// variantSrc    – when truthy, cross-fades a variant image over the base image.
-// holoEffect    – drives a pure-CSS rainbow foil effect:
-//   'reverse-holo' → shimmer on the card border/background, NOT the inner frame artwork
-//   'holo'         → shimmer ONLY inside the inner frame artwork area
-//
-// Both effects are updated every rAF frame from mouse position so the rainbow slides
-// naturally as the cursor moves — no state, no re-renders.
+// variantSrc – when truthy, cross-fades a variant image over the base image.
 function CardGlareImage({
   src,
   variantSrc,
-  holoEffect,
-  isFullArt,
   alt,
 }: {
   src: string | null | undefined
   variantSrc?: string | null
-  holoEffect?: 'reverse-holo' | 'holo' | null
-  /** True for full-art / special-illustration prints — shimmer covers full card face */
-  isFullArt?: boolean
   alt?: string
 }) {
   const cardRef  = useRef<HTMLDivElement>(null)
   const glareRef = useRef<HTMLDivElement>(null)
-  const holoRef  = useRef<HTMLDivElement>(null)
   const rafRef   = useRef<number | null>(null)
-
-  // Mirror the prop into a ref so the RAF closure always sees the current value
-  // without needing to re-create the RAF callback on every render.
-  const holoEffectRef = useRef<'reverse-holo' | 'holo' | null>(null)
-  useEffect(() => { holoEffectRef.current = holoEffect ?? null }, [holoEffect])
 
   // ── Variant image cross-fade ─────────────────────────────────────────────
   const [displayedVariantSrc, setDisplayedVariantSrc] = useState<string | null>(null)
@@ -140,23 +123,6 @@ function CardGlareImage({
       fadeOutTimerRef.current = setTimeout(() => setDisplayedVariantSrc(null), 320)
     }
   }, [variantSrc])
-
-  // ── Show / hide holo layer immediately when holoEffect changes ───────────
-  // handleMouseMove only fires over the card image; the user may hover a variant
-  // row on the right panel without ever moving over the card. We must show the
-  // effect as soon as holoEffect becomes non-null, independent of mouse position.
-  useEffect(() => {
-    if (!holoRef.current) return
-    if (holoEffect) {
-      // Resting centred rainbow at reduced opacity — raised to full on mouse-move.
-      const h = (off: number) => `hsla(${off % 360},80%,65%,0.40)`
-      holoRef.current.style.backgroundImage =
-        `linear-gradient(135deg,${h(0)} 0%,${h(60)} 17%,${h(120)} 34%,${h(180)} 51%,${h(240)} 68%,${h(300)} 85%,${h(360)} 100%)`
-      holoRef.current.style.opacity = '0.25'
-    } else {
-      holoRef.current.style.opacity = '0'
-    }
-  }, [holoEffect])
 
   // Cancel pending RAF / timers on unmount
   useEffect(() => () => {
@@ -190,18 +156,6 @@ function CardGlareImage({
       glareRef.current.style.background =
         `radial-gradient(circle at ${x * 100}% ${y * 100}%, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.08) 35%, rgba(255,255,255,0) 65%)`
 
-      // ── Holographic rainbow layer ──────────────────────────────────────
-      if (holoRef.current && holoEffectRef.current) {
-        // Hue sweeps left→right; gradient angle rotates with both axes.
-        const hue   = (x * 300 + 30) % 360
-        const angle = 90 + x * 180 + y * 30
-        const h = (off: number) => `hsla(${(hue + off) % 360},80%,65%,0.40)`
-        holoRef.current.style.opacity         = '1'
-        holoRef.current.style.backgroundImage =
-          `linear-gradient(${angle}deg,${h(0)} 0%,${h(60)} 17%,${h(120)} 34%,${h(180)} 51%,${h(240)} 68%,${h(300)} 85%,${h(360)} 100%)`
-      } else if (holoRef.current) {
-        holoRef.current.style.opacity = '0'
-      }
     })
   }
 
@@ -211,66 +165,6 @@ function CardGlareImage({
     cardRef.current.style.transition = 'transform 600ms cubic-bezier(0.16,1,0.3,1)'
     cardRef.current.style.transform  = 'perspective(800px) rotateX(0deg) rotateY(0deg)'
     glareRef.current.style.opacity   = '0'
-    // Keep a gentle resting glow for always-on holo/reverse-holo cards;
-    // fully hide only when there is no current effect.
-    if (holoRef.current) holoRef.current.style.opacity = holoEffectRef.current ? '0.25' : '0'
-  }
-
-  // ── Static mask / clip styles for each holo effect ──────────────────────
-  // ── Reverse-holo: SVG data-URI mask (universally supported) ─────────────
-  //
-  // On a real reverse-holo card the foil is the CARD BACKGROUND — it shimmers
-  // through the name plate, attack rows, border etc., but NOT through the solid
-  // artwork photo box.  We mask out only the illustration rectangle:
-  //
-  //   Name / HP bar    0 – 16%  of card height
-  //   Artwork photo   16 – 53%  → height = 37%, width = 85% (7.5% margin each side)
-  //   Text / attacks  53 – 100%
-  //
-  // CSS mask-image uses the ALPHA channel — fill="black" is still opaque (alpha=1)
-  // and would NOT hide the shimmer. We need actual transparency in the artwork area.
-  //
-  // Solution: a single <path> with fill-rule="evenodd" creates a true "donut" shape:
-  //   Outer subpath  M0 0 … Z     full card    → winding 1 (odd)  → filled white (alpha=1)
-  //   Inner subpath  M7.5 16 … Z  artwork box  → winding 2 (even) → unfilled   (alpha=0)
-  //
-  // The artwork box has zero fill → transparent → shimmer HIDDEN.
-  // All other card areas are white/opaque → shimmer SHOWN.
-  // preserveAspectRatio="none" stretches the SVG to exact card pixel dimensions.
-  const reverseHoloSvg = encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none">` +
-    `<path fill-rule="evenodd" fill="white" d="M0 0 H100 V100 H0 Z M7.5 12 H92.5 V51 H7.5 Z"/>` +
-    `</svg>`
-  )
-  const reverseHoloMaskStyle: React.CSSProperties = {
-    WebkitMaskImage:  `url("data:image/svg+xml,${reverseHoloSvg}")`,
-    maskImage:        `url("data:image/svg+xml,${reverseHoloSvg}")`,
-    WebkitMaskSize:   '100% 100%',
-    maskSize:         '100% 100%',
-    WebkitMaskRepeat: 'no-repeat',
-    maskRepeat:       'no-repeat',
-  }
-
-  // ── Holo: clip shimmer to artwork window (standard) or full card (full-art) ──
-  //
-  // Standard frame: artwork occupies 16%–53% vertically, 8% margin each side.
-  //   inset(top right bottom left) = inset(16% 8% 42% 8%)
-  //   Bottom inset = 100 - 53 - (bottom text area) ≈ 42% clears attacks/weakness.
-  //
-  // Full-art (Rare Ultra, Rainbow, SIR etc.): artwork fills the whole card face,
-  //   so shimmer should cover end-to-end with only a 1% safety margin.
-  const holoMaskStyle: React.CSSProperties = isFullArt
-    ? { clipPath: 'inset(1% 1% 1% 1% round 8px)' }
-    : { clipPath: 'inset(12% 8% 49% 8% round 3px)' }
-
-  const holoLayerStyle: React.CSSProperties = {
-    // 'screen' adds the rainbow on top of the card image reliably — more visible
-    // than 'color-dodge' which is near-invisible on dark pixel areas.
-    mixBlendMode: 'screen',
-    opacity: 0,
-    transition: 'opacity 250ms ease',
-    ...(holoEffect === 'reverse-holo' ? reverseHoloMaskStyle : {}),
-    ...(holoEffect === 'holo'         ? holoMaskStyle        : {}),
   }
 
   return (
@@ -308,13 +202,6 @@ function CardGlareImage({
             }}
           />
         )}
-
-        {/* Holographic rainbow layer — shown for Reverse Holo / Holo variants */}
-        <div
-          ref={holoRef}
-          className="absolute inset-0 pointer-events-none transform-gpu"
-          style={{ zIndex: 8, ...holoLayerStyle }}
-        />
 
         {/* White glare spot — sits above everything */}
         <div
@@ -1116,49 +1003,6 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       ? hoveredVariant.variant_image_url
       : null
 
-  // CSS holographic effect — maps variant name to effect type.
-  const getHoloEffect = (name: string | null | undefined): 'reverse-holo' | 'holo' | null => {
-    if (!name) return null
-    const n = name.toLowerCase()
-    if (n.includes('reverse')) return 'reverse-holo'
-    if (n.includes('holo') || n.includes('holofoil')) return 'holo'
-    return null
-  }
-
-  // Returns true for special-print rarities where the artwork fills the whole card
-  // face (Full Art, Rainbow, Special Illustration, Secret Rare, Hyper Rare).
-  // Used to skip the artwork-window clip-path and let the holo shimmer cover the
-  // full card instead — matching how real foil full-art cards look.
-  // Keep in sync with https://pokemontcg.io/docs#rarity
-  const isFullArtCard = (rarity: string | null | undefined): boolean => {
-    if (!rarity) return false
-    const r = rarity.toLowerCase()
-    return (
-      r.includes('rare ultra')           ||  // Full Art EX / GX / V / VMAX
-      r.includes('rare rainbow')         ||  // Rainbow Rare (older naming)
-      r.includes('rare secret')          ||  // Secret Rare
-      r.includes('special illustration') ||  // Special Illustration Rare (SIR)
-      r.includes('illustration rare')    ||  // Illustration Rare (IR)
-      r.includes('hyper rare')               // Hyper Rare / ACE SPEC ultra
-    )
-  }
-
-  // Base effect: driven by the card's quick-add / default variant — ALWAYS ON when
-  // the card is naturally a holo or reverse-holo card (e.g. a card where the only
-  // variant is "Holo Rare" should permanently show the holo shimmer).
-  const defaultVariantObj = filteredVariants.find(v => v.id === defaultVariantId || v.is_quick_add) ?? null
-  const baseHoloEffect = selectedCard ? getHoloEffect(defaultVariantObj?.name) : null
-
-  // Hover override: when the user hovers a DIFFERENT variant row (and no uploaded
-  // image is taking over), the hovered variant's effect replaces the base.
-  const hoverHoloEffect: 'reverse-holo' | 'holo' | null =
-    hoveredVariant && hoveredVariant.id !== defaultVariantId && !variantImageSrc
-      ? getHoloEffect(hoveredVariant.name)
-      : null
-
-  // Final: hover takes priority; falls back to the card's natural base effect.
-  const holoEffect: 'reverse-holo' | 'holo' | null = hoverHoloEffect ?? baseHoloEffect
-
   return (
     <>
       <div className="flex flex-wrap gap-4">
@@ -1337,8 +1181,6 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
               <CardGlareImage
                 src={selectedCard.image_url}
                 variantSrc={variantImageSrc}
-                holoEffect={holoEffect}
-                isFullArt={isFullArtCard(selectedCard.rarity)}
                 alt={selectedCard.name ?? undefined}
               />
               {/* Artist credit — displayed below card image */}
