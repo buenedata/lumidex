@@ -1646,9 +1646,10 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                                   const priceRow = cardPriceCache.get(selectedCard.id)
                                   if (!priceRow) return isLoadingPrice ? '…' : '—'
 
-                                  const vName     = variant.name.toLowerCase()
-                                  const isReverse = vName.includes('reverse')
-                                  const isHolo    = vName.includes('holo') && !isReverse
+                                  const vName        = variant.name.toLowerCase()
+                                  const isReverse    = vName.includes('reverse')
+                                  const isHolo       = vName.includes('holo') && !isReverse
+                                  const is1stEdition = vName.includes('1st') || vName.includes('first edition')
 
                                   let price: number | null = null
                                   if (priceSource === 'cardmarket') {
@@ -1658,10 +1659,14 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                                       : (priceRow.cm_avg_sell ?? priceRow.cm_trend ?? null)
                                     price = eur != null ? Math.round(eur * EUR_TO_USD * 100) / 100 : null
                                   } else {
-                                    // TCGPlayer per-variant columns
-                                    price = isReverse ? (priceRow.tcgp_reverse_holo ?? null)
-                                          : isHolo    ? (priceRow.tcgp_holo         ?? null)
-                                          :             (priceRow.tcgp_normal        ?? priceRow.tcgp_market ?? null)
+                                    // TCGPlayer per-variant columns — only show a price when we have a
+                                    // dedicated column for the variant type. Do NOT fall back to
+                                    // tcgp_market for unrecognised variants (e.g. Play! Pokémon Prize
+                                    // Pack) — showing the wrong price is more misleading than showing —.
+                                    price = isReverse    ? (priceRow.tcgp_reverse_holo ?? null)
+                                          : isHolo       ? (priceRow.tcgp_holo         ?? null)
+                                          : is1stEdition ? (priceRow.tcgp_1st_edition  ?? null)
+                                          :                (priceRow.tcgp_normal        ?? null)
                                   }
                                   return price != null ? formatPrice(price, effectiveCurrency) : '—'
                                 })()}
