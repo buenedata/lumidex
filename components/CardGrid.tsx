@@ -138,6 +138,24 @@ function CardGlareImage({
     }
   }, [variantSrc])
 
+  // ── Show / hide holo layer immediately when holoEffect changes ───────────
+  // handleMouseMove only fires over the card image; the user may hover a variant
+  // row on the right panel without ever moving over the card. We must show the
+  // effect as soon as holoEffect becomes non-null, independent of mouse position.
+  useEffect(() => {
+    if (!holoRef.current) return
+    if (holoEffect) {
+      // Visible centred rainbow — live-updated if the mouse enters the card.
+      // Use 0.75 alpha so it's clearly visible with mix-blend-mode: screen.
+      const h = (off: number) => `hsla(${off % 360},100%,60%,0.75)`
+      holoRef.current.style.backgroundImage =
+        `linear-gradient(135deg,${h(0)} 0%,${h(60)} 17%,${h(120)} 34%,${h(180)} 51%,${h(240)} 68%,${h(300)} 85%,${h(360)} 100%)`
+      holoRef.current.style.opacity = '1'
+    } else {
+      holoRef.current.style.opacity = '0'
+    }
+  }, [holoEffect])
+
   // Cancel pending RAF / timers on unmount
   useEffect(() => () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
@@ -172,14 +190,13 @@ function CardGlareImage({
 
       // ── Holographic rainbow layer ──────────────────────────────────────
       if (holoRef.current && holoEffectRef.current) {
-        // Hue sweeps across the spectrum as the mouse moves left → right.
-        // Gradient angle rotates slightly with both x and y for a live foil feel.
+        // Hue sweeps left→right; gradient angle rotates with both axes.
         const hue   = (x * 300 + 30) % 360
         const angle = 90 + x * 180 + y * 30
-        const h = (offset: number) => `hsla(${(hue + offset) % 360},100%,65%,0.55)`
+        const h = (off: number) => `hsla(${(hue + off) % 360},100%,60%,0.75)`
         holoRef.current.style.opacity         = '1'
         holoRef.current.style.backgroundImage =
-          `linear-gradient(${angle}deg,${h(0)} 0%,${h(60)} 20%,${h(120)} 40%,${h(180)} 60%,${h(240)} 80%,${h(300)} 100%)`
+          `linear-gradient(${angle}deg,${h(0)} 0%,${h(60)} 17%,${h(120)} 34%,${h(180)} 51%,${h(240)} 68%,${h(300)} 85%,${h(360)} 100%)`
       } else if (holoRef.current) {
         holoRef.current.style.opacity = '0'
       }
@@ -226,10 +243,11 @@ function CardGlareImage({
   }
 
   const holoLayerStyle: React.CSSProperties = {
-    mixBlendMode: 'color-dodge',
+    // 'screen' adds the rainbow on top of the card image reliably — more visible
+    // than 'color-dodge' which is near-invisible on dark pixel areas.
+    mixBlendMode: 'screen',
     opacity: 0,
     transition: 'opacity 250ms ease',
-    backgroundSize: '200% 200%',
     ...(holoEffect === 'reverse-holo' ? reverseHoloMaskStyle : {}),
     ...(holoEffect === 'holo'         ? holoMaskStyle        : {}),
   }
@@ -1077,20 +1095,30 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       ? hoveredVariant.variant_image_url
       : null
 
-  // CSS holographic effect for global variants — no uploaded image required.
-  // Reverse Holo → shimmer on the card border/background, NOT the inner artwork frame.
-  // Holo         → shimmer only inside the inner artwork frame.
-  // Only applied when no uploaded variant image is already handling the visual swap.
-  const getHoloEffect = (name: string): 'reverse-holo' | 'holo' | null => {
+  // CSS holographic effect — maps variant name to effect type.
+  const getHoloEffect = (name: string | null | undefined): 'reverse-holo' | 'holo' | null => {
+    if (!name) return null
     const n = name.toLowerCase()
     if (n.includes('reverse')) return 'reverse-holo'
     if (n.includes('holo') || n.includes('holofoil')) return 'holo'
     return null
   }
-  const holoEffect: 'reverse-holo' | 'holo' | null =
-    hoveredVariant && !variantImageSrc
+
+  // Base effect: driven by the card's quick-add / default variant — ALWAYS ON when
+  // the card is naturally a holo or reverse-holo card (e.g. a card where the only
+  // variant is "Holo Rare" should permanently show the holo shimmer).
+  const defaultVariantObj = filteredVariants.find(v => v.id === defaultVariantId || v.is_quick_add) ?? null
+  const baseHoloEffect = selectedCard ? getHoloEffect(defaultVariantObj?.name) : null
+
+  // Hover override: when the user hovers a DIFFERENT variant row (and no uploaded
+  // image is taking over), the hovered variant's effect replaces the base.
+  const hoverHoloEffect: 'reverse-holo' | 'holo' | null =
+    hoveredVariant && hoveredVariant.id !== defaultVariantId && !variantImageSrc
       ? getHoloEffect(hoveredVariant.name)
       : null
+
+  // Final: hover takes priority; falls back to the card's natural base effect.
+  const holoEffect: 'reverse-holo' | 'holo' | null = hoverHoloEffect ?? baseHoloEffect
 
   return (
     <>
