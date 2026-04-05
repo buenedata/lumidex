@@ -227,12 +227,19 @@ function CardGlareImage({
   //   Artwork photo   16 – 53%  → height = 37%, width = 85% (7.5% margin each side)
   //   Text / attacks  53 – 100%
   //
-  // SVG: white = show shimmer, black = hide shimmer (artwork-box-only cutout).
-  // preserveAspectRatio="none" stretches the SVG to exact card dimensions.
+  // CSS mask-image uses the ALPHA channel — fill="black" is still opaque (alpha=1)
+  // and would NOT hide the shimmer. We need actual transparency in the artwork area.
+  //
+  // Solution: a single <path> with fill-rule="evenodd" creates a true "donut" shape:
+  //   Outer subpath  M0 0 … Z     full card    → winding 1 (odd)  → filled white (alpha=1)
+  //   Inner subpath  M7.5 16 … Z  artwork box  → winding 2 (even) → unfilled   (alpha=0)
+  //
+  // The artwork box has zero fill → transparent → shimmer HIDDEN.
+  // All other card areas are white/opaque → shimmer SHOWN.
+  // preserveAspectRatio="none" stretches the SVG to exact card pixel dimensions.
   const reverseHoloSvg = encodeURIComponent(
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" preserveAspectRatio="none">` +
-    `<rect width="100" height="100" fill="white"/>` +
-    `<rect x="7.5" y="16" width="85" height="37" rx="2" fill="black"/>` +
+    `<path fill-rule="evenodd" fill="white" d="M0 0 H100 V100 H0 Z M7.5 16 H92.5 V53 H7.5 Z"/>` +
     `</svg>`
   )
   const reverseHoloMaskStyle: React.CSSProperties = {
