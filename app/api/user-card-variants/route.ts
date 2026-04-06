@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { checkAndUnlockAchievements } from '@/lib/achievements'
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,6 +38,11 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      // Fire-and-forget: check & revoke/unlock achievements after card removal
+      checkAndUnlockAchievements(userId, supabaseAdmin).catch(err =>
+        console.error('[user-card-variants POST] achievement sync failed:', err)
+      )
+
       return NextResponse.json({
         message: 'Card variant removed successfully',
         quantity: 0
@@ -69,6 +75,11 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // Fire-and-forget: check & unlock any newly earned achievements
+    checkAndUnlockAchievements(userId, supabaseAdmin).catch(err =>
+      console.error('[user-card-variants POST] achievement sync failed:', err)
+    )
 
     return NextResponse.json({
       message: 'Card variant updated successfully',
@@ -135,6 +146,11 @@ export async function PATCH(request: NextRequest) {
         )
       }
 
+      // Fire-and-forget: check & revoke/unlock achievements after card removal
+      checkAndUnlockAchievements(userId, supabaseAdmin).catch(err =>
+        console.error('[user-card-variants PATCH] achievement sync failed:', err)
+      )
+
       return NextResponse.json({
         message: 'Card variant removed successfully',
         quantity: 0
@@ -169,6 +185,11 @@ export async function PATCH(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // Fire-and-forget: check & unlock any newly earned achievements
+    checkAndUnlockAchievements(userId, supabaseAdmin).catch(err =>
+      console.error('[user-card-variants PATCH] achievement sync failed:', err)
+    )
 
     return NextResponse.json({
       message: 'Card variant updated successfully',

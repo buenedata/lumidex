@@ -202,6 +202,51 @@ export async function getUserStats(
   }
 }
 
+// ── Revoke achievements whose conditions are no longer met ───────────────────
+
+export async function revokeStaleAchievements(
+  userId: string,
+  stats: UserStats,
+  client: AnySupabaseClient = supabase,
+): Promise<string[]> {
+  // Fetch currently unlocked achievements with their join-table row ids
+  const { data: unlockedData } = await client
+    .from('user_achievements')
+    .select('achievement_id, achievements!inner ( name )')
+    .eq('user_id', userId)
+
+  if (!unlockedData || unlockedData.length === 0) return []
+
+  // Build a lookup: achievementName → condition
+  const conditionByName = new Map<string, (s: UserStats) => boolean>(
+    achievementChecks.map(c => [c.name, c.condition]),
+  )
+
+  const revokedNames: string[] = []
+
+  for (const ua of unlockedData as Array<{ achievement_id: string; achievements: { name: string } | null }>) {
+    const name = ua.achievements?.name
+    if (!name) continue
+
+    const condition = conditionByName.get(name)
+    // If no matching condition entry exists we leave it alone (future-proof).
+    // If the condition is now false, revoke.
+    if (condition && !condition(stats)) {
+      const { error } = await client
+        .from('user_achievements')
+        .delete()
+        .eq('user_id', userId)
+        .eq('achievement_id', ua.achievement_id)
+
+      if (!error) {
+        revokedNames.push(name)
+      }
+    }
+  }
+
+  return revokedNames
+}
+
 // ── Check & unlock achievements ───────────────────────────────────────────────
 
 export async function checkAndUnlockAchievements(
@@ -210,7 +255,10 @@ export async function checkAndUnlockAchievements(
 ): Promise<Achievement[]> {
   const stats = await getUserStats(userId, client)
 
-  // Get currently unlocked achievement names
+  // Revoke any achievements the user no longer qualifies for
+  await revokeStaleAchievements(userId, stats, client)
+
+  // Get currently unlocked achievement names (after revocation)
   const { data: unlockedData } = await client
     .from('user_achievements')
     .select('achievements!inner ( name )')

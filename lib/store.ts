@@ -99,6 +99,9 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
 
       currentCards.delete(cardId)
       set({ userCards: currentCards })
+
+      // Check for achievements that may need to be revoked after card removal
+      checkAndUnlockAchievements(user.id).catch(console.error)
       return
     }
 
