@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
+import { CardTile } from '@/components/CardTile'
 import Image from 'next/image'
 import Link from 'next/link'
 import { PokemonCard, UserCard, VariantWithQuantity, QuickAddVariant, VARIANT_COLOR_CLASSES, CollectionGoal, PriceHistoryPoint, FriendCardOwner, PriceSource } from '@/types'
@@ -276,6 +277,15 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const [cardQuickVariants, setCardQuickVariants] = useState<Map<string, QuickAddVariant[]>>(new Map())
   const [cardCustomVariantCounts, setCardCustomVariantCounts] = useState<Map<string, number>>(new Map())
   const [isLoadingVariants, setIsLoadingVariants] = useState<Set<string>>(new Set())
+
+  // ── Stable refs — allow useCallback handlers to read fresh state without
+  // listing the state in deps (which would defeat React.memo on CardTile).
+  const cardQuickVariantsRef = useRef(cardQuickVariants)
+  const cardVariantsRef      = useRef(cardVariants)
+  const isLoadingVariantsRef = useRef(isLoadingVariants)
+  useEffect(() => { cardQuickVariantsRef.current  = cardQuickVariants  }, [cardQuickVariants])
+  useEffect(() => { cardVariantsRef.current       = cardVariants       }, [cardVariants])
+  useEffect(() => { isLoadingVariantsRef.current  = isLoadingVariants  }, [isLoadingVariants])
   const [showVariantSuggestionModal, setShowVariantSuggestionModal] = useState(false)
   const [relatedCards, setRelatedCards] = useState<RelatedCard[]>([])
   const [relatedCardsTotal, setRelatedCardsTotal] = useState(0)
@@ -459,11 +469,9 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     })
   }, [cards, userCards, filter, sortBy, sortDirection, collectionGoal, cardQuickVariants, cardPricesUSD])
 
-  // Load variants for a specific card
-  const loadCardVariants = async (cardId: string, quickAddOnly = false) => {
-    if (isLoadingVariants.has(cardId)) {
-      return
-    }
+  // Load variants for a specific card — stable (useCallback + isLoadingVariantsRef)
+  const loadCardVariants = useCallback(async (cardId: string, quickAddOnly = false) => {
+    if (isLoadingVariantsRef.current.has(cardId)) return
 
     setIsLoadingVariants(prev => new Set(prev).add(cardId))
 
@@ -486,7 +494,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
           id: v.id,
           name: v.name,
           color: v.color,
-          short_label: null, // No longer using labels in UI
+          short_label: null,
           quantity: v.quantity,
           sort_order: v.sort_order
         }))
@@ -503,10 +511,10 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
         return newSet
       })
     }
-  }
+  }, [userId])
 
-  // Fetch other versions of the same Pokémon from other sets
-  const fetchRelatedCards = async (card: PokemonCard) => {
+  // Fetch other versions of the same Pokémon from other sets — stable (no external state deps)
+  const fetchRelatedCards = useCallback(async (card: PokemonCard) => {
     if (!card.name) return
     setIsFetchingRelated(true)
     setRelatedCards([])
@@ -527,7 +535,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     } finally {
       setIsFetchingRelated(false)
     }
-  }
+  }, [])
 
   // BATCH LOADING: Load ALL variants in a single API call - like pkmn.gg
   // NOTE: depends on `cards` (stable prop), NOT `filteredCards` (derived from cardQuickVariants)
@@ -605,94 +613,96 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     loadAllVariants()
   }, [cards, userId])
 
-  // Update variant quantity
-  const updateVariantQuantity = async (cardId: string, variantId: string, increment: number) => {
-    if (!userId) {
-      console.error('❌ No userId provided for variant update')
-      return
-    }
+  // Update variant quantity — with optimistic UI update for instant button feedback.
+  // The new quantity is reflected in the UI immediately; the API call runs in the
+  // background and the state is reconciled when it resolves (or reverted on error).
+  // useCallback + ref: stable identity so CardTile / React.memo skips re-renders.
+  const updateVariantQuantity = useCallback(async (cardId: string, variantId: string, increment: number) => {
+    if (!userId) return
+
+    // ── Snapshot current quantity before the click (via ref — no stale closure) ─
+    const preClickVariants = cardQuickVariantsRef.current.get(cardId) || []
+    const preClickVariant  = preClickVariants.find(v => v.id === variantId)
+    const currentQuantity  = preClickVariant?.quantity ?? 0
+    const optimisticQty    = Math.max(0, currentQuantity + increment)
+
+    // ── Optimistic update: reflect new qty instantly, no await ───────────────
+    setCardQuickVariants(prev => {
+      const m = new Map(prev)
+      const vs = m.get(cardId)
+      if (vs) m.set(cardId, vs.map(v => v.id === variantId ? { ...v, quantity: optimisticQty } : v))
+      return m
+    })
 
     try {
+      // Pass currentQuantity so the server skips its own SELECT round-trip
       const response = await fetch('/api/user-card-variants', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          cardId,
-          variantId,
-          increment
-        })
+        body: JSON.stringify({ userId, cardId, variantId, increment, currentQuantity }),
       })
 
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error('❌ API Error:', {
-          status: response.status,
-          statusText: response.statusText,
-          errorText: errorText,
-          requestData: { userId, cardId, variantId, increment }
+        // ── Revert optimistic update on API failure ──────────────────────────
+        setCardQuickVariants(prev => {
+          const m = new Map(prev)
+          const vs = m.get(cardId)
+          if (vs) m.set(cardId, vs.map(v => v.id === variantId ? { ...v, quantity: currentQuantity } : v))
+          return m
         })
-        throw new Error(`Failed to update variant quantity: ${response.status} ${errorText}`)
+        console.error('Failed to update variant quantity:', response.status)
+        return
       }
 
       const result = await response.json()
 
-      // Update quick variants in state
+      // ── Reconcile with server-confirmed quantity ─────────────────────────
       setCardQuickVariants(prev => {
-        const newMap = new Map(prev)
-        const variants = newMap.get(cardId)
-        if (variants) {
-          const updatedVariants = variants.map(v =>
-            v.id === variantId ? { ...v, quantity: result.quantity } : v
-          )
-          newMap.set(cardId, updatedVariants)
-        }
-        return newMap
+        const m = new Map(prev)
+        const vs = m.get(cardId)
+        if (vs) m.set(cardId, vs.map(v => v.id === variantId ? { ...v, quantity: result.quantity } : v))
+        return m
       })
 
-      // Update full variants if loaded
+      // Update full variants if loaded in the modal
       setCardVariants(prev => {
-        const newMap = new Map(prev)
-        const variants = newMap.get(cardId)
-        if (variants) {
-          const updatedVariants = variants.map(v =>
-            v.id === variantId ? { ...v, quantity: result.quantity } : v
-          )
-          newMap.set(cardId, updatedVariants)
-        }
-        return newMap
+        const m = new Map(prev)
+        const vs = m.get(cardId)
+        if (vs) m.set(cardId, vs.map(v => v.id === variantId ? { ...v, quantity: result.quantity } : v))
+        return m
       })
 
-      // Update legacy system for backwards compatibility.
-      // IMPORTANT: `quickVariants` is stale React state (value before this click),
-      // so we must use `result.quantity` for the variant that was just updated,
-      // otherwise maxVariantQty in the store will lag one click behind.
-      const quickVariants = cardQuickVariants.get(cardId) || []
-      const totalQuantity = quickVariants.reduce((sum, v) => {
+      // Legacy user_cards sync — fire-and-forget, must NOT block the UI.
+      // Use preClickVariants as the base (state updates are async and may not
+      // have flushed yet), substituting result.quantity for the updated variant.
+      const totalQuantity = preClickVariants.reduce((sum, v) => {
         const qty = v.id === variantId ? result.quantity : v.quantity
         return sum + qty
       }, 0)
-
-      // Per-variant breakdown — substitute result.quantity for the updated variant
       const getVariantQty = (name: string) => {
-        const v = quickVariants.find(v => v.name === name)
+        const v = preClickVariants.find(v => v.name === name)
         if (!v) return 0
         return v.id === variantId ? result.quantity : v.quantity
       }
-
-      // Update the legacy user_cards table
-      await updateCardQuantity(cardId, totalQuantity, {
+      updateCardQuantity(cardId, totalQuantity, {
         normal:  getVariantQty('Normal'),
         reverse: getVariantQty('Reverse Holo'),
         holo:    getVariantQty('Holo Rare'),
-      })
+      }).catch(console.error)   // explicitly fire-and-forget
 
     } catch (error) {
+      // ── Revert optimistic update on network error ────────────────────────
+      setCardQuickVariants(prev => {
+        const m = new Map(prev)
+        const vs = m.get(cardId)
+        if (vs) m.set(cardId, vs.map(v => v.id === variantId ? { ...v, quantity: currentQuantity } : v))
+        return m
+      })
       console.error('Failed to update variant quantity:', error)
     }
-  }
+  }, [userId, updateCardQuantity])
 
-  // Set variant quantity directly (used when user types a value into the input)
+  // Set variant quantity directly (used when user types a value into the modal input)
   const setVariantQuantityDirect = async (cardId: string, variantId: string, newQuantity: number) => {
     if (!userId) return
     const clamped = Math.max(0, Math.floor(newQuantity))
@@ -705,8 +715,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       })
 
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error('❌ API Error (direct set):', { status: response.status, errorText })
+        console.error('API Error (direct set):', response.status)
         return
       }
 
@@ -715,25 +724,21 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
       // Update quick variants in state
       setCardQuickVariants(prev => {
-        const newMap = new Map(prev)
-        const variants = newMap.get(cardId)
-        if (variants) {
-          newMap.set(cardId, variants.map(v => v.id === variantId ? { ...v, quantity: resultQty } : v))
-        }
-        return newMap
+        const m = new Map(prev)
+        const vs = m.get(cardId)
+        if (vs) m.set(cardId, vs.map(v => v.id === variantId ? { ...v, quantity: resultQty } : v))
+        return m
       })
 
-      // Update full variants if loaded
+      // Update full variants if loaded in modal
       setCardVariants(prev => {
-        const newMap = new Map(prev)
-        const variants = newMap.get(cardId)
-        if (variants) {
-          newMap.set(cardId, variants.map(v => v.id === variantId ? { ...v, quantity: resultQty } : v))
-        }
-        return newMap
+        const m = new Map(prev)
+        const vs = m.get(cardId)
+        if (vs) m.set(cardId, vs.map(v => v.id === variantId ? { ...v, quantity: resultQty } : v))
+        return m
       })
 
-      // Update legacy system
+      // Legacy user_cards sync — fire-and-forget, must NOT block the UI
       const quickVariants = cardQuickVariants.get(cardId) || []
       const totalQuantity = quickVariants.reduce((sum, v) => {
         const qty = v.id === variantId ? resultQty : v.quantity
@@ -744,25 +749,25 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
         if (!v) return 0
         return v.id === variantId ? resultQty : v.quantity
       }
-      await updateCardQuantity(cardId, totalQuantity, {
+      updateCardQuantity(cardId, totalQuantity, {
         normal:  getVariantQty('Normal'),
         reverse: getVariantQty('Reverse Holo'),
         holo:    getVariantQty('Holo Rare'),
-      })
+      }).catch(console.error)   // fire-and-forget
     } catch (error) {
       console.error('Failed to set variant quantity directly:', error)
     }
   }
 
-  // Handle variant color box click
-  const handleVariantClick = (e: React.MouseEvent, cardId: string, variantId: string) => {
+  // Handle variant color box click — stable (useCallback + ref, no stale closure)
+  const handleVariantClick = useCallback((e: React.MouseEvent, cardId: string, variantId: string) => {
     e.stopPropagation()
 
     if (e.type === 'contextmenu') {
       // Always suppress the browser context menu on variant buttons
       e.preventDefault()
       // Right-click: decrement, but never below 0
-      const variants = cardQuickVariants.get(cardId) || []
+      const variants = cardQuickVariantsRef.current.get(cardId) || []
       const variant  = variants.find(v => v.id === variantId)
       if (variant && variant.quantity > 0) {
         updateVariantQuantity(cardId, variantId, -1)
@@ -772,7 +777,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
     if (e.altKey || e.button === 2) {
       // Alt-click: decrement, but never below 0
-      const variants = cardQuickVariants.get(cardId) || []
+      const variants = cardQuickVariantsRef.current.get(cardId) || []
       const variant  = variants.find(v => v.id === variantId)
       if (variant && variant.quantity > 0) {
         updateVariantQuantity(cardId, variantId, -1)
@@ -781,7 +786,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       // Normal click: increment
       updateVariantQuantity(cardId, variantId, 1)
     }
-  }
+  }, [updateVariantQuantity])
 
   // Fetch full price row for a card (cached — one fetch per card per session)
   const fetchCardPrice = useCallback(async (cardId: string) => {
@@ -897,18 +902,18 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     }
   }, [friendsCache])
 
-  // Open card modal when clicked (used by auto-open and right-click)
-  const handleCardClick = (card: PokemonCard) => {
+  // Open card modal when clicked — stable (useCallback + cardVariantsRef)
+  const handleCardClick = useCallback((card: PokemonCard) => {
     setSelectedCard(card)
     setModalTab('card')      // always open on Card tab
     fetchRelatedCards(card)
     fetchCardPrice(card.id)  // eagerly load so Market Price column is populated on Card tab
-    if (!cardVariants.has(card.id)) {
+    if (!cardVariantsRef.current.has(card.id)) {
       setTimeout(() => loadCardVariants(card.id, false), 100)
     }
     // Pre-load wanted list on first modal open
     if (user) fetchWantedCards()
-  }
+  }, [fetchRelatedCards, fetchCardPrice, loadCardVariants, fetchWantedCards, user])
 
   // Navigate to the previous / next card while the modal is open
   const navigateCard = (dir: 1 | -1) => {
@@ -933,26 +938,25 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCard, cards])
 
-  // Single click on card image — open modal after short delay so double-click can cancel it
-  const handleCardImageClick = (card: PokemonCard) => {
+  // Single click on card image — stable (useCallback, deps on stable handleCardClick)
+  const handleCardImageClick = useCallback((card: PokemonCard) => {
     if (clickTimerRef.current) return // already waiting; second click = dblclick path
     clickTimerRef.current = setTimeout(() => {
       clickTimerRef.current = null
       handleCardClick(card)
     }, 250)
-  }
+  }, [handleCardClick])
 
-  // Double click on card image — add 1 of the default variant for this card.
-  // Uses card.default_variant_id if set, otherwise falls back to the first
-  // available quick-add variant (derived from card rarity).
-  const handleCardImageDblClick = (e: React.MouseEvent, card: PokemonCard) => {
+  // Double click on card image — stable (useCallback + ref)
+  const handleCardImageDblClick = useCallback((e: React.MouseEvent, card: PokemonCard) => {
     e.preventDefault()
     if (clickTimerRef.current) {
       clearTimeout(clickTimerRef.current)
       clickTimerRef.current = null
     }
     if (!userId) return
-    const quick = cardQuickVariants.get(card.id) || []
+    // Read via ref so this callback stays stable between variant-click renders
+    const quick = cardQuickVariantsRef.current.get(card.id) || []
     // Prefer default_variant_id → is_quick_add variant → first in sort order
     const defaultVariant = card.default_variant_id
       ? (quick.find(v => v.id === card.default_variant_id) ?? quick.find(v => v.is_quick_add) ?? quick[0])
@@ -960,16 +964,16 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     if (defaultVariant) {
       updateVariantQuantity(card.id, defaultVariant.id, 1)
     }
-  }
+  }, [userId, updateVariantQuantity])
 
-  // Open card modal
-  const handleCardRightClick = (e: React.MouseEvent, card: PokemonCard) => {
+  // Open card modal (right-click / context-menu on card image)
+  const handleCardRightClick = useCallback((e: React.MouseEvent, card: PokemonCard) => {
     e.preventDefault()
     setSelectedCard(card)
-    if (!cardVariants.has(card.id)) {
+    if (!cardVariantsRef.current.has(card.id)) {
       loadCardVariants(card.id, false)
     }
-  }
+  }, [loadCardVariants])
 
   // Auto-open the modal when navigated from an "Other versions" thumbnail (?card=<id>)
   useEffect(() => {
@@ -1037,144 +1041,29 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     <>
       <div className="flex flex-wrap gap-4">
         {filteredCards.map(card => {
-          const userCard          = userCards.get(card.id)
-          const quickVariants     = cardQuickVariants.get(card.id) || []
-          // Use user_card_variants as source of truth once loaded; fall back to
-          // legacy user_cards only while the batch fetch is still in-flight.
-          // Always use the Zustand store's aggregate quantity for owned status.
-          // quickVariants only covers global variants (card-specific variant IDs are
-          // excluded from the batch fetch's .in('variant_id', variantIds) filter),
-          // so for cards like promos with card-specific variants all quantities would
-          // be 0 and the card would appear unowned even when it is owned.
-          const isOwned = !!(userCard && userCard.quantity > 0)
+          const userCard           = userCards.get(card.id)
+          // quickVariants: same array reference for unchanged cards → React.memo skips re-render
+          const quickVariants      = cardQuickVariants.get(card.id) || []
+          const isOwned            = !!(userCard && userCard.quantity > 0)
           const customVariantCount = cardCustomVariantCounts.get(card.id) ?? 0
-          const typeGlowClass     = getTypeGlowClass(card.type)
-          const shouldGrey        = greyOutUnowned && !isOwned
-
-          // Quick-add buttons: server already pre-filtered by override/rarity rules.
-          // Card-specific variants are never shown as dots — the +N badge on the image handles them.
-          const filteredQuick = quickVariants
-          const buttonsToRender = filteredQuick.filter(v => v.card_id == null)
-
           return (
-            <div
+            <CardTile
               key={card.id}
-              id={`card-${card.id}`}
-              className="group relative cursor-pointer flex-shrink-0 flex flex-col"
-              style={{ width: 220 }}
-            >
-              {/* +N badge — overlaps top-right corner of card; outside overflow-hidden so it can protrude */}
-              {customVariantCount > 0 && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleCardClick(card) }}
-                  title={`${customVariantCount} card-specific variant${customVariantCount > 1 ? 's' : ''} — open to manage`}
-                  className="absolute -top-2.5 right-1.5 z-20 flex items-center justify-center bg-accent text-white text-[10px] font-bold leading-none px-1.5 py-0.5 rounded-full shadow-lg ring-1 ring-white/20 transition-all duration-200 hover:scale-110 hover:brightness-110 whitespace-nowrap"
-                >
-                  +{customVariantCount} variant{customVariantCount > 1 ? 's' : ''}
-                </button>
-              )}
-
-              {/* ── Image area ── */}
-              <div
-                className={`relative w-[220px] h-[308px] rounded-lg overflow-hidden border transition-all duration-200 cursor-pointer ${typeGlowClass} ${
-                  isOwned ? 'border-accent shadow-lg glow-accent-sm' : 'border-subtle'
-                }`}
-                onClick={() => handleCardImageClick(card)}
-                onDoubleClick={(e) => handleCardImageDblClick(e, card)}
-                onContextMenu={(e) => { e.preventDefault(); handleCardClick(card) }}
-              >
-                <img
-                  src={card.image_url ?? '/pokemon_card_backside.png'}
-                  alt={card.name ?? ''}
-                  className={`w-full h-full object-cover transition-all duration-300 pointer-events-none ${
-                    shouldGrey ? 'grayscale opacity-40' : ''
-                  }`}
-                  loading="lazy"
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement
-                    if (!target.src.endsWith('/pokemon_card_backside.png')) {
-                      target.src = '/pokemon_card_backside.png'
-                    }
-                  }}
-                />
-
-                {/* Hover overlay */}
-                <div className="absolute inset-0 z-10" />
-              </div>
-
-              {/* ── Variant dots row — always rendered so text aligns consistently ── */}
-              <div
-                className="w-[220px] flex gap-1 flex-wrap justify-center px-2 pt-1.5 min-h-[28px]"
-                onClick={e => e.stopPropagation()}
-              >
-                {buttonsToRender.map(variant => (
-                    <button
-                      key={variant.id}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (variant.color === 'gray' || variant.card_id != null) {
-                          handleCardClick(card)
-                        } else {
-                          handleVariantClick(e, card.id, variant.id)
-                        }
-                      }}
-                      onContextMenu={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        if (variant.color === 'gray' || variant.card_id != null) {
-                          handleCardClick(card)
-                        } else {
-                          handleVariantClick(e, card.id, variant.id)
-                        }
-                      }}
-                      title={`${variant.name} (${variant.quantity})`}
-                      className={`
-                        w-6 h-6 rounded flex items-center justify-center
-                        text-xs font-bold border border-black/30 shadow-sm
-                        ${variant.card_id != null ? 'bg-gray-500' : (colorMap[variant.color] || 'bg-zinc-500')}
-                        ${variant.quantity > 0 ? '!text-black' : 'text-transparent'}
-                        hover:scale-110 transition-transform cursor-pointer
-                      `}
-                    >
-                      {variant.quantity > 0 ? variant.quantity : ''}
-                    </button>
-                ))}
-              </div>
-
-              {/* ── Card info below variant dots ── */}
-              <div className="w-[220px] flex flex-col gap-0.5 px-1 pt-1 pb-1">
-                {/* Row 1: Card name — prominent, full-width */}
-                <p className="text-sm font-semibold text-primary truncate leading-tight">
-                  {card.name}
-                </p>
-                {/* Row 2: Card number (muted/small, left) · Price (accent, right) */}
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-secondary tabular-nums">#{card.number}</span>
-                  <span className="text-sm font-semibold text-price tabular-nums">
-                    {cardPricesUSD?.[card.id] != null
-                      ? formatPrice(cardPricesUSD[card.id], effectiveCurrency)
-                      : ''}
-                  </span>
-                </div>
-                {/* Row 3: Set name — only shown on browse/search where cards span multiple sets */}
-                {card.set_name && (
-                  <Link
-                    href={`/set/${card.set_id}`}
-                    className="flex items-center gap-1 mt-0.5 hover:text-accent transition-colors"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {card.set_logo_url && (
-                      <img
-                        src={card.set_logo_url}
-                        alt=""
-                        className="h-3 w-auto object-contain shrink-0"
-                      />
-                    )}
-                    <span className="text-xs text-muted truncate leading-tight">{card.set_name}</span>
-                  </Link>
-                )}
-              </div>
-            </div>
+              card={card}
+              quickVariants={quickVariants}
+              isOwned={isOwned}
+              customVariantCount={customVariantCount}
+              greyOutUnowned={greyOutUnowned}
+              cardPricesUSD={cardPricesUSD}
+              effectiveCurrency={effectiveCurrency}
+              onCardBadgeClick={handleCardClick}
+              onCardImageClick={handleCardImageClick}
+              onCardImageDblClick={handleCardImageDblClick}
+              onCardContextMenu={handleCardClick}
+              onVariantClick={handleVariantClick}
+              onVariantContextMenu={handleVariantClick}
+              onVariantGrayClick={handleCardClick}
+            />
           )
         })}
       </div>

@@ -67,12 +67,23 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
     if (user) {
       userId = user.id
 
-      // Fetch preferred currency + price source from user profile
-      const { data: profileRow, error: profileError } = await supabaseAdmin
-        .from('users')
-        .select('preferred_currency, price_source')
-        .eq('id', user.id)
-        .maybeSingle()
+      // Fetch profile preferences and collection goal in parallel — independent queries
+      const [profileResult, userSetResult] = await Promise.all([
+        supabaseAdmin
+          .from('users')
+          .select('preferred_currency, price_source')
+          .eq('id', user.id)
+          .maybeSingle(),
+        supabaseAdmin
+          .from('user_sets')
+          .select('collection_goal')
+          .eq('user_id', user.id)
+          .eq('set_id', id)
+          .maybeSingle(),
+      ])
+
+      const { data: profileRow, error: profileError } = profileResult
+      const { data: userSetRow } = userSetResult
 
       if (profileError) {
         console.error('[set page] Failed to read user profile preferences:', profileError)
@@ -83,14 +94,6 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
       if (profileRow?.price_source) {
         priceSource = profileRow.price_source as PriceSource
       }
-
-      const { data: userSetRow } = await supabaseAdmin
-        .from('user_sets')
-        .select('collection_goal')
-        .eq('user_id', user.id)
-        .eq('set_id', id)
-        .maybeSingle()
-
       if (userSetRow?.collection_goal) {
         currentGoal = userSetRow.collection_goal as CollectionGoal
       }
