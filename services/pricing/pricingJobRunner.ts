@@ -31,9 +31,9 @@ if (process.env.NODE_ENV !== 'test') {
   console.log(`
 [PricingJobRunner] Setup cron:
 - URL: /api/cron/update-prices
-- Method: POST
+- Method: GET  (Vercel Cron always uses GET)
 - Header: Authorization: Bearer <CRON_SECRET>
-- Schedule: every 12 hours
+- Schedule: 01:00, 02:00, 03:00 UTC (nightly)
 `)
 }
 

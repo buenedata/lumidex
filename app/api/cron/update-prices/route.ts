@@ -3,7 +3,7 @@ import { getSetsForPricing } from '@/services/pricing/setTierService'
 import { updatePricesBatch } from '@/services/pricing/pricingOrchestrator'
 
 /**
- * POST /api/cron/update-prices
+ * GET /api/cron/update-prices
  *
  * Triggered 3× per night by Vercel Cron (vercel.json):
  *   01:00 UTC  (03:00 Oslo)
@@ -45,7 +45,7 @@ function isNighttimeUTC(): boolean {
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 
-export async function POST(req: NextRequest) {
+export async function GET(req: NextRequest) {
   // 1. Authorization
   const cronSecret = process.env.CRON_SECRET
   if (!cronSecret) {

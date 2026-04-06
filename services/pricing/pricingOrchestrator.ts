@@ -1,4 +1,3 @@
-import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import { supabaseAdmin } from '@/lib/supabase'
 import { fetchPokemonApiPrices } from './pokemonApiService'
 import { fetchEbayRawPrices } from './ebayService'
@@ -125,9 +124,7 @@ async function processSingleSet(
   concurrency:    number,
   emit:           ((payload: unknown) => void) | null,
 ): Promise<ProcessSetResult> {
-  const supabase = await createSupabaseServerClient()
-
-  let query = supabase
+  let query = supabaseAdmin
     .from('cards')
     .select('id, name, set_id, number, api_id, rarity')
     .eq('set_id', setId)
@@ -346,8 +343,6 @@ export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Pro
     let setsProcessed        = 0
     let setsSkipped          = 0
 
-    const supabase = await createSupabaseServerClient()
-
     for (const setId of rawSetIds) {
       const elapsed = Date.now() - startTime
       if (elapsed >= timeBudgetMs) {
@@ -462,9 +457,7 @@ export async function updatePricesBatch(options?: UpdatePricesBatchOptions): Pro
 
   // ── Path B: no setIds — legacy all-cards pass (admin manual sync) ────────────
 
-  const supabase = await createSupabaseServerClient()
-
-  let query = supabase
+  let query = supabaseAdmin
     .from('cards')
     .select('id, name, set_id, number, api_id, rarity')
 
