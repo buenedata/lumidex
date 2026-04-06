@@ -8,7 +8,8 @@ import { upsertGradedPrices, deleteGradedPricesForCard } from './gradedPriceRepo
 import { aggregatePricesForCard, writeCardPriceCache } from './priceAggregator'
 import { findUndervaluedCards } from './undervaluedDetector'
 import { importProductPricing } from './productPricingService'
-import { NormalizedPricePoint } from './types'
+import { NormalizedPricePoint, CardPriceUpdate } from './types'
+import { fetchTcggoEpisodePrices, TcggoCardPriceEntry } from './tcggoCardService'
 
 export const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -107,6 +108,49 @@ async function mapConcurrent<T, R>(
   return results
 }
 
+// ── Tcggo price merge helper ──────────────────────────────────────────────────
+
+/**
+ * Merge tcggo.com CardMarket price data into a CardPriceUpdate when pokemontcg.io
+ * returned no CardMarket prices (cm_avg_sell and cm_trend both null).
+ * Also fills tcgp_market when pokemontcg.io returned no TCGPlayer price.
+ * Mutates `agg` in-place. Safe to call when tcggoPriceMap is null (no-op).
+ */
+function mergeTcggoPrices(
+  agg:             CardPriceUpdate,
+  cardId:          string,
+  tcggoPriceMap:   Map<string, TcggoCardPriceEntry> | null,
+  cardIdToNormNum: Map<string, string>,
+): void {
+  if (!tcggoPriceMap) return
+
+  const cmMissing   = agg.cm_avg_sell == null && agg.cm_trend == null
+  const tcgpMissing = agg.tcgp_market == null
+
+  if (!cmMissing && !tcgpMissing) return
+
+  const normNum = cardIdToNormNum.get(cardId)
+  if (!normNum) return
+
+  const tcggo = tcggoPriceMap.get(normNum)
+  if (!tcggo) return
+
+  if (cmMissing) {
+    // 7-day average is the best proxy for current avg sell price
+    if (tcggo.cardmarket.avg7  != null) agg.cm_avg_sell = tcggo.cardmarket.avg7
+    if (tcggo.cardmarket.avg30 != null) agg.cm_avg_30d  = tcggo.cardmarket.avg30
+    if (tcggo.cardmarket.low   != null) agg.cm_low      = tcggo.cardmarket.low
+    // cm_trend: use 7d average as best available current trend indicator
+    if (tcggo.cardmarket.avg7  != null) agg.cm_trend    = tcggo.cardmarket.avg7
+      else if (tcggo.cardmarket.avg30 != null) agg.cm_trend = tcggo.cardmarket.avg30
+  }
+
+  if (tcgpMissing && tcggo.tcgplayer.market != null) {
+    // TCGPlayer market price — note: tcggo API mislabels these as EUR but values are USD
+    agg.tcgp_market = tcggo.tcgplayer.market
+  }
+}
+
 // ── Core: process a single set ────────────────────────────────────────────────
 
 interface ProcessSetResult {
@@ -143,6 +187,35 @@ async function processSingleSet(
   if (!cards || cards.length === 0) {
     console.log(`[PricingOrchestrator] processSingleSet(${setId}): no cards found.`)
     return { processed: 0, errors: 0, gradedPointsSaved: 0, processedCardIds: [] }
+  }
+
+  // ── Tcggo episode prices (CardMarket singles source for new/unindexed sets) ──
+  // One batch call per set — fetches all pages, builds a normNum→TcggoCardPriceEntry map.
+  // Used when pokemontcg.io returns no CardMarket data (e.g. sets not yet indexed by them).
+  // Works automatically for cron, bulk seed, and manual admin sync.
+  let tcggoPriceMap: Map<string, TcggoCardPriceEntry> | null = null
+  const { data: setRow } = await supabaseAdmin
+    .from('sets')
+    .select('api_set_id')
+    .eq('set_id', setId)
+    .single()
+  const tcggoEpisodeId = setRow?.api_set_id ?? null
+
+  if (tcggoEpisodeId) {
+    tcggoPriceMap = await fetchTcggoEpisodePrices(tcggoEpisodeId)
+    console.log(
+      `[PricingOrchestrator] processSingleSet(${setId}): ` +
+      `tcggo episode ${tcggoEpisodeId} → ${tcggoPriceMap.size} card prices loaded`,
+    )
+  }
+
+  // Build cardId → normalised card number map for tcggo lookup.
+  // Normalised = leading zeros stripped, "/total" suffix stripped (e.g. "001/88" → "1").
+  const cardIdToNormNum = new Map<string, string>()
+  for (const card of cards) {
+    const raw    = String(card.number ?? '').split('/')[0]
+    const parsed = parseInt(raw, 10)
+    if (!isNaN(parsed)) cardIdToNormNum.set(card.id as string, String(parsed))
   }
 
   const mode = includeEbayRaw || includeGraded ? 'full' : 'fast'
@@ -183,13 +256,17 @@ async function processSingleSet(
         savePricePoints(allPoints),
         savePriceHistory(allPoints),
       ])
+    }
 
-      // Aggregate each card concurrently (DB fan-out, not HTTP)
-      // Merge in cmUrl from the API response — it is not stored in price_points
+    // Aggregate each card concurrently and write to card_prices cache.
+    // Runs even when pokemontcg.io returned no points — tcggo prices still apply.
+    if (allPoints.length > 0 || tcggoPriceMap) {
       await mapConcurrent(processedCardIds, 10, async (cardId) => {
         const agg = await aggregatePricesForCard(cardId)
         const cmUrl = cmUrlMap.get(cardId)
         if (cmUrl) agg.cm_url = cmUrl
+        // Fill in CardMarket (and TCGPlayer) prices from tcggo when pokemontcg.io has none
+        mergeTcggoPrices(agg, cardId, tcggoPriceMap, cardIdToNormNum)
         await writeCardPriceCache(agg)
       })
     }
@@ -267,9 +344,10 @@ async function processSingleSet(
       await savePricePoints(allPoints)
       await savePriceHistory(allPoints)
 
-      // e. Aggregate into card_prices cache; merge in cm_url from API response
+      // e. Aggregate into card_prices cache; merge in cm_url and tcggo prices
       const aggregated = await aggregatePricesForCard(card.id)
       if (cmUrl) aggregated.cm_url = cmUrl
+      mergeTcggoPrices(aggregated, card.id, tcggoPriceMap, cardIdToNormNum)
       await writeCardPriceCache(aggregated)
 
       processedCardIds.push(card.id)
