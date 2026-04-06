@@ -96,7 +96,7 @@ export default function DashboardPage() {
       set.name.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  // Sum all variant quantities for "Cards Owned" — matches the profile's "Cards Collected"
+  // Sum all variant quantities for "Cards Owned"
   const totalCards     = Array.from(userCards.values()).reduce((s, uc) => s + uc.quantity, 0)
   const setsTracked    = userPokemonSets.length
   const completedSets  = userPokemonSets.filter(set => {

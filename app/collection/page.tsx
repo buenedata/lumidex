@@ -13,6 +13,7 @@ export default function CollectionPage() {
   const { user, isLoading: authLoading } = useAuthStore()
   const {
     userSets,
+    userCards,
     pokemonSets,
     userCardCountBySet,
     fetchUserSets,
@@ -54,8 +55,9 @@ export default function CollectionPage() {
     userSetIds.has(set.id)
   )
 
-  const totalOwnedCards = Array.from(userCardCountBySet.values()).reduce(
-    (sum, n) => sum + n,
+  // Sum all variant quantities — matches dashboard and profile "Cards Owned" count
+  const totalOwnedCards = Array.from(userCards.values()).reduce(
+    (sum, uc) => sum + uc.quantity,
     0
   )
 
