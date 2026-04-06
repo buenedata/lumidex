@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { Listbox, ListboxButton, ListboxOption, ListboxOptions } from '@headlessui/react'
-import { ChevronUpDownIcon, CheckIcon } from '@heroicons/react/20/solid'
+import { ChevronUpDownIcon, CheckIcon, ArrowUpIcon, ArrowDownIcon } from '@heroicons/react/20/solid'
 import { cn } from '@/lib/utils'
 import CardGrid from '@/components/CardGrid'
 import CollectionGoalSelector from '@/components/CollectionGoalSelector'
@@ -46,8 +46,9 @@ interface SetPageCardsProps {
   statSetValueUSD?: number
 }
 
-type FilterTab = 'all' | 'owned' | 'missing' | 'duplicates'
-type SortBy    = 'number' | 'name' | 'price'
+type FilterTab    = 'all' | 'owned' | 'missing' | 'duplicates'
+type SortBy       = 'number' | 'name' | 'price'
+type SortDirection = 'asc' | 'desc'
 
 const sortOptions: { label: string; value: SortBy }[] = [
   { label: 'Number', value: 'number' },
@@ -78,9 +79,10 @@ export default function SetPageCards({
   statMostExpensiveUSD,
   statSetValueUSD,
 }: SetPageCardsProps) {
-  const [activeFilter, setActiveFilter] = useState<FilterTab>('all')
-  const [searchQuery, setSearchQuery]   = useState('')
-  const [sortBy, setSortBy]             = useState<SortBy>('number')
+  const [activeFilter, setActiveFilter]     = useState<FilterTab>('all')
+  const [searchQuery, setSearchQuery]       = useState('')
+  const [sortBy, setSortBy]                 = useState<SortBy>('number')
+  const [sortDirection, setSortDirection]   = useState<SortDirection>('asc')
   const [collectionGoal, setCollectionGoal] = useState<CollectionGoal>(initialGoal)
   const [legendVariants, setLegendVariants] = useState<QuickAddVariant[]>([])
 
@@ -304,11 +306,11 @@ export default function SetPageCards({
       <div className="max-w-screen-2xl mx-auto px-6">
         <div className="flex items-center gap-0 border-b border-subtle">
 
-          {/* Sort dropdown */}
+          {/* Sort dropdown + direction toggle */}
           <div className="flex items-center gap-2 pr-3 mr-0 border-r border-subtle self-stretch">
             <span className="text-sm text-muted select-none whitespace-nowrap">Sort by</span>
 
-            <Listbox value={sortBy} onChange={setSortBy}>
+            <Listbox value={sortBy} onChange={(v) => { setSortBy(v); setSortDirection('asc') }}>
               <div className="relative">
                 <ListboxButton className="flex items-center gap-1 px-3 py-2.5 text-sm font-medium text-secondary hover:text-primary focus:outline-none transition-colors cursor-pointer whitespace-nowrap">
                   <span>{sortOptions.find(o => o.value === sortBy)?.label}</span>
@@ -342,6 +344,18 @@ export default function SetPageCards({
                 </ListboxOptions>
               </div>
             </Listbox>
+
+            {/* Asc / Desc toggle */}
+            <button
+              onClick={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
+              title={sortDirection === 'asc' ? 'Ascending — click to switch to descending' : 'Descending — click to switch to ascending'}
+              className="flex items-center justify-center w-6 h-6 rounded text-muted hover:text-primary hover:bg-surface transition-colors"
+            >
+              {sortDirection === 'asc'
+                ? <ArrowUpIcon className="w-3.5 h-3.5" />
+                : <ArrowDownIcon className="w-3.5 h-3.5" />
+              }
+            </button>
           </div>
 
           {/* Filter tabs — with counts */}
@@ -389,6 +403,7 @@ export default function SetPageCards({
               userCards={storeUserCards}
               filter={safeFilter}
               sortBy={sortBy}
+              sortDirection={sortDirection}
               setTotal={setTotal}
               setName={setName}
               setComplete={setComplete}

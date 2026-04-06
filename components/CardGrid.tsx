@@ -61,6 +61,7 @@ interface CardGridProps {
   userCards: Map<string, UserCard>
   filter?: FilterTab
   sortBy?: SortBy
+  sortDirection?: 'asc' | 'desc'
   userId?: string
   setTotal: number
   setName?: string
@@ -226,7 +227,7 @@ function getTypeGlowClass(type: string | null | undefined): string {
   return known.includes(key) ? `card-type-${key}` : ''
 }
 
-export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', priceSource = 'tcgplayer', onVariantsLegendChange, disableGreyOut = false }: CardGridProps) {
+export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', sortDirection = 'asc', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', priceSource = 'tcgplayer', onVariantsLegendChange, disableGreyOut = false }: CardGridProps) {
   const { updateCardQuantity, userCards: storeUserCards, fetchUserCards } = useCollectionStore()
   const { user, isLoading, profile } = useAuthStore()
   // Prefer the client-side profile's preferred_currency (always reliable after login)
@@ -436,15 +437,17 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       }
     })
 
-    // Sort according to the active sortBy option
+    // Sort according to the active sortBy option and direction
+    const dir = sortDirection === 'desc' ? -1 : 1
     return [...filtered].sort((a, b) => {
       if (sortBy === 'name') {
-        return (a.name ?? '').localeCompare(b.name ?? '')
+        return dir * (a.name ?? '').localeCompare(b.name ?? '')
       }
       if (sortBy === 'price') {
         const priceA = cardPricesUSD?.[a.id] ?? 0
         const priceB = cardPricesUSD?.[b.id] ?? 0
-        return priceB - priceA  // descending: highest price first
+        // base order: highest price first (desc = 1, asc = -1)
+        return dir * (priceB - priceA)
       }
       // default: 'number' — numeric sort with string fallback
       const getNum = (n: string | null): number => {
@@ -452,9 +455,9 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
         return m ? parseInt(m[1], 10) : 0
       }
       const diff = getNum(a.number) - getNum(b.number)
-      return diff !== 0 ? diff : (a.number ?? '').localeCompare(b.number ?? '')
+      return dir * (diff !== 0 ? diff : (a.number ?? '').localeCompare(b.number ?? ''))
     })
-  }, [cards, userCards, filter, sortBy, collectionGoal, cardQuickVariants, cardPricesUSD])
+  }, [cards, userCards, filter, sortBy, sortDirection, collectionGoal, cardQuickVariants, cardPricesUSD])
 
   // Load variants for a specific card
   const loadCardVariants = async (cardId: string, quickAddOnly = false) => {
@@ -1099,13 +1102,12 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                 <div className="absolute inset-0 z-10" />
               </div>
 
-              {/* ── Variant dots row — below image, normal flow ── */}
-              {buttonsToRender.length > 0 && (
-                <div
-                  className="w-[220px] flex gap-1 flex-wrap justify-center px-2 pt-1.5"
-                  onClick={e => e.stopPropagation()}
-                >
-                  {buttonsToRender.map(variant => (
+              {/* ── Variant dots row — always rendered so text aligns consistently ── */}
+              <div
+                className="w-[220px] flex gap-1 flex-wrap justify-center px-2 pt-1.5 min-h-[28px]"
+                onClick={e => e.stopPropagation()}
+              >
+                {buttonsToRender.map(variant => (
                     <button
                       key={variant.id}
                       onClick={(e) => {
@@ -1136,10 +1138,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                     >
                       {variant.quantity > 0 ? variant.quantity : ''}
                     </button>
-                  ))}
-
-                </div>
-              )}
+                ))}
+              </div>
 
               {/* ── Card info below variant dots ── */}
               <div className="w-[220px] flex flex-col gap-0.5 px-1 pt-1 pb-1">
