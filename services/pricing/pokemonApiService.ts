@@ -117,8 +117,15 @@ export async function fetchPokemonApiPrices(card: CardSearchData): Promise<Pokem
   const cmUrl     = cmSection?.url ?? null;
 
   if (cmPrices && typeof cmPrices === 'object') {
-    // Normal variant price
-    const normalPrice = cmPrices.averageSellPrice ?? null;
+    // Normal variant price.
+    // averageSellPrice is only populated after real sales have occurred (can take
+    // weeks for new sets). Fall back to trendPrice then lowPrice so that newly
+    // released sets show prices from day 1 instead of showing nothing.
+    const normalPrice =
+      cmPrices.averageSellPrice ??
+      cmPrices.trendPrice       ??
+      cmPrices.lowPrice         ??
+      null;
     if (normalPrice && normalPrice > 0) {
       points.push({
         cardId: card.id,
@@ -130,7 +137,7 @@ export async function fetchPokemonApiPrices(card: CardSearchData): Promise<Pokem
       });
     } else {
       console.warn(
-        `[pokemonApiService] Skipping CM normal price for card ${card.api_id} — averageSellPrice missing or zero`
+        `[pokemonApiService] Skipping CM normal price for card ${card.api_id} — averageSellPrice/trendPrice/lowPrice all missing or zero`
       );
     }
 
