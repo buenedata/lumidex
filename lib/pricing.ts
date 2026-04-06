@@ -175,15 +175,29 @@ export async function getCardPricesForSet(
   for (const row of (data ?? [])) {
     const r = row as unknown as CardPriceRow
 
-    // Determine the best market price in USD based on user's price source
+    // Determine the best market price in USD based on user's price source.
+    // When the preferred source has no data (e.g. TCGPlayer hasn't indexed a
+    // newly released set yet), fall back to the other source so prices still
+    // appear instead of showing a dash for every card.
     let marketUSD: number | null = null
 
     if (priceSource === 'tcgplayer') {
-      marketUSD = r.tcgp_market ?? null
+      if (r.tcgp_market != null) {
+        marketUSD = r.tcgp_market
+      } else {
+        // TCGPlayer has no market price yet — fall back to CardMarket (EUR → USD)
+        const eurPrice = r.cm_avg_sell ?? r.cm_trend ?? null
+        marketUSD = eurPrice !== null ? Math.round(eurPrice * EUR_TO_USD * 100) / 100 : null
+      }
     } else {
       // CardMarket prices are in EUR — convert to USD for uniform math
       const eurPrice = r.cm_avg_sell ?? r.cm_trend ?? null
-      marketUSD = eurPrice !== null ? Math.round(eurPrice * EUR_TO_USD * 100) / 100 : null
+      if (eurPrice != null) {
+        marketUSD = Math.round(eurPrice * EUR_TO_USD * 100) / 100
+      } else {
+        // CardMarket has no price yet — fall back to TCGPlayer
+        marketUSD = r.tcgp_market ?? null
+      }
     }
 
     result[r.card_id] = {
