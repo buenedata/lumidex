@@ -78,9 +78,11 @@ export default function DashboardPage() {
     userSetIds.has(set.id)
   )
 
-  // Sum all variant quantities for "Cards Owned"
-  const totalCards    = Array.from(userCards.values()).reduce((s, uc) => s + uc.quantity, 0)
-  const setsTracked   = userPokemonSets.length
+  // Total copies owned (counts duplicates/variants)
+  const totalCards  = Array.from(userCards.values()).reduce((s, uc) => s + uc.quantity, 0)
+  // Distinct card entries owned (one entry per card+variant combo, ignoring quantity)
+  const uniqueCards = userCards.size
+  const setsTracked = userPokemonSets.length
   const completedSets = userPokemonSets.filter(set => {
     const owned = userCardCountBySet.get(set.id) ?? 0
     const total = set.total ?? 0
@@ -93,16 +95,6 @@ export default function DashboardPage() {
     const percentage = setTotal > 0 ? Math.round((ownedCards / setTotal) * 100) : 0
     return { owned_cards: ownedCards, total_cards: setTotal, percentage }
   }
-
-  // Average completion % across all tracked sets
-  const avgCompletion = setsTracked === 0
-    ? 0
-    : Math.round(
-        userPokemonSets.reduce((sum, set) => {
-          const { percentage } = calculateSetProgress(set.id)
-          return sum + percentage
-        }, 0) / setsTracked
-      )
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -123,8 +115,8 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6 items-start mb-6">
           <DashboardStats
             totalCards={totalCards}
+            uniqueCards={uniqueCards}
             setsTracked={setsTracked}
-            avgCompletion={avgCompletion}
             setsAvailable={pokemonSets.size}
           />
           <div className="lg:sticky lg:top-20">
