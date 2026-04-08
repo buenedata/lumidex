@@ -55,6 +55,34 @@ function FriendAvatar({ user }: { user: WBUser }) {
   )
 }
 
+// ── Section header — always rendered ─────────────────────────────────────────
+function SectionHeader({ matchCount }: { matchCount: number | null }) {
+  return (
+    <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center gap-2">
+        <span className="text-lg" aria-hidden>🔄</span>
+        <h2
+          className="text-lg font-semibold text-primary"
+          style={{ fontFamily: 'var(--font-space-grotesk)' }}
+        >
+          Wanted Board
+        </h2>
+        {matchCount !== null && matchCount > 0 && (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-price/10 border border-price/30 text-price font-medium">
+            {matchCount} match{matchCount !== 1 ? 'es' : ''}
+          </span>
+        )}
+      </div>
+      <Link
+        href="/wanted-board"
+        className="text-sm text-accent hover:text-accent-light transition-colors font-medium"
+      >
+        View all →
+      </Link>
+    </div>
+  )
+}
+
 export default function WantedBoard() {
   const { user } = useAuthStore()
   const [matches,  setMatches]  = useState<WBMatch[]>([])
@@ -69,13 +97,16 @@ export default function WantedBoard() {
       .finally(() => setLoading(false))
   }, [user])
 
-  // ── Loading skeleton ─────────────────────────────────────────────────────
+  // ── Loading skeleton — full section shell always visible ──────────────────
   if (loading) {
     return (
       <section className="mb-6">
         <div className="flex items-center justify-between mb-4">
-          <div className="skeleton h-6 w-44 rounded" />
-          <div className="skeleton h-4 w-20 rounded" />
+          <div className="flex items-center gap-2">
+            <div className="skeleton h-5 w-5 rounded" />
+            <div className="skeleton h-6 w-36 rounded" />
+          </div>
+          <div className="skeleton h-4 w-16 rounded" />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[0, 1, 2].map(i => <div key={i} className="skeleton h-36 rounded-xl" />)}
@@ -84,34 +115,58 @@ export default function WantedBoard() {
     )
   }
 
-  // ── No matches — hide section ────────────────────────────────────────────
-  if (matches.length === 0) return null
+  // ── No matches — show promo / empty state ─────────────────────────────────
+  if (matches.length === 0) {
+    return (
+      <section className="mb-6">
+        <SectionHeader matchCount={null} />
 
+        <div className="bg-elevated border border-subtle rounded-xl px-6 py-8 flex flex-col items-center text-center gap-4">
+          {/* Icon */}
+          <div className="w-14 h-14 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-2xl shadow-sm">
+            🔄
+          </div>
+
+          {/* Copy */}
+          <div>
+            <h3
+              className="text-base font-semibold text-primary mb-1"
+              style={{ fontFamily: 'var(--font-space-grotesk)' }}
+            >
+              No trade matches yet
+            </h3>
+            <p className="text-sm text-secondary max-w-sm mx-auto leading-relaxed">
+              Star cards on your wanted list and connect with friends — when a friend owns a card
+              you want (or vice‑versa), a trade match will appear here.
+            </p>
+          </div>
+
+          {/* CTAs */}
+          <div className="flex flex-wrap justify-center gap-3 pt-1">
+            <Link
+              href="/wanted"
+              className="inline-flex items-center gap-1.5 h-9 px-4 text-sm font-semibold rounded-lg bg-accent text-white hover:bg-accent-light transition-colors"
+            >
+              ★ Add Wanted Cards
+            </Link>
+            <Link
+              href="/wanted-board"
+              className="inline-flex items-center gap-1.5 h-9 px-4 text-sm font-medium rounded-lg bg-surface border border-subtle text-secondary hover:text-primary hover:border-accent/40 transition-colors"
+            >
+              View Wanted Board →
+            </Link>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  // ── Has matches — card grid ───────────────────────────────────────────────
   const topMatches = matches.slice(0, 3)
 
   return (
     <section className="mb-6">
-      {/* ── Section header ── */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <span className="text-lg" aria-hidden>🔄</span>
-          <h2
-            className="text-lg font-semibold text-primary"
-            style={{ fontFamily: 'var(--font-space-grotesk)' }}
-          >
-            Wanted Board
-          </h2>
-          <span className="text-xs px-2 py-0.5 rounded-full bg-price/10 border border-price/30 text-price font-medium">
-            {matches.length} match{matches.length !== 1 ? 'es' : ''}
-          </span>
-        </div>
-        <Link
-          href="/wanted-board"
-          className="text-sm text-accent hover:text-accent-light transition-colors font-medium"
-        >
-          View all →
-        </Link>
-      </div>
+      <SectionHeader matchCount={matches.length} />
 
       {/* ── Match cards ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

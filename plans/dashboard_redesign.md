@@ -23,18 +23,28 @@
 │  HERO BANNER  (avatar + greeting + trainer rank + key stats)    │
 └─────────────────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────────────────┐
-│  QUICK ACTIONS  (Browse Sets · My Collection · Find a Card · …) │
+│  QUICK ACTIONS  (Browse Sets · My Collection · Find a Card · …  │
+│                  Wanted List · Wanted Board)                     │
 └─────────────────────────────────────────────────────────────────┘
-┌──────────────────────────────┬──────────────────────────────────┐
-│  YOUR SETS  (enhanced grid)  │  SPOTLIGHT  (most-complete set)  │
-│  - progress rings            │  + next milestone card           │
-│  - recently added badge      │                                  │
-└──────────────────────────────┴──────────────────────────────────┘
+┌──────────────────────────┬──────────────────────────────────────┐
+│  STATS  (4 stat cards)   │  SPOTLIGHT  (most-complete set)      │
+│                          │  + next milestone card               │
+└──────────────────────────┴──────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  WANTED BOARD  (trade match cards — always visible)             │
+│  - empty state with CTAs when no matches                        │
+│  - top 3 matches + "View all →" link when matches exist         │
+└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  NEWS STORIES                                                   │
+└─────────────────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────────────────┐
 │  COMING SOON  (3-col teaser cards)                              │
 │  Trade Hub · Marketplace · TCG News                             │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+> **Note:** "Your Sets" was removed from the dashboard — it is available on the Profile and Collection pages.
 
 ---
 
