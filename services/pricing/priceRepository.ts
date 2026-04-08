@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from '@/lib/supabaseServer'
+import { supabaseAdmin } from '@/lib/supabase'
 import { NormalizedPricePoint } from './types'
 
 /**
@@ -10,7 +10,7 @@ import { NormalizedPricePoint } from './types'
 export async function savePricePoints(points: NormalizedPricePoint[]): Promise<void> {
   if (points.length === 0) return
 
-  const supabase = await createSupabaseServerClient()
+  const supabase = supabaseAdmin
   const now = new Date().toISOString()
 
   const rows = points.map(point => ({
@@ -52,7 +52,7 @@ export async function savePriceHistory(points: NormalizedPricePoint[]): Promise<
 
   if (historyPoints.length === 0) return
 
-  const supabase = await createSupabaseServerClient()
+  const supabase = supabaseAdmin
   const now = new Date().toISOString()
 
   const rows = historyPoints.map(point => ({

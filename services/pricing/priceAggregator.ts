@@ -1,4 +1,4 @@
-import { createSupabaseServerClient } from '@/lib/supabaseServer'
+import { supabaseAdmin } from '@/lib/supabase'
 import { CardPriceUpdate } from './types'
 
 /** Compute the arithmetic mean of an array of numbers. Returns null for empty arrays. */
@@ -36,7 +36,7 @@ function minimum(values: number[]): number | null {
  * not in card_prices. The aggregator only handles TCGPlayer and CardMarket data.
  */
 export async function aggregatePricesForCard(cardId: string): Promise<CardPriceUpdate> {
-  const supabase = await createSupabaseServerClient()
+  const supabase = supabaseAdmin
 
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
@@ -122,7 +122,7 @@ export async function aggregatePricesForCard(cardId: string): Promise<CardPriceU
  * Logs errors but does not throw.
  */
 export async function writeCardPriceCache(update: CardPriceUpdate): Promise<void> {
-  const supabase = await createSupabaseServerClient()
+  const supabase = supabaseAdmin
 
   // Build the upsert payload — only include defined (non-undefined) fields
   const payload: Record<string, unknown> = {

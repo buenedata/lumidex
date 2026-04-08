@@ -6,7 +6,7 @@
  * prices in place rather than appending duplicate rows.
  */
 
-import { createSupabaseServerClient } from '@/lib/supabaseServer';
+import { supabaseAdmin } from '@/lib/supabase';
 import { EbayGradedResult } from './types';
 
 /**
@@ -19,7 +19,7 @@ import { EbayGradedResult } from './types';
 export async function upsertGradedPrices(results: EbayGradedResult[]): Promise<void> {
   if (results.length === 0) return;
 
-  const supabase = await createSupabaseServerClient();
+  const supabase = supabaseAdmin;
   const now = new Date().toISOString();
 
   const rows = results.map(r => ({
@@ -57,7 +57,7 @@ export async function upsertGradedPrices(results: EbayGradedResult[]): Promise<v
  * Logs errors but does not throw.
  */
 export async function deleteGradedPricesForCard(cardId: string): Promise<void> {
-  const supabase = await createSupabaseServerClient();
+  const supabase = supabaseAdmin;
 
   const { error } = await supabase
     .from('card_graded_prices')
