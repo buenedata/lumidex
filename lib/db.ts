@@ -4,6 +4,7 @@
  * Replaces external Pokemon TCG API calls
  */
 
+import { unstable_cache } from 'next/cache'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -111,58 +112,73 @@ export async function getSets(): Promise<DbSet[]> {
 }
 
 /**
- * Get specific set by ID
+ * Get specific set by ID — unstable_cache-wrapped.
+ *
+ * Set metadata (name, logo, dates) changes at most once per set release.
+ * A 60-second in-process cache eliminates redundant DB round-trips for the
+ * ~6 DB queries that currently race on every set-page render, including the
+ * duplicate call in generateMetadata.
  */
-export async function getSetById(setId: string): Promise<DbSet | null> {
-  const { data, error } = await supabase
-    .from('sets')
-    .select('id:set_id, name, series, total:setTotal, setComplete, release_date, logo_url, symbol_url, created_at, language')
-    .eq('set_id', setId)
-    .single()
-  
-  if (error) {
-    if (error.code === 'PGRST116') {
-      // No rows found
-      return null
+export const getSetById = unstable_cache(
+  async (setId: string): Promise<DbSet | null> => {
+    const { data, error } = await supabase
+      .from('sets')
+      .select('id:set_id, name, series, total:setTotal, setComplete, release_date, logo_url, symbol_url, created_at, language')
+      .eq('set_id', setId)
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') return null        // no rows
+      console.error('Error fetching set:', error)
+      throw new Error(`Failed to fetch set: ${error.message}`)
     }
-    console.error('Error fetching set:', error)
-    throw new Error(`Failed to fetch set: ${error.message}`)
-  }
-  
-  return data
-}
+
+    return data
+  },
+  ['db:getSetById'],
+  { revalidate: 60, tags: ['sets'] },
+)
 
 /**
- * Get all cards for a specific set, ordered by card number.
- * The returned `image` field is COALESCED: if the card has its own
- * uploaded image it is used; otherwise the source card's image is used
- * (for Prize Pack / reprint sets).  `own_image` carries the raw value.
+ * Get all cards for a specific set, ordered by card number — unstable_cache-wrapped.
+ *
+ * The returned `image` field is COALESCED: if the card has its own uploaded
+ * image it is used; otherwise the source card's image is used (for Prize Pack /
+ * reprint sets).  `own_image` carries the raw value.
+ *
+ * Card lists for a given set change only when an admin imports new data.
+ * The 60-second cache makes repeated visits (e.g. user navigates away and back)
+ * instant without stale-data risk for normal browsing.
  */
-export async function getCardsBySet(setId: string): Promise<DbCard[]> {
-  // Supabase FK join: source:source_card_id(image) fetches the linked row's image
-  const { data, error } = await supabase
-    .from('cards')
-    .select('*, source:source_card_id(image)')
-    .eq('set_id', setId)
-    .order('number', { ascending: true })
+export const getCardsBySet = unstable_cache(
+  async (setId: string): Promise<DbCard[]> => {
+    // Supabase FK join: source:source_card_id(image) fetches the linked row's image
+    const { data, error } = await supabase
+      .from('cards')
+      .select('*, source:source_card_id(image)')
+      .eq('set_id', setId)
+      .order('number', { ascending: true })
 
-  if (error) {
-    console.error('Error fetching cards:', error)
-    throw new Error(`Failed to fetch cards: ${error.message}`)
-  }
+    if (error) {
+      console.error('Error fetching cards:', error)
+      throw new Error(`Failed to fetch cards: ${error.message}`)
+    }
 
-  return (data || []).map((raw: any) => {
-    const { source, image, ...rest } = raw
-    const sourceImage: string | null = source?.image ?? null
-    return {
-      ...rest,
-      own_image: image ?? null,
-      source_card_id: raw.source_card_id ?? null,
-      // Resolved display image: own upload takes priority; fall back to source
-      image: image ?? sourceImage,
-    } as DbCard
-  })
-}
+    return (data || []).map((raw: any) => {
+      const { source, image, ...rest } = raw
+      const sourceImage: string | null = source?.image ?? null
+      return {
+        ...rest,
+        own_image: image ?? null,
+        source_card_id: raw.source_card_id ?? null,
+        // Resolved display image: own upload takes priority; fall back to source
+        image: image ?? sourceImage,
+      } as DbCard
+    })
+  },
+  ['db:getCardsBySet'],
+  { revalidate: 60, tags: ['cards'] },
+)
 
 /**
  * Search cards by name across all sets

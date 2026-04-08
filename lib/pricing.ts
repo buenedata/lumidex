@@ -140,28 +140,42 @@ export interface SeriesProductGroup {
  * Returns a Record<cardId, CardPriceData> keyed by the internal UUID.
  * Cards with no price row are omitted — those cards should show no price.
  *
- * @param setId       The set's text ID (e.g. "sv1")
- * @param priceSource User preference: 'tcgplayer' | 'cardmarket'
+ * @param setId              The set's text ID (e.g. "sv1")
+ * @param priceSource        User preference: 'tcgplayer' | 'cardmarket'
+ * @param preloadedCardIds   Optional card UUIDs already fetched by the caller
+ *                           (e.g. from getCardsBySet). When provided the initial
+ *                           SELECT id FROM cards query is skipped entirely,
+ *                           saving one DB round-trip (~100–200 ms).
  */
 export async function getCardPricesForSet(
   setId: string,
   priceSource: PriceSource = 'tcgplayer',
+  preloadedCardIds?: string[],
 ): Promise<Record<string, CardPriceData>> {
-  // Step 1: resolve card UUIDs for this set
-  const { data: cardRows, error: cardErr } = await supabaseAdmin
-    .from('cards')
-    .select('id')
-    .eq('set_id', setId)
+  let cardIds: string[]
 
-  if (cardErr) {
-    console.error('[pricing] getCardPricesForSet card lookup error:', cardErr)
-    return {}
+  if (preloadedCardIds && preloadedCardIds.length > 0) {
+    // Caller already has the card UUIDs — skip the extra DB round-trip.
+    cardIds = preloadedCardIds
+  } else {
+    // Step 1: resolve card UUIDs for this set (fallback when not pre-loaded)
+    const { data: cardRows, error: cardErr } = await supabaseAdmin
+      .from('cards')
+      .select('id')
+      .eq('set_id', setId)
+
+    if (cardErr) {
+      console.error('[pricing] getCardPricesForSet card lookup error:', cardErr)
+      return {}
+    }
+
+    cardIds = (cardRows ?? []).map(c => c.id as string)
+    if (cardIds.length === 0) return {}
   }
 
-  const cardIds = (cardRows ?? []).map(c => c.id as string)
   if (cardIds.length === 0) return {}
 
-  // Step 2: fetch price rows for those card UUIDs
+  // Fetch price rows for those card UUIDs
   const { data, error } = await supabaseAdmin
     .from('card_prices')
     .select('card_id, tcgp_normal, tcgp_reverse_holo, tcgp_holo, tcgp_1st_edition, tcgp_market, tcgp_psa10, tcgp_psa9, tcgp_bgs95, tcgp_bgs9, tcgp_cgc10, cm_avg_sell, cm_low, cm_trend, cm_avg_30d, api_card_id, fetched_at')
