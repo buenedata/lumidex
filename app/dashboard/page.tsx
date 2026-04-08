@@ -15,6 +15,7 @@ import QuickActions from '@/components/dashboard/QuickActions'
 import ComingSoonFeatures from '@/components/dashboard/ComingSoonFeatures'
 import CollectionSpotlight from '@/components/dashboard/CollectionSpotlight'
 import NewsStories from '@/components/dashboard/NewsStories'
+import WantedBoard from '@/components/dashboard/WantedBoard'
 
 export default function DashboardPage() {
   const { user, isLoading } = useAuthStore()
@@ -270,6 +271,9 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+
+        {/* ── Wanted Board ─────────────────────────────────────────────── */}
+        <WantedBoard />
 
         {/* ── News Stories ─────────────────────────────────────────────── */}
         <NewsStories />

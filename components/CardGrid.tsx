@@ -1181,9 +1181,9 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h2 className="text-2xl font-bold text-primary mb-1">{selectedCard.name}</h2>
-                  {setName && <p className="text-sm text-muted">{setName}</p>}
+                  {(setName || selectedCard.set_name) && <p className="text-sm text-muted">{setName || selectedCard.set_name}</p>}
                   <p className="text-muted text-sm mt-0.5">
-                    #{(selectedCard.number || 'Unknown').split('/')[0]}/{setComplete ?? setTotal}
+                    #{(selectedCard.number || 'Unknown').split('/')[0]}/{setComplete ?? (selectedCard.number?.includes('/') ? selectedCard.number.split('/')[1] : setTotal)}
                   </p>
                 </div>
                 <div className="flex items-center gap-0.5">
