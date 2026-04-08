@@ -142,6 +142,7 @@ export async function writeCardPriceCache(update: CardPriceUpdate): Promise<void
   if (update.cm_trend          !== undefined) payload.cm_trend          = update.cm_trend
   if (update.cm_avg_30d        !== undefined) payload.cm_avg_30d        = update.cm_avg_30d
   if (update.cm_reverse_holo   !== undefined) payload.cm_reverse_holo   = update.cm_reverse_holo
+  if (update.cm_cosmos_holo    !== undefined) payload.cm_cosmos_holo    = update.cm_cosmos_holo
   if (update.cm_url            !== undefined) payload.cm_url            = update.cm_url
 
   const { error } = await supabase

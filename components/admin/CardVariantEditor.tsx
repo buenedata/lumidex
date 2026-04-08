@@ -85,6 +85,15 @@ export function CardVariantEditor({
   // Variant image state — maps variantId → image URL. Read-only here; upload via Image Upload tool.
   const [variantImages, setVariantImages] = useState<Record<string, string | null>>({})
 
+  // ── CardMarket URL overrides ───────────────────────────────────────────────
+  /** Saved overrides loaded from the DB: { [variantKey]: url } */
+  const [cmUrlOverrides, setCmUrlOverrides] = useState<Record<string, string>>({})
+  /** Draft values being edited in the inputs */
+  const [cmUrlDrafts, setCmUrlDrafts] = useState<Record<string, string>>({})
+  /** Draft for the cm_cosmos_holo EUR price field */
+  const [cmCosmosHoloPriceDraft, setCmCosmosHoloPriceDraft] = useState<string>('')
+  const [savingCmUrls, setSavingCmUrls] = useState(false)
+
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const showMessage = (type: 'success' | 'error', text: string) => {
@@ -146,6 +155,31 @@ export function CardVariantEditor({
     loadVariantImages()
   }, [loadVariantImages])
 
+  // Load existing CardMarket URL overrides for this card.
+  const loadCmUrls = useCallback(async () => {
+    try {
+      const [urlRes, priceRes] = await Promise.all([
+        fetch(`/api/card-cm-urls?cardId=${selectedCard.id}`),
+        fetch(`/api/prices/card/${selectedCard.id}`),
+      ])
+      if (urlRes.ok) {
+        const data = await urlRes.json()
+        const urls = data.urls ?? {}
+        setCmUrlOverrides(urls)
+        setCmUrlDrafts(urls)
+      }
+      if (priceRes.ok) {
+        const data = await priceRes.json()
+        const price = data.price?.cm_cosmos_holo
+        setCmCosmosHoloPriceDraft(price != null ? String(price) : '')
+      }
+    } catch { /* non-critical */ }
+  }, [selectedCard.id])
+
+  useEffect(() => {
+    loadCmUrls()
+  }, [loadCmUrls])
+
   const toggleVariant = (variantId: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev)
@@ -206,6 +240,81 @@ export function CardVariantEditor({
       showMessage('error', err.message || 'Failed to reset')
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  // Save all CM URL overrides and the optional cm_cosmos_holo price.
+  const handleSaveCmUrls = async () => {
+    setSavingCmUrls(true)
+    try {
+      // Collect all variant keys from assigned global variants + card-specific variants
+      const allVariantKeys = [
+        ...allVariants.filter(v => selectedIds.has(v.id)).map(v => v.key),
+        ...cardSpecificVariants.map(v => v.key),
+      ]
+      // Deduplicate
+      const keys = [...new Set(allVariantKeys)]
+
+      // Upsert or delete each URL override
+      const urlPromises = keys.map(async (key) => {
+        const draftUrl = (cmUrlDrafts[key] ?? '').trim()
+        const savedUrl = cmUrlOverrides[key] ?? ''
+        if (draftUrl === savedUrl) return // unchanged
+
+        const res = await fetch('/api/card-cm-urls', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cardId: selectedCard.id,
+            variantKey: key,
+            cmUrl: draftUrl, // empty string = delete
+          }),
+        })
+        if (!res.ok) {
+          const err = await res.json()
+          throw new Error(err.error || `Failed to save URL for "${key}"`)
+        }
+      })
+
+      // Save cm_cosmos_holo price if the card has a cosmos_holo variant
+      const hasCosmosHolo = keys.includes('cosmos_holo') ||
+        cardSpecificVariants.some(v => v.key === 'cosmos_holo')
+
+      const pricePromise = hasCosmosHolo ? (async () => {
+        const trimmed = cmCosmosHoloPriceDraft.trim()
+        const parsedPrice = trimmed === '' ? null : parseFloat(trimmed)
+        if (trimmed !== '' && (isNaN(parsedPrice!) || parsedPrice! < 0)) {
+          throw new Error('Cosmos Holo price must be a positive number or empty')
+        }
+        const res = await fetch('/api/admin/prices/patch', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cardId: selectedCard.id,
+            fields: { cm_cosmos_holo: parsedPrice },
+          }),
+        })
+        if (!res.ok) {
+          const err = await res.json()
+          throw new Error(err.error || 'Failed to save Cosmos Holo price')
+        }
+      })() : Promise.resolve()
+
+      await Promise.all([...urlPromises, pricePromise])
+
+      // Refresh saved state
+      const updatedOverrides = { ...cmUrlDrafts }
+      // Remove empty-string entries (deleted overrides)
+      for (const key of Object.keys(updatedOverrides)) {
+        if (updatedOverrides[key].trim() === '') delete updatedOverrides[key]
+      }
+      setCmUrlOverrides(updatedOverrides)
+      setCmUrlDrafts(updatedOverrides)
+      showMessage('success', 'CardMarket URLs saved!')
+    } catch (err: any) {
+      showMessage('error', err.message || 'Failed to save CardMarket URLs')
+    } finally {
+      setSavingCmUrls(false)
     }
   }
 
@@ -942,6 +1051,88 @@ export function CardVariantEditor({
               <span className="text-yellow-400 text-xs">
                 ⚠ Saving will create a custom override for this card
               </span>
+            )}
+          </div>
+
+          {/* ── CardMarket URL Overrides ─────────────────────────────────────── */}
+          <div className="border-t border-zinc-700 pt-5 mt-2">
+            <h3 className="text-sm font-semibold text-primary mb-1">CardMarket URLs</h3>
+            <p className="text-xs text-muted mb-3">
+              Override the CardMarket product page URL per variant. The pokemontcg.io API sometimes
+              links to the wrong card version. Reverse Holo URL is always auto-derived as
+              <span className="font-mono text-zinc-300"> normal_url?isReverseHolo=Y</span>.
+            </p>
+
+            <div className="space-y-3">
+              {/* Global assigned variants */}
+              {allVariants.filter(v => selectedIds.has(v.id)).map(variant => (
+                <div key={variant.id} className="flex flex-col gap-1">
+                  <label className="text-xs text-muted font-medium">
+                    {variant.name}
+                    <span className="ml-1.5 font-mono text-zinc-500">({variant.key})</span>
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://www.cardmarket.com/..."
+                    value={cmUrlDrafts[variant.key] ?? ''}
+                    onChange={e => setCmUrlDrafts(prev => ({ ...prev, [variant.key]: e.target.value }))}
+                    className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-xs text-primary placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+              ))}
+
+              {/* Card-specific variants */}
+              {cardSpecificVariants.map(variant => (
+                <div key={variant.id} className="flex flex-col gap-1">
+                  <label className="text-xs text-muted font-medium">
+                    {variant.name}
+                    <span className="ml-1.5 font-mono text-zinc-500">({variant.key})</span>
+                    <span className="ml-1 text-purple-400 text-xs">[card-specific]</span>
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://www.cardmarket.com/..."
+                    value={cmUrlDrafts[variant.key] ?? ''}
+                    onChange={e => setCmUrlDrafts(prev => ({ ...prev, [variant.key]: e.target.value }))}
+                    className="w-full bg-zinc-800 border border-zinc-600 rounded px-2 py-1.5 text-xs text-primary placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                  />
+                  {/* Cosmos Holo price — only shown for cosmos_holo key */}
+                  {variant.key === 'cosmos_holo' && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <label className="text-xs text-muted shrink-0">CM Price (EUR):</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        placeholder="e.g. 4.50"
+                        value={cmCosmosHoloPriceDraft}
+                        onChange={e => setCmCosmosHoloPriceDraft(e.target.value)}
+                        className="w-28 bg-zinc-800 border border-zinc-600 rounded px-2 py-1 text-xs text-primary placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                      />
+                      <span className="text-xs text-muted">CardMarket avg sell price in EUR</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Fallback when no variants assigned yet */}
+              {allVariants.filter(v => selectedIds.has(v.id)).length === 0 &&
+               cardSpecificVariants.length === 0 && (
+                <p className="text-xs text-zinc-500 italic">
+                  No variants assigned to this card yet. Assign variants above first.
+                </p>
+              )}
+            </div>
+
+            {(allVariants.filter(v => selectedIds.has(v.id)).length > 0 ||
+              cardSpecificVariants.length > 0) && (
+              <Button
+                onClick={handleSaveCmUrls}
+                disabled={savingCmUrls}
+                className="mt-3 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-sm"
+              >
+                {savingCmUrls ? 'Saving…' : 'Save CardMarket URLs'}
+              </Button>
             )}
           </div>
         </>

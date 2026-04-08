@@ -80,6 +80,8 @@ interface CardPriceRow {
   cm_avg_30d:        number | null
   /** CardMarket avg sell price for the reverse holo variant (EUR) */
   cm_reverse_holo:   number | null
+  /** CardMarket avg sell price for the Cosmos Holo variant (EUR) — manually set */
+  cm_cosmos_holo:    number | null
   /** Direct URL to this card on CardMarket */
   cm_url:            string | null
   api_card_id:       string | null

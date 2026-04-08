@@ -35,11 +35,19 @@ interface CardPriceRow {
   cm_avg_30d:        number | null
   /** CardMarket avg sell price for the reverse holo variant (EUR) */
   cm_reverse_holo:   number | null
+  /** CardMarket avg sell price for the Cosmos Holo variant (EUR) — manually set */
+  cm_cosmos_holo:    number | null
   /** Direct URL to this card's CardMarket product page */
   cm_url:            string | null
   tcgp_updated_at:   string | null
   cm_updated_at:     string | null
   fetched_at:        string
+  /**
+   * Per-variant CardMarket URL overrides from card_cm_url_overrides table.
+   * Keys are variant_key values (e.g. 'normal', 'cosmos_holo').
+   * Reverse holo URL is auto-derived at render time: normal_url + ?isReverseHolo=Y
+   */
+  variant_cm_urls:   Record<string, string> | null
 }
 
 type ModalTab = 'card' | 'price' | 'trade' | 'friends'
@@ -827,7 +835,12 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       const res = await fetch(`/api/prices/card/${cardId}`)
       if (res.ok) {
         const json = await res.json()
-        setCardPriceCache(prev => new Map(prev).set(cardId, json.price ?? null))
+        // Merge variant_cm_urls into the price row so the cache contains
+        // everything needed to render per-variant prices and links.
+        const priceRow: CardPriceRow | null = json.price
+          ? { ...json.price, variant_cm_urls: json.variant_cm_urls ?? null }
+          : null
+        setCardPriceCache(prev => new Map(prev).set(cardId, priceRow))
       }
     } catch {
       setCardPriceCache(prev => new Map(prev).set(cardId, null))
@@ -1601,16 +1614,30 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                                   if (!priceRow) return isLoadingPrice ? '…' : '—'
 
                                   const vName        = variant.name.toLowerCase()
+                                  const vKey         = variant.key ?? ''
                                   const isReverse    = vName.includes('reverse')
+                                  const isCosmosHolo = vKey === 'cosmos_holo' ||
+                                    (vName.includes('cosmos') && vName.includes('holo'))
                                   const isHolo       = vName.includes('holo') && !isReverse
                                   const is1stEdition = vName.includes('1st') || vName.includes('first edition')
 
                                   let price: number | null = null
                                   if (priceSource === 'cardmarket') {
-                                    // CardMarket stores separate prices for normal and reverse holo
-                                    const eur = isReverse
-                                      ? (priceRow.cm_reverse_holo ?? null)
-                                      : (priceRow.cm_avg_sell ?? priceRow.cm_trend ?? null)
+                                    // CardMarket prices per variant:
+                                    //   Cosmos Holo           → cm_cosmos_holo (manually set, EUR)
+                                    //   Reverse Holo          → cm_reverse_holo (EUR, from pokemontcg.io reverseHoloSell)
+                                    //   Reverse Holo (Cosmos) → no separate CM price available; show —
+                                    //   Normal / other        → cm_avg_sell ?? cm_trend (EUR)
+                                    let eur: number | null = null
+                                    if (isCosmosHolo && isReverse) {
+                                      eur = null // Reverse Cosmos Holo has no dedicated CM price
+                                    } else if (isCosmosHolo) {
+                                      eur = priceRow.cm_cosmos_holo ?? null
+                                    } else if (isReverse) {
+                                      eur = priceRow.cm_reverse_holo ?? null
+                                    } else {
+                                      eur = priceRow.cm_avg_sell ?? priceRow.cm_trend ?? null
+                                    }
                                     price = eur != null ? Math.round(eur * EUR_TO_USD * 100) / 100 : null
                                   } else {
                                     // TCGPlayer per-variant columns — only show a price when we have a
@@ -1627,13 +1654,46 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                               </div>
                             </div>
 
-                            {/* CardMarket external link — shown when cm_url is available */}
+                            {/* CardMarket external link — per-variant URL resolution:
+                                1. Check variant_cm_urls override for this variant key
+                                2. For reverse holo: base_url + ?isReverseHolo=Y
+                                3. Fall back to cm_url (API-provided, may be wrong version) */}
                             {(() => {
                               const priceRow = cardPriceCache.get(selectedCard.id)
-                              if (!priceRow?.cm_url) return null
+                              if (!priceRow) return null
+
+                              const vName     = variant.name.toLowerCase()
+                              const vKey      = variant.key ?? ''
+                              const isRev     = vName.includes('reverse')
+                              const isCosmos  = vKey === 'cosmos_holo' ||
+                                (vName.includes('cosmos') && vName.includes('holo'))
+                              const overrides = priceRow.variant_cm_urls ?? {}
+
+                              // Determine the correct base URL for this variant
+                              let resolvedUrl: string | null = null
+                              if (isCosmos) {
+                                const cosmosBase = overrides['cosmos_holo'] ?? null
+                                if (!cosmosBase) {
+                                  // No cosmos override set yet — don't show a link rather
+                                  // than linking to the wrong version
+                                  resolvedUrl = null
+                                } else {
+                                  resolvedUrl = isRev ? `${cosmosBase}?isReverseHolo=Y` : cosmosBase
+                                }
+                              } else if (isRev) {
+                                // Reverse holo URL = normal url + ?isReverseHolo=Y
+                                const normalBase = overrides['normal'] ?? priceRow.cm_url ?? null
+                                resolvedUrl = normalBase ? `${normalBase}?isReverseHolo=Y` : null
+                              } else {
+                                // Normal / holo / other → use override if available, else cm_url
+                                resolvedUrl = overrides['normal'] ?? priceRow.cm_url ?? null
+                              }
+
+                              if (!resolvedUrl) return null
+
                               return (
                                 <a
-                                  href={priceRow.cm_url}
+                                  href={resolvedUrl}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   title="View on CardMarket"
