@@ -1152,7 +1152,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
             {/* Left side - Card Image with holographic glare + artist */}
             <div className="flex-shrink-0 flex flex-col">
               <CardGlareImage
-                src={selectedCard.image_url}
+                src={selectedCard.image ?? selectedCard.image_url}
                 variantSrc={variantImageSrc}
                 alt={selectedCard.name ?? undefined}
               />
