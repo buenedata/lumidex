@@ -153,6 +153,12 @@ export default function WantedPage() {
             userCards={userCards}
             setTotal={filteredCards.length}
             disableGreyOut
+            onWantedStatusChange={(cardId, isWanted) => {
+              // Remove the card instantly when the user un-stars it
+              if (!isWanted) {
+                setCards(prev => prev.filter(c => c.id !== cardId))
+              }
+            }}
           />
         )}
       </div>

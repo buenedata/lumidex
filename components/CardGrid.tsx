@@ -90,6 +90,11 @@ interface CardGridProps {
    * Used on the browse/search page where collection status should not affect card appearance.
    */
   disableGreyOut?: boolean
+  /**
+   * Called immediately after the user toggles a card's wanted status (optimistic).
+   * Allows parent pages (e.g. /wanted) to remove the card from their list without a refresh.
+   */
+  onWantedStatusChange?: (cardId: string, isWanted: boolean) => void
 }
 
 // ── Standalone component — zero React state, RAF-gated DOM writes for buttery 3D tilt ──
@@ -229,7 +234,7 @@ function getTypeGlowClass(type: string | null | undefined): string {
   return known.includes(key) ? `card-type-${key}` : ''
 }
 
-export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', sortDirection = 'asc', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', priceSource = 'tcgplayer', onVariantsLegendChange, disableGreyOut = false }: CardGridProps) {
+export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', sortDirection = 'asc', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', priceSource = 'tcgplayer', onVariantsLegendChange, disableGreyOut = false, onWantedStatusChange }: CardGridProps) {
   const { updateCardQuantity, userCards: storeUserCards, fetchUserCards } = useCollectionStore()
   const { user, isLoading, profile } = useAuthStore()
   // Prefer the client-side profile's preferred_currency (always reliable after login)
@@ -896,6 +901,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const toggleWanted = useCallback(async (cardId: string) => {
     if (wantedLoading) return
     const isCurrentlyWanted = wantedCardIds.has(cardId)
+    const newWantedState = !isCurrentlyWanted
     // Optimistic update
     setWantedCardIds(prev => {
       const next = new Set(prev)
@@ -903,6 +909,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       else next.add(cardId)
       return next
     })
+    // Notify parent immediately (optimistic) — lets /wanted page remove the card instantly
+    onWantedStatusChange?.(cardId, newWantedState)
     setWantedLoading(true)
     try {
       const res = await fetch('/api/wanted-cards', {
@@ -919,10 +927,12 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
         else next.delete(cardId)
         return next
       })
+      // Revert parent notification
+      onWantedStatusChange?.(cardId, isCurrentlyWanted)
     } finally {
       setWantedLoading(false)
     }
-  }, [wantedCardIds, wantedLoading])
+  }, [wantedCardIds, wantedLoading, onWantedStatusChange])
 
   // Fetch friends who own a card (cached per card per session)
   const fetchFriendsForCard = useCallback(async (cardId: string) => {
