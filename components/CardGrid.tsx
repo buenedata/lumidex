@@ -409,20 +409,19 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
   const filteredCards = useMemo(() => {
     const filtered = cards.filter(card => {
-      // ── Ownership & duplicate decisions always use storeUserCards ──────────
-      // This keeps the filter consistent with the tab counts computed in
-      // SetPageCards (which also read storeUserCards). The cardQuickVariants
-      // data (API-fetched) is only used for the coloured quick-add buttons UI
-      // and for Masterset/Grandmasterset goal completeness checks below.
       const userCard      = userCards.get(card.id)
       const quickVariants = cardQuickVariants.get(card.id)
 
-      // Basic ownership: any variant quantity > 0
-      const anyOwned = !!(userCard && userCard.quantity > 0)
+      // Basic ownership: prefer quickVariants (updated optimistically on every
+      // variant click) when they are loaded and non-empty.  Fall back to the
+      // Zustand store aggregate for promo/card-specific-variant-only cards
+      // (quickVariants is [] even after loading) and before the batch fetch.
+      const anyOwned = (quickVariants && quickVariants.length > 0)
+        ? quickVariants.some(v => v.quantity > 0)
+        : !!(userCard && userCard.quantity > 0)
 
       // isOwned for normal goal = anyOwned.
       // For Masterset/Grandmasterset: every quick-add variant must have qty > 0.
-      // If cardQuickVariants haven't loaded yet, fall back to anyOwned.
       let isOwned: boolean
       if (collectionGoal === 'masterset' || collectionGoal === 'grandmasterset') {
         if (quickVariants && quickVariants.length > 0) {
@@ -1044,7 +1043,15 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
           const userCard           = userCards.get(card.id)
           // quickVariants: same array reference for unchanged cards → React.memo skips re-render
           const quickVariants      = cardQuickVariants.get(card.id) || []
-          const isOwned            = !!(userCard && userCard.quantity > 0)
+          // isOwned: use quickVariants as the source of truth when they are loaded
+          // and non-empty — they update optimistically on every variant click so the
+          // card un-greys and gains the green border instantly.
+          // Fall back to the Zustand store aggregate for:
+          //   - cards whose quickVariants haven't loaded yet ([] before batch fetch)
+          //   - promo/card-specific-variant-only cards ([] even after batch fetch)
+          const isOwned = quickVariants.length > 0
+            ? quickVariants.some(v => v.quantity > 0)
+            : !!(userCard && userCard.quantity > 0)
           const customVariantCount = cardCustomVariantCounts.get(card.id) ?? 0
           return (
             <CardTile
