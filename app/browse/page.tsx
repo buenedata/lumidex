@@ -140,7 +140,7 @@ async function fetchDiscoveryData(): Promise<DiscoveryData> {
 
   const map = new Map<string, { images: string[]; count: number }>()
   for (const card of (artistCardsResult.data ?? [])) {
-    if (!card.artist) continue
+    if (!card.artist || card.artist.trim().toUpperCase() === 'N/A') continue
     const entry = map.get(card.artist)
     if (entry) {
       entry.count++

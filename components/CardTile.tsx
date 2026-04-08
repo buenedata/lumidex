@@ -97,7 +97,7 @@ function CardTileInner({
         onContextMenu={(e) => { e.preventDefault(); onCardContextMenu(card) }}
       >
         <img
-          src={card.image_url ?? '/pokemon_card_backside.png'}
+          src={card.image_url ?? card.image ?? '/pokemon_card_backside.png'}
           alt={card.name ?? ''}
           className={`w-full h-full object-cover transition-all duration-300 pointer-events-none ${
             shouldGrey ? 'grayscale opacity-40' : ''
