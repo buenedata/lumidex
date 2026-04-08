@@ -286,6 +286,10 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   useEffect(() => { cardQuickVariantsRef.current  = cardQuickVariants  }, [cardQuickVariants])
   useEffect(() => { cardVariantsRef.current       = cardVariants       }, [cardVariants])
   useEffect(() => { isLoadingVariantsRef.current  = isLoadingVariants  }, [isLoadingVariants])
+  // Tracks cards whose full variants (incl. variant_image_url) have been loaded via GET.
+  const cardVariantsLoadedRef = useRef(new Set<string>())
+  // Cache for related-card results — avoids re-fetching on every modal open for the same card.
+  const relatedCardsCacheRef  = useRef(new Map<string, { cards: RelatedCard[], total: number }>())
   const [showVariantSuggestionModal, setShowVariantSuggestionModal] = useState(false)
   const [relatedCards, setRelatedCards] = useState<RelatedCard[]>([])
   const [relatedCardsTotal, setRelatedCardsTotal] = useState(0)
@@ -500,6 +504,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
         setCardQuickVariants(prev => new Map(prev).set(cardId, quickVariants))
       } else {
         setCardVariants(prev => new Map(prev).set(cardId, variants))
+        cardVariantsLoadedRef.current.add(cardId)  // mark fully loaded (has variant_image_url)
       }
     } catch (error) {
       console.error('Failed to load variants for card:', cardId, error)
@@ -512,9 +517,18 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     }
   }, [userId])
 
-  // Fetch other versions of the same Pokémon from other sets — stable (no external state deps)
+  // Fetch other versions of the same Pokémon — cached per card so repeat modal opens are instant
   const fetchRelatedCards = useCallback(async (card: PokemonCard) => {
     if (!card.name) return
+
+    // Return cached result immediately — no spinner, no network round-trip
+    const cached = relatedCardsCacheRef.current.get(card.id)
+    if (cached) {
+      setRelatedCards(cached.cards)
+      setRelatedCardsTotal(cached.total)
+      return
+    }
+
     setIsFetchingRelated(true)
     setRelatedCards([])
     setRelatedCardsTotal(0)
@@ -527,8 +541,11 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       const response = await fetch(`/api/cards/related?${params}`)
       if (!response.ok) return
       const data = await response.json()
-      setRelatedCards(data.cards ?? [])
-      setRelatedCardsTotal(data.total ?? 0)
+      const relCards = data.cards ?? []
+      const relTotal = data.total ?? 0
+      relatedCardsCacheRef.current.set(card.id, { cards: relCards, total: relTotal })
+      setRelatedCards(relCards)
+      setRelatedCardsTotal(relTotal)
     } catch (error) {
       console.error('Failed to fetch related cards:', error)
     } finally {
@@ -560,8 +577,11 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
         
         const batchResults: Record<string, VariantWithQuantity[]> = await response.json()
         
-        const newQuickVariants    = new Map<string, QuickAddVariant[]>()
-        const newCustomCounts     = new Map<string, number>()
+        const newQuickVariants = new Map<string, QuickAddVariant[]>()
+        const newCustomCounts  = new Map<string, number>()
+        // Pre-populate full variants so the modal shows them instantly (no per-card GET needed).
+        // variant_image_url is absent at this stage; loadCardVariants adds it silently on first open.
+        const newCardVariants  = new Map<string, VariantWithQuantity[]>()
 
         Object.entries(batchResults).forEach(([cardId, variants]) => {
           // All official variants become dots — is_quick_add only controls the double-click default
@@ -579,6 +599,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
               variant_image_url: v.variant_image_url ?? null,
             }))
           newQuickVariants.set(cardId, quickVariants)
+          newCardVariants.set(cardId, variants as VariantWithQuantity[])
 
           // Track count of card-specific variants for the ★ indicator (multiple-variant case)
           const customCount = quickVariants.filter(v => v.card_id != null).length
@@ -587,6 +608,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
         
         setCardQuickVariants(newQuickVariants)
         setCardCustomVariantCounts(newCustomCounts)
+        setCardVariants(newCardVariants)  // pre-populate so modal variants appear instantly
 
         // Compute deduplicated legend variants (one entry per unique color, sorted)
         if (onVariantsLegendChange) {
@@ -907,8 +929,11 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     setModalTab('card')      // always open on Card tab
     fetchRelatedCards(card)
     fetchCardPrice(card.id)  // eagerly load so Market Price column is populated on Card tab
-    if (!cardVariantsRef.current.has(card.id)) {
-      setTimeout(() => loadCardVariants(card.id, false), 100)
+    // Variants are pre-populated from the batch (instant modal display).
+    // On first open, kick off a background GET to add missing variant_image_url data
+    // (used by the hover image-swap feature), without any delay.
+    if (!cardVariantsLoadedRef.current.has(card.id)) {
+      loadCardVariants(card.id, false)
     }
     // Pre-load wanted list on first modal open
     if (user) fetchWantedCards()
