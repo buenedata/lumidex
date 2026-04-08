@@ -6,6 +6,7 @@ import { ChevronUpDownIcon, CheckIcon, ArrowUpIcon, ArrowDownIcon } from '@heroi
 import { cn } from '@/lib/utils'
 import CardGrid from '@/components/CardGrid'
 import CollectionGoalSelector from '@/components/CollectionGoalSelector'
+import BinderCalculatorModal from '@/components/BinderCalculatorModal'
 import { useCollectionStore, useAuthStore } from '@/lib/store'
 import { PokemonCard, CollectionGoal, QuickAddVariant, PriceSource } from '@/types'
 import { formatPrice } from '@/lib/pricing'
@@ -85,6 +86,7 @@ export default function SetPageCards({
   const [sortDirection, setSortDirection]   = useState<SortDirection>('asc')
   const [collectionGoal, setCollectionGoal] = useState<CollectionGoal>(initialGoal)
   const [legendVariants, setLegendVariants] = useState<QuickAddVariant[]>([])
+  const [binderModalOpen, setBinderModalOpen] = useState(false)
 
   const { userCards: storeUserCards } = useCollectionStore()
   const { user, profile } = useAuthStore()
@@ -209,7 +211,7 @@ export default function SetPageCards({
         </div>
       )}
 
-      {/* ── Collection Goal Selector + Variant Legend ────────────── */}
+      {/* ── Collection Goal Selector + Variant Legend + Binder Guide ── */}
       <div className="max-w-screen-2xl mx-auto px-6 pt-5 pb-4 border-b border-subtle">
         <div className="flex flex-wrap items-start gap-6">
           <CollectionGoalSelector
@@ -251,6 +253,25 @@ export default function SetPageCards({
               </div>
             </div>
           )}
+
+          {/* Binder Guide button — aligned to the right via ml-auto */}
+          <div className="flex flex-col gap-1.5 ml-auto">
+            <span className="text-xs text-muted uppercase tracking-wider select-none">
+              Binder
+            </span>
+            <button
+              onClick={() => setBinderModalOpen(true)}
+              title="See how many binder pages you need to store this set"
+              className={cn(
+                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium',
+                'border border-subtle bg-surface text-secondary',
+                'hover:border-accent/50 hover:text-primary transition-all duration-150 cursor-pointer'
+              )}
+            >
+              <span className="text-base leading-none" aria-hidden>🗂️</span>
+              <span>Binder Guide</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -418,6 +439,16 @@ export default function SetPageCards({
             />
         )}
       </div>
+
+      {/* ── Binder Calculator Modal ───────────────────────────── */}
+      <BinderCalculatorModal
+        isOpen={binderModalOpen}
+        onClose={() => setBinderModalOpen(false)}
+        setId={setId}
+        setName={setName}
+        currentGoal={collectionGoal}
+        hasPromos={hasPromos}
+      />
     </div>
   )
 }
