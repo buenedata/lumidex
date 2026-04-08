@@ -37,7 +37,33 @@ export interface User {
   grey_out_unowned?: boolean;
   profile_private?: boolean;
   show_portfolio_value?: PortfolioVisibility;
+  lists_public_by_default?: boolean;
   created_at: string;
+}
+
+// ── Custom Lists ───────────────────────────────────────────────────────────────
+
+/** A user-created named list of cards (e.g. "Yuka Collection"). */
+export interface UserCardList {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  is_public: boolean;
+  /** Computed: number of cards in this list (returned by GET /api/user-lists). */
+  card_count?: number;
+  /** Computed: first few card image URLs for preview thumbnails. */
+  preview_images?: (string | null)[];
+  created_at: string;
+  updated_at: string;
+}
+
+/** A single card entry inside a custom list. */
+export interface UserCardListItem {
+  id: string;
+  list_id: string;
+  card_id: string;
+  added_at: string;
 }
 
 export interface UserSet {

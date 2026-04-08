@@ -56,15 +56,16 @@ interface FriendshipRow {
 
 function userToSettings(u: ProfileUser): SettingsValues {
   return {
-    display_name:         u.display_name        ?? '',
-    bio:                  u.bio                 ?? '',
-    location:             u.location            ?? '',
-    preferred_language:   u.preferred_language  ?? 'en',
-    preferred_currency:   u.preferred_currency  ?? 'USD',
-    price_source:         u.price_source        ?? 'tcgplayer',
-    grey_out_unowned:     u.grey_out_unowned     ?? true,
-    profile_private:      u.profile_private      ?? false,
-    show_portfolio_value: u.show_portfolio_value ?? 'public',
+    display_name:              u.display_name              ?? '',
+    bio:                       u.bio                       ?? '',
+    location:                  u.location                  ?? '',
+    preferred_language:        u.preferred_language        ?? 'en',
+    preferred_currency:        u.preferred_currency        ?? 'USD',
+    price_source:              u.price_source              ?? 'tcgplayer',
+    grey_out_unowned:          u.grey_out_unowned          ?? true,
+    profile_private:           u.profile_private           ?? false,
+    show_portfolio_value:      u.show_portfolio_value      ?? 'public',
+    lists_public_by_default:   u.lists_public_by_default   ?? false,
   }
 }
 

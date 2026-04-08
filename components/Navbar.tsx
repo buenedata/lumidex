@@ -90,6 +90,18 @@ export default function Navbar() {
                 Collection
               </Link>
               <Link
+                href="/wanted"
+                className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all"
+              >
+                Wanted
+              </Link>
+              <Link
+                href="/lists"
+                className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all"
+              >
+                Lists
+              </Link>
+              <Link
                 href={`/profile/${user.id}`}
                 className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all"
               >

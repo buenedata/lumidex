@@ -345,3 +345,41 @@ insert into public.variants (name, key, color, is_quick_add, sort_order, is_offi
     ('Pokeball',     'pokeball',   'red',    true, 4, true),
     ('Masterball',   'masterball', 'yellow', true, 5, true)
 on conflict (key) do nothing;
+
+-- ── User Card Lists (custom named lists) ─────────────────────
+-- Added: migration_user_card_lists.sql
+-- Users can create named lists of cards (e.g. "Yuka Collection").
+-- Each list is public or private (default: private).
+create table if not exists public.user_card_lists (
+    id          uuid        primary key default gen_random_uuid(),
+    user_id     uuid        not null references public.users(id) on delete cascade,
+    name        text        not null,
+    description text,
+    is_public   boolean     not null default false,
+    created_at  timestamptz not null default now(),
+    updated_at  timestamptz not null default now()
+);
+
+create index if not exists user_card_lists_user_id_idx
+    on public.user_card_lists (user_id);
+
+-- Items (cards) inside a custom list
+create table if not exists public.user_card_list_items (
+    id       uuid        primary key default gen_random_uuid(),
+    list_id  uuid        not null references public.user_card_lists(id) on delete cascade,
+    card_id  uuid        not null references public.cards(id)           on delete cascade,
+    added_at timestamptz not null default now(),
+    constraint user_card_list_items_list_card_key unique (list_id, card_id)
+);
+
+create index if not exists user_card_list_items_list_id_idx
+    on public.user_card_list_items (list_id);
+
+create index if not exists user_card_list_items_card_id_idx
+    on public.user_card_list_items (card_id);
+
+-- ── Users: lists_public_by_default ───────────────────────────
+-- Added: migration_lists_public_by_default.sql
+-- When true, new lists are created with is_public=true by default.
+-- Column: lists_public_by_default boolean not null default false
+-- (added via ALTER TABLE in the migration file)

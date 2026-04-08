@@ -12,6 +12,7 @@ import VariantSuggestionModal from '@/components/VariantSuggestionModal'
 import { formatPrice, EUR_TO_USD } from '@/lib/pricing'
 import type { PriceChartRange } from '@/components/PriceChart'
 import { updateVariant, deleteVariant, removeVariantFromCard } from '@/app/admin/variants/actions'
+import AddToListDropdown from '@/components/lists/AddToListDropdown'
 
 // Recharts has SSR issues — load only on client
 const PriceChart = dynamic(() => import('@/components/PriceChart'), { ssr: false })
@@ -311,6 +312,10 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const [wantedCardIds, setWantedCardIds]               = useState<Set<string>>(new Set())
   const [wantedLoading, setWantedLoading]               = useState(false)
   const [wantedInitialized, setWantedInitialized]       = useState(false)
+  // Custom list membership state — tracks which cards appear in any user list
+  // (used to fill the star if the card is in a list but not wanted)
+  const [listCardIds, setListCardIds]                   = useState<Set<string>>(new Set())
+  const [listCardsInitialized, setListCardsInitialized] = useState(false)
   // Friends tab state
   const [friendsCache, setFriendsCache]                 = useState<Map<string, FriendCardOwner[]>>(new Map())
   const [isLoadingFriends, setIsLoadingFriends]         = useState(false)
@@ -874,6 +879,19 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     } catch { /* non-critical */ }
   }, [wantedInitialized])
 
+  // Load all card IDs that are in any custom list once on first modal open
+  const fetchListCardIds = useCallback(async () => {
+    if (listCardsInitialized) return
+    try {
+      const res = await fetch('/api/user-lists/all-card-ids')
+      if (res.ok) {
+        const json = await res.json()
+        setListCardIds(new Set(json.cardIds ?? []))
+        setListCardsInitialized(true)
+      }
+    } catch { /* non-critical */ }
+  }, [listCardsInitialized])
+
   // Toggle wanted status for a card
   const toggleWanted = useCallback(async (cardId: string) => {
     if (wantedLoading) return
@@ -935,9 +953,12 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     if (!cardVariantsLoadedRef.current.has(card.id)) {
       loadCardVariants(card.id, false)
     }
-    // Pre-load wanted list on first modal open
-    if (user) fetchWantedCards()
-  }, [fetchRelatedCards, fetchCardPrice, loadCardVariants, fetchWantedCards, user])
+    // Pre-load wanted + list card IDs on first modal open
+    if (user) {
+      fetchWantedCards()
+      fetchListCardIds()
+    }
+  }, [fetchRelatedCards, fetchCardPrice, loadCardVariants, fetchWantedCards, fetchListCardIds, user])
 
   // Navigate to the previous / next card while the modal is open
   const navigateCard = (dir: 1 | -1) => {
@@ -1189,19 +1210,21 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                   })()}
                   {/* Divider */}
                   <span className="w-px h-5 bg-subtle mx-1 shrink-0" />
-                  {/* Wanted / Wishlist star — authenticated users only */}
+                  {/* Star / list dropdown — authenticated users only */}
                   {user && (
-                    <button
-                      onClick={() => toggleWanted(selectedCard.id)}
-                      disabled={wantedLoading}
-                      title={wantedCardIds.has(selectedCard.id) ? 'Remove from wanted list' : 'Add to wanted list'}
-                      className="p-2 transition-colors disabled:opacity-40"
-                    >
-                      {wantedCardIds.has(selectedCard.id)
-                        ? <span className="text-2xl leading-none text-yellow-400">★</span>
-                        : <span className="text-2xl leading-none text-muted hover:text-yellow-400 transition-colors">☆</span>
-                      }
-                    </button>
+                    <AddToListDropdown
+                      cardId={selectedCard.id}
+                      isWanted={wantedCardIds.has(selectedCard.id)}
+                      wantedLoading={wantedLoading}
+                      onToggleWanted={() => toggleWanted(selectedCard.id)}
+                      onListMembershipChange={(cardId, isInAnyList) => {
+                        setListCardIds(prev => {
+                          const next = new Set(prev)
+                          if (isInAnyList) { next.add(cardId) } else { next.delete(cardId) }
+                          return next
+                        })
+                      }}
+                    />
                   )}
                   <button
                     onClick={() => setSelectedCard(null)}

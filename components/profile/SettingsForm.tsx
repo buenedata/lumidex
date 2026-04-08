@@ -15,6 +15,7 @@ export interface SettingsValues {
   grey_out_unowned: boolean
   profile_private: boolean
   show_portfolio_value: PortfolioVisibility
+  lists_public_by_default: boolean
 }
 
 export const defaultSettings: SettingsValues = {
@@ -27,6 +28,7 @@ export const defaultSettings: SettingsValues = {
   grey_out_unowned: true,
   profile_private: false,
   show_portfolio_value: 'public',
+  lists_public_by_default: false,
 }
 
 // ── Option lists ──────────────────────────────────────────────
@@ -388,6 +390,14 @@ export default function SettingsForm({
                 description: 'Only you can see your portfolio value',
               },
             ]}
+          />
+
+          <Toggle
+            id="lists_public_by_default"
+            label="New lists are public by default"
+            description="When you create a new custom list it will be publicly visible unless you change it"
+            checked={values.lists_public_by_default}
+            onChange={v => onChange({ lists_public_by_default: v })}
           />
         </section>
       )}
