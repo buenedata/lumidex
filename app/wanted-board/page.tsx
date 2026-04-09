@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
+import TradeProposalCard, { type TradeProposal } from '@/components/trade/TradeProposalCard'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface WBUser {
@@ -153,16 +154,18 @@ function MatchPanel({ match }: { match: WBMatch }) {
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
-type FilterTab = 'all' | 'mutual'
+type PageTab = 'all' | 'mutual' | 'offers'
 
 export default function WantedBoardPage() {
   const { user, isLoading: authLoading } = useAuthStore()
   const router = useRouter()
 
   const [matches,    setMatches]    = useState<WBMatch[]>([])
+  const [proposals,  setProposals]  = useState<TradeProposal[]>([])
   const [loading,    setLoading]    = useState(true)
+  const [propLoading,setPropLoading] = useState(true)
   const [error,      setError]      = useState<string | null>(null)
-  const [activeTab,  setActiveTab]  = useState<FilterTab>('all')
+  const [activeTab,  setActiveTab]  = useState<PageTab>('all')
 
   // Auth guard
   useEffect(() => {
@@ -183,10 +186,28 @@ export default function WantedBoardPage() {
       .finally(() => setLoading(false))
   }, [user])
 
+  // Fetch trade proposals
+  useEffect(() => {
+    if (!user) return
+    setPropLoading(true)
+    fetch('/api/trade-proposals')
+      .then(r => r.json())
+      .then(d => setProposals(d.proposals ?? []))
+      .catch(() => {})
+      .finally(() => setPropLoading(false))
+  }, [user])
+
+  const handleStatusChange = useCallback((id: string, newStatus: string) => {
+    setProposals(prev =>
+      prev.map(p => p.id === id ? { ...p, status: newStatus as TradeProposal['status'] } : p)
+    )
+  }, [])
+
   if (authLoading) return null
 
-  const mutualCount  = matches.filter(m => m.isMutual).length
-  const displayed    = activeTab === 'mutual' ? matches.filter(m => m.isMutual) : matches
+  const mutualCount   = matches.filter(m => m.isMutual).length
+  const pendingCount  = proposals.filter(p => p.status === 'pending').length
+  const displayed     = activeTab === 'mutual' ? matches.filter(m => m.isMutual) : matches
 
   return (
     <div className="min-h-screen bg-[color:var(--color-bg-base)]">
@@ -216,87 +237,164 @@ export default function WantedBoardPage() {
           </Link>
         </div>
 
-        {/* ── Filter tabs ── */}
-        {!loading && !error && matches.length > 0 && (
-          <div className="flex gap-1 mb-6 bg-elevated border border-subtle rounded-xl p-1 w-fit">
-            {([['all', 'All matches', matches.length], ['mutual', 'Mutual', mutualCount]] as [FilterTab, string, number][]).map(([tab, label, count]) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={cn(
-                  'flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150',
-                  activeTab === tab
-                    ? 'bg-accent text-white shadow-sm'
-                    : 'text-secondary hover:text-primary',
-                )}
-              >
-                {label}
-                <span className={cn(
-                  'text-xs px-1.5 py-0.5 rounded-full font-bold',
-                  activeTab === tab ? 'bg-white/20 text-white' : 'bg-elevated border border-subtle text-muted',
-                )}>
-                  {count}
-                </span>
-              </button>
-            ))}
-          </div>
+        {/* ── Top-level tabs ── */}
+        <div className="flex gap-1 mb-6 bg-elevated border border-subtle rounded-xl p-1 w-fit flex-wrap">
+          {/* Matches tabs */}
+          {!loading && !error && (
+            <>
+              {([['all', 'All Matches', matches.length], ['mutual', 'Mutual', mutualCount]] as [PageTab, string, number][]).map(([tab, label, count]) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150',
+                    activeTab === tab
+                      ? 'bg-accent text-white shadow-sm'
+                      : 'text-secondary hover:text-primary',
+                  )}
+                >
+                  {label}
+                  <span className={cn(
+                    'text-xs px-1.5 py-0.5 rounded-full font-bold',
+                    activeTab === tab ? 'bg-white/20 text-white' : 'bg-elevated border border-subtle text-muted',
+                  )}>
+                    {count}
+                  </span>
+                </button>
+              ))}
+            </>
+          )}
+          {/* Trade Offers tab */}
+          <button
+            onClick={() => setActiveTab('offers')}
+            className={cn(
+              'flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150',
+              activeTab === 'offers'
+                ? 'bg-accent text-white shadow-sm'
+                : 'text-secondary hover:text-primary',
+            )}
+          >
+            Trade Offers
+            {pendingCount > 0 && (
+              <span className={cn(
+                'text-xs px-1.5 py-0.5 rounded-full font-bold',
+                activeTab === 'offers' ? 'bg-white/20 text-white' : 'bg-amber-500/20 border border-amber-500/40 text-amber-400',
+              )}>
+                {pendingCount}
+              </span>
+            )}
+            {pendingCount === 0 && !propLoading && (
+              <span className={cn(
+                'text-xs px-1.5 py-0.5 rounded-full font-bold',
+                activeTab === 'offers' ? 'bg-white/20 text-white' : 'bg-elevated border border-subtle text-muted',
+              )}>
+                {proposals.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* ══════════════════ MATCHES VIEWS ══════════════════ */}
+        {activeTab !== 'offers' && (
+          <>
+            {/* Loading */}
+            {loading && (
+              <div className="space-y-4">
+                {[0, 1, 2].map(i => <div key={i} className="skeleton h-52 rounded-2xl" />)}
+              </div>
+            )}
+
+            {/* Error */}
+            {!loading && error && (
+              <div className="text-center py-24">
+                <p className="text-red-400 text-sm mb-4">{error}</p>
+                <button onClick={() => window.location.reload()} className="text-sm text-accent hover:underline">
+                  Try again
+                </button>
+              </div>
+            )}
+
+            {/* Empty: no friends */}
+            {!loading && !error && matches.length === 0 && (
+              <div className="text-center py-24">
+                <p className="text-5xl mb-4">🔄</p>
+                <h2 className="text-xl font-semibold text-primary mb-2">No matches yet</h2>
+                <p className="text-secondary text-sm mb-6 max-w-sm mx-auto">
+                  Add friends and make sure you&apos;ve both starred cards on your wanted lists.
+                  When a friend wants a card you own, it&apos;ll appear here.
+                </p>
+                <div className="flex justify-center gap-3">
+                  <Link
+                    href="/dashboard"
+                    className="inline-flex items-center gap-2 h-10 px-5 text-sm font-medium rounded-lg bg-accent text-white hover:bg-accent-light transition-colors"
+                  >
+                    Find friends
+                  </Link>
+                  <Link
+                    href="/browse"
+                    className="inline-flex items-center gap-2 h-10 px-5 text-sm font-medium rounded-lg bg-elevated border border-subtle text-secondary hover:text-primary hover:border-accent/50 transition-colors"
+                  >
+                    Browse cards
+                  </Link>
+                </div>
+              </div>
+            )}
+
+            {/* Empty: mutual filter */}
+            {!loading && !error && matches.length > 0 && displayed.length === 0 && (
+              <div className="text-center py-20 text-muted text-sm">
+                No mutual matches yet — these appear when you and a friend each have cards the other wants.
+              </div>
+            )}
+
+            {/* Match list */}
+            {!loading && !error && displayed.length > 0 && (
+              <div className="space-y-4">
+                {displayed.map(m => <MatchPanel key={m.user.id} match={m} />)}
+              </div>
+            )}
+          </>
         )}
 
-        {/* ── Loading ── */}
-        {loading && (
-          <div className="space-y-4">
-            {[0, 1, 2].map(i => <div key={i} className="skeleton h-52 rounded-2xl" />)}
-          </div>
-        )}
+        {/* ══════════════════ TRADE OFFERS VIEW ══════════════════ */}
+        {activeTab === 'offers' && (
+          <>
+            {propLoading && (
+              <div className="space-y-4">
+                {[0, 1, 2].map(i => <div key={i} className="skeleton h-48 rounded-2xl" />)}
+              </div>
+            )}
 
-        {/* ── Error ── */}
-        {!loading && error && (
-          <div className="text-center py-24">
-            <p className="text-red-400 text-sm mb-4">{error}</p>
-            <button onClick={() => window.location.reload()} className="text-sm text-accent hover:underline">
-              Try again
-            </button>
-          </div>
-        )}
+            {!propLoading && proposals.length === 0 && (
+              <div className="text-center py-24">
+                <p className="text-5xl mb-4">📬</p>
+                <h2 className="text-xl font-semibold text-primary mb-2">No trade offers yet</h2>
+                <p className="text-secondary text-sm mb-6 max-w-sm mx-auto">
+                  Propose a trade from the Matches tab and it will appear here.
+                </p>
+              </div>
+            )}
 
-        {/* ── Empty: no friends ── */}
-        {!loading && !error && matches.length === 0 && (
-          <div className="text-center py-24">
-            <p className="text-5xl mb-4">🔄</p>
-            <h2 className="text-xl font-semibold text-primary mb-2">No matches yet</h2>
-            <p className="text-secondary text-sm mb-6 max-w-sm mx-auto">
-              Add friends and make sure you&apos;ve both starred cards on your wanted lists.
-              When a friend wants a card you own, it&apos;ll appear here.
-            </p>
-            <div className="flex justify-center gap-3">
-              <Link
-                href="/dashboard"
-                className="inline-flex items-center gap-2 h-10 px-5 text-sm font-medium rounded-lg bg-accent text-white hover:bg-accent-light transition-colors"
-              >
-                Find friends
-              </Link>
-              <Link
-                href="/browse"
-                className="inline-flex items-center gap-2 h-10 px-5 text-sm font-medium rounded-lg bg-elevated border border-subtle text-secondary hover:text-primary hover:border-accent/50 transition-colors"
-              >
-                Browse cards
-              </Link>
-            </div>
-          </div>
-        )}
-
-        {/* ── Empty: mutual filter has no results ── */}
-        {!loading && !error && matches.length > 0 && displayed.length === 0 && (
-          <div className="text-center py-20 text-muted text-sm">
-            No mutual matches yet — these appear when you and a friend each have cards the other wants.
-          </div>
-        )}
-
-        {/* ── Match list ── */}
-        {!loading && !error && displayed.length > 0 && (
-          <div className="space-y-4">
-            {displayed.map(m => <MatchPanel key={m.user.id} match={m} />)}
-          </div>
+            {!propLoading && proposals.length > 0 && (
+              <div className="space-y-4">
+                {/* Pending first, then by newest */}
+                {[...proposals]
+                  .sort((a, b) => {
+                    if (a.status === 'pending' && b.status !== 'pending') return -1
+                    if (b.status === 'pending' && a.status !== 'pending') return  1
+                    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                  })
+                  .map(p => (
+                    <TradeProposalCard
+                      key={p.id}
+                      proposal={p}
+                      onStatusChange={handleStatusChange}
+                    />
+                  ))
+                }
+              </div>
+            )}
+          </>
         )}
 
       </div>

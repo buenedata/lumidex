@@ -473,6 +473,9 @@ function TradeHubContent() {
   const [activePanel,   setActivePanel]   = useState<'offer' | 'request' | null>(null)
   const [cardPrices,    setCardPrices]    = useState<Record<string, CardPriceEntry>>({})
   const [showPicker,    setShowPicker]    = useState(false)
+  const [cashOffered,   setCashOffered]   = useState('')
+  const [cashRequested, setCashRequested] = useState('')
+  const [currencyCode,  setCurrencyCode]  = useState('EUR')
 
   // Auth guard
   useEffect(() => {
@@ -539,8 +542,12 @@ function TradeHubContent() {
     return sum + (p.eur ?? (p.usd != null ? p.usd / EUR_USD_RATE : 0))
   }, 0)
 
+  const parsedCashOffered   = Math.max(0, parseFloat(cashOffered)   || 0)
+  const parsedCashRequested = Math.max(0, parseFloat(cashRequested) || 0)
+  const canSubmit = offering.length > 0 || parsedCashOffered > 0
+
   const handleSubmit = async () => {
-    if (!withId || offering.length === 0) return
+    if (!withId || !canSubmit) return
     setSubmitting(true)
     setSubmitError(null)
 
@@ -549,10 +556,13 @@ function TradeHubContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          receiverId: withId,
-          notes:      notes.trim() || undefined,
-          offering:   offering.map(c => ({ cardId: c.id, quantity: 1 })),
-          requesting: requesting.map(c => ({ cardId: c.id, quantity: 1 })),
+          receiverId:    withId,
+          notes:         notes.trim() || undefined,
+          offering:      offering.map(c => ({ cardId: c.id, quantity: 1 })),
+          requesting:    requesting.map(c => ({ cardId: c.id, quantity: 1 })),
+          cashOffered:   parsedCashOffered   || undefined,
+          cashRequested: parsedCashRequested || undefined,
+          currencyCode:  currencyCode,
         }),
       })
 
@@ -628,7 +638,7 @@ function TradeHubContent() {
         {/* ── Two-panel layout ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
           {/* Your Offer */}
-          <div className="bg-elevated border border-subtle rounded-2xl p-5">
+          <div className="bg-elevated border border-subtle rounded-2xl p-5 flex flex-col gap-4">
             <TradePanel
               label="Your Offer"
               accentClass="text-accent"
@@ -644,10 +654,36 @@ function TradeHubContent() {
                 if (!addedOfferIds.has(card.id)) setOffering(prev => [...prev, card])
               }}
             />
+            {/* Cash to offer */}
+            <div className="border-t border-subtle pt-4">
+              <p className="text-[11px] font-semibold text-secondary uppercase tracking-wider mb-2">
+                💵 Add cash to offer
+              </p>
+              <div className="flex items-center gap-2">
+                <select
+                  value={currencyCode}
+                  onChange={e => setCurrencyCode(e.target.value)}
+                  className="h-9 bg-surface border border-subtle rounded-lg px-2 text-sm text-primary outline-none focus:border-accent/60 transition-colors shrink-0"
+                >
+                  {['EUR','USD','GBP','NOK','SEK','DKK','CAD','AUD','JPY','CHF'].map(c => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={cashOffered}
+                  onChange={e => setCashOffered(e.target.value)}
+                  placeholder="0.00"
+                  className="flex-1 h-9 bg-surface border border-subtle rounded-lg px-3 text-sm text-primary placeholder:text-muted outline-none focus:border-accent/60 transition-colors"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Other user offers */}
-          <div className="bg-elevated border border-subtle rounded-2xl p-5">
+          <div className="bg-elevated border border-subtle rounded-2xl p-5 flex flex-col gap-4">
             <TradePanel
               label={`${otherUser?.display_name ?? otherUser?.username ?? 'They'} Offer${(otherUser?.display_name ?? otherUser?.username ?? '').endsWith('s') ? '' : 's'}`}
               accentClass="text-price"
@@ -664,6 +700,26 @@ function TradeHubContent() {
               }}
               onOpenPicker={otherUser ? () => setShowPicker(true) : undefined}
             />
+            {/* Cash to request */}
+            <div className="border-t border-subtle pt-4">
+              <p className="text-[11px] font-semibold text-secondary uppercase tracking-wider mb-2">
+                💵 Request cash
+              </p>
+              <div className="flex items-center gap-2">
+                <span className="h-9 px-3 flex items-center bg-surface border border-subtle rounded-lg text-sm text-muted shrink-0">
+                  {currencyCode}
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={cashRequested}
+                  onChange={e => setCashRequested(e.target.value)}
+                  placeholder="0.00"
+                  className="flex-1 h-9 bg-surface border border-subtle rounded-lg px-3 text-sm text-primary placeholder:text-muted outline-none focus:border-accent/60 transition-colors"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -730,8 +786,8 @@ function TradeHubContent() {
         {/* ── Submit ── */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
           <div>
-            {offering.length === 0 && (
-              <p className="text-xs text-amber-400">Add at least one card to offer before sending.</p>
+            {!canSubmit && (
+              <p className="text-xs text-amber-400">Add at least one card or cash amount to offer before sending.</p>
             )}
             {submitError && (
               <p className="text-xs text-red-400">{submitError}</p>
@@ -746,10 +802,10 @@ function TradeHubContent() {
             </Link>
             <button
               onClick={handleSubmit}
-              disabled={submitting || offering.length === 0 || !otherUser}
+              disabled={submitting || !canSubmit || !otherUser}
               className={cn(
                 'h-10 px-6 rounded-xl text-sm font-semibold transition-all',
-                submitting || offering.length === 0 || !otherUser
+                submitting || !canSubmit || !otherUser
                   ? 'bg-accent/30 text-white/50 cursor-not-allowed'
                   : 'bg-accent text-white hover:bg-accent-light',
               )}
