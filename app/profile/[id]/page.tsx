@@ -17,6 +17,8 @@ import FriendsList from '@/components/profile/FriendsList'
 import FriendRequests from '@/components/profile/FriendRequests'
 import OutgoingRequests from '@/components/profile/OutgoingRequests'
 import AddFriendModal from '@/components/profile/AddFriendModal'
+import ProfileLists from '@/components/profile/ProfileLists'
+import ProfileWantedCards from '@/components/profile/ProfileWantedCards'
 import { type SettingsValues } from '@/components/profile/SettingsForm'
 import { User, Achievement, PokemonSet, SetProgress } from '@/types'
 import type { FriendEntry } from '@/components/profile/FriendsList'
@@ -730,6 +732,20 @@ export default function ProfilePage() {
                 </div>
               )}
             </section>
+
+            {/* ── Wanted Cards Section ─────────────────────────────────────────── */}
+            <ProfileWantedCards
+              userId={userId}
+              isOwnProfile={isOwnProfile}
+              displayName={displayName}
+            />
+
+            {/* ── Lists Section ────────────────────────────────────────────────── */}
+            <ProfileLists
+              userId={userId}
+              isOwnProfile={isOwnProfile}
+              displayName={displayName}
+            />
 
             {/* ── Friends Section ───────────────────────────────────────────────── */}
             <section className="mb-8">
