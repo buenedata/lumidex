@@ -1,7 +1,6 @@
 'use server'
 
 import { requireAdmin, getAdminSupabaseClient } from '@/lib/admin'
-import { revalidatePath } from 'next/cache'
 
 // Validation helpers
 function validateCreateVariant(data: any) {
@@ -96,8 +95,6 @@ export async function createVariant(formData: FormData) {
       throw new Error(`Failed to create variant: ${error.message}`)
     }
 
-    revalidatePath('/admin/variants')
-    
     return {
       success: true,
       data
@@ -162,8 +159,6 @@ export async function renameVariant(variantId: string, newName: string) {
     if (error) {
       throw new Error(`Failed to rename variant: ${error.message}`)
     }
-
-    revalidatePath('/admin/variants')
 
     return {
       success: true,
@@ -268,8 +263,6 @@ export async function updateVariant(
       throw new Error(`Failed to update variant: ${error.message}`)
     }
 
-    revalidatePath('/admin/variants')
-
     return { success: true, data }
 
   } catch (error: any) {
@@ -313,8 +306,6 @@ export async function deleteVariant(variantId: string) {
       throw new Error(`Failed to delete variant: ${error.message}`)
     }
 
-    revalidatePath('/admin/variants')
-    
     return {
       success: true,
       message: `Variant "${variant.name}" deleted successfully`
@@ -361,7 +352,6 @@ export async function removeVariantFromCard(variantId: string, cardId: string) {
       throw new Error(`Failed to remove variant from card: ${error.message}`)
     }
 
-    revalidatePath('/admin/variants')
     return { success: true, message: 'Variant removed from this card' }
   } catch (error: any) {
     console.error('removeVariantFromCard error:', error)
@@ -474,8 +464,6 @@ export async function approveVariantSuggestion(suggestionId: string) {
       throw new Error(`Failed to update suggestion: ${updateError.message}`)
     }
 
-    revalidatePath('/admin/variants')
-    
     return {
       success: true,
       data: newVariant,
@@ -599,8 +587,6 @@ export async function createCardSpecificVariant(formData: FormData) {
       }
     }
 
-    revalidatePath('/admin/variants')
-
     return { success: true, data: newVariant, madeDefault: makeDefault }
 
   } catch (error: any) {
@@ -639,8 +625,6 @@ export async function rejectVariantSuggestion(suggestionId: string) {
       throw new Error('Suggestion not found or already processed')
     }
 
-    revalidatePath('/admin/variants')
-    
     return {
       success: true,
       message: `Suggestion "${data.name}" rejected`

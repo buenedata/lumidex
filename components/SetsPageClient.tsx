@@ -47,8 +47,12 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId, seriesWi
     const latestDate = new Map<string, string>()
     for (const set of langSets) {
       const s = set.series ?? 'Other'
-      if (!latestDate.has(s) || (set.release_date && set.release_date > (latestDate.get(s) ?? ''))) {
-        latestDate.set(s, set.release_date ?? '')
+      // Fall back to created_at when release_date is null so that a series
+      // with missing release dates (e.g. some Japanese sets) is never sorted
+      // to the bottom by an empty string.
+      const dateStr = set.release_date ?? set.created_at
+      if (!latestDate.has(s) || dateStr > (latestDate.get(s) ?? '')) {
+        latestDate.set(s, dateStr)
       }
     }
     return Array.from(latestDate.entries())
