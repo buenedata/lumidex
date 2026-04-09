@@ -352,7 +352,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const [hoveredVariantId, setHoveredVariantId]         = useState<string | null>(null)
   // Admin: floating popup edit state for variant editing
   const [editingVariantId, setEditingVariantId]   = useState<string | null>(null)
-  const [editForm,         setEditForm]            = useState({ name: '', description: '', color: 'gray', sortOrder: 0 })
+  const [editForm,         setEditForm]            = useState({ name: '', description: '', color: 'gray', sortOrder: 0, isQuickAdd: false, shortLabel: '' })
   const [variantEditError, setVariantEditError]    = useState<string | null>(null)
   const [confirmDeleteId,  setConfirmDeleteId]     = useState<string | null>(null)
   const [isSavingEdit,     setIsSavingEdit]        = useState(false)
@@ -391,6 +391,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       description: editForm.description || null,
       color:       editForm.color,
       sortOrder:   editForm.sortOrder,
+      isQuickAdd:  editForm.isQuickAdd,
+      shortLabel:  editForm.shortLabel || null,
     })
     setIsSavingEdit(false)
     if (!result.success) {
@@ -405,7 +407,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
           selectedCard.id,
           variants.map(v =>
             v.id === variantId
-              ? { ...v, name: editForm.name, description: editForm.description || null, color: editForm.color as any, sort_order: editForm.sortOrder }
+              ? { ...v, name: editForm.name, description: editForm.description || null, color: editForm.color as any, sort_order: editForm.sortOrder, is_quick_add: editForm.isQuickAdd, short_label: editForm.shortLabel || null }
               : v
           )
         )
@@ -1622,6 +1624,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                                     description: variant.description || '',
                                     color:       variant.color,
                                     sortOrder:   variant.sort_order,
+                                    isQuickAdd:  variant.is_quick_add,
+                                    shortLabel:  variant.short_label ?? '',
                                   })
                                   setVariantEditError(null)
                                   setConfirmDeleteId(null)
