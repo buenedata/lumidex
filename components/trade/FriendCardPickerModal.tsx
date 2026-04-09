@@ -125,6 +125,7 @@ export default function FriendCardPickerModal({
 
   const [tab,     setTab]     = useState<'suggested' | 'all'>('suggested')
   const [search,  setSearch]  = useState('')
+  const [sort,    setSort]    = useState<'set' | 'price-desc' | 'price-asc'>('set')
   const [cards,   setCards]   = useState<FriendCard[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -159,7 +160,7 @@ export default function FriendCardPickerModal({
       .slice(0, 24)
   }, [cards, remainingEur, offerValueEur])
 
-  // ── All cards filtered + grouped by set ───────────────────────────────────
+  // ── All cards filtered ────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     if (!search.trim()) return cards
     const q = search.toLowerCase()
@@ -170,6 +171,17 @@ export default function FriendCardPickerModal({
     )
   }, [cards, search])
 
+  // ── Sorted flat list (for price sorts) ────────────────────────────────────
+  const sortedFlat = useMemo(() => {
+    if (sort === 'set') return filtered
+    return [...filtered].sort((a, b) => {
+      const pa = toEur(a) ?? (sort === 'price-desc' ? -Infinity : Infinity)
+      const pb = toEur(b) ?? (sort === 'price-desc' ? -Infinity : Infinity)
+      return sort === 'price-desc' ? pb - pa : pa - pb
+    })
+  }, [filtered, sort])
+
+  // ── Grouped by set (only used when sort === 'set') ────────────────────────
   const bySet = useMemo(() => {
     const groups = new Map<string, { setName: string; cards: FriendCard[] }>()
     for (const c of filtered) {
@@ -186,6 +198,12 @@ export default function FriendCardPickerModal({
   function handleSearch(v: string) {
     setSearch(v)
     if (v.trim()) setTab('all')
+  }
+
+  const sortLabel: Record<typeof sort, string> = {
+    'set':        '🗂️ By Set',
+    'price-desc': '💰 Price ↓',
+    'price-asc':  '💰 Price ↑',
   }
 
   return (
@@ -249,34 +267,58 @@ export default function FriendCardPickerModal({
           </div>
         </div>
 
-        {/* ── Tabs (hidden while searching) ── */}
-        {!search && (
-          <div className="flex gap-1 px-5 pt-3 pb-1 shrink-0">
-            <button
-              onClick={() => setTab('suggested')}
-              className={[
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
-                tab === 'suggested'
-                  ? 'bg-accent text-white'
-                  : 'text-muted hover:text-primary hover:bg-surface',
-              ].join(' ')}
-            >
-              <span>💡</span> Suggested
-            </button>
-            <button
-              onClick={() => setTab('all')}
-              className={[
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
-                tab === 'all'
-                  ? 'bg-accent text-white'
-                  : 'text-muted hover:text-primary hover:bg-surface',
-              ].join(' ')}
-            >
-              <span>🗂️</span> All Cards
-              {!loading && <span className="opacity-70">({cards.length})</span>}
-            </button>
-          </div>
-        )}
+        {/* ── Tabs + sort controls ── */}
+        <div className="flex items-center justify-between gap-2 px-5 pt-3 pb-1 shrink-0">
+          {/* Tabs */}
+          {!search && (
+            <div className="flex gap-1">
+              <button
+                onClick={() => setTab('suggested')}
+                className={[
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
+                  tab === 'suggested'
+                    ? 'bg-accent text-white'
+                    : 'text-muted hover:text-primary hover:bg-surface',
+                ].join(' ')}
+              >
+                <span>💡</span> Suggested
+              </button>
+              <button
+                onClick={() => setTab('all')}
+                className={[
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
+                  tab === 'all'
+                    ? 'bg-accent text-white'
+                    : 'text-muted hover:text-primary hover:bg-surface',
+                ].join(' ')}
+              >
+                <span>🗂️</span> All Cards
+                {!loading && <span className="opacity-70">({cards.length})</span>}
+              </button>
+            </div>
+          )}
+          {search && <div />}
+
+          {/* Sort control — only shown in All Cards / search mode */}
+          {(tab === 'all' || search) && !loading && cards.length > 0 && (
+            <div className="flex gap-1 ml-auto">
+              {(['set', 'price-desc', 'price-asc'] as const).map(s => (
+                <button
+                  key={s}
+                  onClick={() => setSort(s)}
+                  className={[
+                    'px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap',
+                    sort === s
+                      ? 'bg-surface border border-accent/50 text-accent'
+                      : 'text-muted hover:text-primary hover:bg-surface border border-transparent',
+                  ].join(' ')}
+                >
+                  {sortLabel[s]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* ── Content ── */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
@@ -351,13 +393,34 @@ export default function FriendCardPickerModal({
           {/* ── All Cards / Search tab ── */}
           {!loading && cards.length > 0 && (tab === 'all' || search) && (
             <div className="flex flex-col gap-6">
-              {bySet.length === 0 ? (
+              {filtered.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-3xl mb-2">🔍</p>
                   <p className="text-sm text-secondary font-medium">No results for &ldquo;{search}&rdquo;</p>
                   <p className="text-xs text-muted mt-1">{name} doesn&apos;t own any matching cards</p>
                 </div>
+              ) : sort !== 'set' ? (
+                /* Price-sorted flat grid */
+                <div>
+                  <p className="text-xs text-muted mb-3">
+                    {sortedFlat.length} card{sortedFlat.length !== 1 ? 's' : ''}
+                    {sortedFlat.filter(c => toEur(c) == null).length > 0 && (
+                      <> · {sortedFlat.filter(c => toEur(c) == null).length} unpriced</>
+                    )}
+                  </p>
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(90px,1fr))] gap-3">
+                    {sortedFlat.map(card => (
+                      <CardTile
+                        key={card.id}
+                        card={card}
+                        added={alreadyAdded.has(card.id)}
+                        onAdd={() => onAdd(card)}
+                      />
+                    ))}
+                  </div>
+                </div>
               ) : (
+                /* Grouped by set */
                 bySet.map(group => (
                   <div key={group.setName}>
                     <p className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 flex items-center gap-2">
