@@ -4,9 +4,12 @@ import { supabaseAdmin } from '@/lib/supabase'
 /**
  * GET /api/users/[id]/collection?q=&limit=
  *
- * Returns a user's owned cards (quantity > 0) with full card details and
- * price data (cm_trend EUR, tcgp_market USD). Used by the Trade Hub so the
- * current user can browse a trading partner's collection.
+ * Returns a user's owned cards with full card details and price data.
+ * Source of truth is `user_card_variants` (quantities aggregated per card).
+ * Prices come from `card_prices` (cm_trend EUR / tcgp_market USD).
+ *
+ * Used by the Trade Hub FriendCardPickerModal so the current user can
+ * browse a trading partner's collection.
  *
  * Response: { cards: FriendCard[] }
  */
@@ -23,21 +26,23 @@ export async function GET(
   const q     = (searchParams.get('q') ?? '').trim()
   const limit = Math.min(parseInt(searchParams.get('limit') ?? '500', 10), 1000)
 
-  // 1. Get all card IDs this user owns
-  const { data: owned, error: ownedError } = await supabaseAdmin
-    .from('user_cards')
+  // 1. Aggregate quantities from user_card_variants (the real collection store)
+  const { data: variantRows, error: variantError } = await supabaseAdmin
+    .from('user_card_variants')
     .select('card_id, quantity')
     .eq('user_id', userId)
     .gt('quantity', 0)
 
-  if (ownedError) {
-    console.error('[users/collection] user_cards error:', ownedError)
+  if (variantError) {
+    console.error('[users/collection] user_card_variants error:', variantError)
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
 
+  // Sum quantities per card (a card may have multiple variant rows)
   const ownedMap = new Map<string, number>()
-  for (const row of owned ?? []) {
-    ownedMap.set(row.card_id as string, row.quantity as number)
+  for (const row of variantRows ?? []) {
+    const cardId = row.card_id as string
+    ownedMap.set(cardId, (ownedMap.get(cardId) ?? 0) + (row.quantity as number))
   }
 
   if (ownedMap.size === 0) {
