@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { Variant, VariantSuggestion } from '@/types'
-import { createVariant, deleteVariant, renameVariant, approveVariantSuggestion, rejectVariantSuggestion } from '@/app/admin/variants/actions'
+import { createVariant, deleteVariant, updateVariant, approveVariantSuggestion, rejectVariantSuggestion } from '@/app/admin/variants/actions'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { CardSearch, SearchCard } from './CardSearch'
@@ -31,9 +31,15 @@ export function VariantManager({ initialVariants, initialSuggestions, onVariants
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({})
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null)
 
-  // Inline rename state
-  const [editingVariantId, setEditingVariantId] = useState<string | null>(null)
-  const [editingName, setEditingName] = useState('')
+  // Inline edit state
+  const [editingVariant, setEditingVariant] = useState<{
+    id: string
+    name: string
+    color: string
+    sortOrder: number
+    isQuickAdd: boolean
+    shortLabel: string
+  } | null>(null)
 
   // Card selection state
   const [selectedCard, setSelectedCard] = useState<SearchCard | null>(null)
@@ -131,44 +137,55 @@ export function VariantManager({ initialVariants, initialSuggestions, onVariants
     })
   }
 
-  const handleStartRename = (variant: Variant) => {
-    setEditingVariantId(variant.id)
-    setEditingName(variant.name)
+  const handleStartEdit = (variant: Variant) => {
+    setEditingVariant({
+      id: variant.id,
+      name: variant.name,
+      color: variant.color,
+      sortOrder: variant.sort_order,
+      isQuickAdd: variant.is_quick_add,
+      shortLabel: variant.short_label ?? '',
+    })
   }
 
-  const handleCancelRename = () => {
-    setEditingVariantId(null)
-    setEditingName('')
+  const handleCancelEdit = () => {
+    setEditingVariant(null)
   }
 
-  const handleSaveRename = async (variantId: string) => {
-    if (!editingName.trim()) {
+  const handleSaveEdit = async (variantId: string) => {
+    if (!editingVariant || !editingVariant.name.trim()) {
       showMessage('error', 'Variant name cannot be empty')
       return
     }
 
-    setLoading(`rename-${variantId}`, true)
+    setLoading(`edit-${variantId}`, true)
 
     startTransition(async () => {
       try {
-        const result = await renameVariant(variantId, editingName)
+        const result = await updateVariant(variantId, {
+          name: editingVariant.name,
+          description: null,
+          color: editingVariant.color,
+          sortOrder: editingVariant.sortOrder,
+          isQuickAdd: editingVariant.isQuickAdd,
+          shortLabel: editingVariant.shortLabel || null,
+        })
 
         if (result.success) {
-          showMessage('success', result.message || 'Variant renamed successfully')
+          showMessage('success', 'Variant updated successfully')
           const updatedVariants = variants.map(v =>
-            v.id === variantId ? { ...v, name: result.data.name } : v
+            v.id === variantId ? { ...v, ...result.data } : v
           )
           setVariants(updatedVariants)
           onVariantsChange?.(updatedVariants)
-          setEditingVariantId(null)
-          setEditingName('')
+          setEditingVariant(null)
         } else {
           showMessage('error', result.error)
         }
       } catch (error: any) {
-        showMessage('error', error.message || 'Failed to rename variant')
+        showMessage('error', error.message || 'Failed to update variant')
       } finally {
-        setLoading(`rename-${variantId}`, false)
+        setLoading(`edit-${variantId}`, false)
       }
     })
   }
@@ -578,44 +595,88 @@ export function VariantManager({ initialVariants, initialSuggestions, onVariants
                         }[variant.color] }}></div>
 
                         <div className="flex-1 min-w-0">
-                          {editingVariantId === variant.id ? (
-                            <div className="flex items-center gap-2">
-                              <Input
-                                type="text"
-                                value={editingName}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingName(e.target.value)}
-                                onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                                  if (e.key === 'Enter') handleSaveRename(variant.id)
-                                  if (e.key === 'Escape') handleCancelRename()
-                                }}
-                                className="h-8 text-sm py-1"
-                                autoFocus
-                                disabled={loadingStates[`rename-${variant.id}`] || isPending}
-                              />
-                              <Button
-                                size="sm"
-                                onClick={() => handleSaveRename(variant.id)}
-                                disabled={loadingStates[`rename-${variant.id}`] || isPending}
-                                className="bg-green-600 hover:bg-green-700 flex-shrink-0"
-                              >
-                                {loadingStates[`rename-${variant.id}`] ? '...' : 'Save'}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={handleCancelRename}
-                                disabled={loadingStates[`rename-${variant.id}`] || isPending}
-                                className="text-gray-400 hover:text-gray-200 flex-shrink-0"
-                              >
-                                Cancel
-                              </Button>
+                          {editingVariant?.id === variant.id ? (
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Input
+                                  type="text"
+                                  value={editingVariant.name}
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingVariant(prev => prev ? { ...prev, name: e.target.value } : prev)}
+                                  onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                                    if (e.key === 'Enter') handleSaveEdit(variant.id)
+                                    if (e.key === 'Escape') handleCancelEdit()
+                                  }}
+                                  className="h-8 text-sm py-1 w-36"
+                                  placeholder="Name"
+                                  autoFocus
+                                  disabled={loadingStates[`edit-${variant.id}`] || isPending}
+                                />
+                                <select
+                                  value={editingVariant.color}
+                                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditingVariant(prev => prev ? { ...prev, color: e.target.value } : prev)}
+                                  className="h-8 px-2 text-sm bg-gray-600 border border-gray-500 rounded text-white"
+                                  disabled={loadingStates[`edit-${variant.id}`] || isPending}
+                                >
+                                  <option value="blue">Blue</option>
+                                  <option value="green">Green</option>
+                                  <option value="purple">Purple</option>
+                                  <option value="red">Red</option>
+                                  <option value="pink">Pink</option>
+                                  <option value="yellow">Yellow</option>
+                                  <option value="gray">Gray</option>
+                                  <option value="orange">Orange</option>
+                                  <option value="teal">Teal</option>
+                                </select>
+                                <Input
+                                  type="number"
+                                  value={editingVariant.sortOrder}
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingVariant(prev => prev ? { ...prev, sortOrder: parseInt(e.target.value) || 0 } : prev)}
+                                  className="h-8 text-sm py-1 w-16"
+                                  placeholder="Order"
+                                  disabled={loadingStates[`edit-${variant.id}`] || isPending}
+                                />
+                                <Input
+                                  type="text"
+                                  value={editingVariant.shortLabel}
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingVariant(prev => prev ? { ...prev, shortLabel: e.target.value } : prev)}
+                                  className="h-8 text-sm py-1 w-20"
+                                  placeholder="Label"
+                                  disabled={loadingStates[`edit-${variant.id}`] || isPending}
+                                />
+                                <label className="flex items-center gap-1 text-sm text-gray-300 cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={editingVariant.isQuickAdd}
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingVariant(prev => prev ? { ...prev, isQuickAdd: e.target.checked } : prev)}
+                                    disabled={loadingStates[`edit-${variant.id}`] || isPending}
+                                  />
+                                  Quick Add
+                                </label>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleSaveEdit(variant.id)}
+                                  disabled={loadingStates[`edit-${variant.id}`] || isPending}
+                                  className="bg-green-600 hover:bg-green-700 flex-shrink-0"
+                                >
+                                  {loadingStates[`edit-${variant.id}`] ? '...' : 'Save'}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={handleCancelEdit}
+                                  disabled={loadingStates[`edit-${variant.id}`] || isPending}
+                                  className="text-gray-400 hover:text-gray-200 flex-shrink-0"
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
                             </div>
                           ) : (
                             <div className="flex items-center gap-2 group">
                               <div className="text-white font-medium">{variant.name}</div>
                               <button
-                                onClick={() => handleStartRename(variant)}
-                                title="Rename variant"
+                                onClick={() => handleStartEdit(variant)}
+                                title="Edit variant"
                                 className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-yellow-400 focus:opacity-100 focus:text-yellow-400 p-0.5 rounded"
                               >
                                 ✏️
@@ -635,7 +696,7 @@ export function VariantManager({ initialVariants, initialSuggestions, onVariants
                       <Button
                         variant="ghost"
                         onClick={() => handleDeleteVariant(variant.id, variant.name)}
-                        disabled={loadingStates[`delete-${variant.id}`] || isPending || editingVariantId === variant.id}
+                        disabled={loadingStates[`delete-${variant.id}`] || isPending || editingVariant?.id === variant.id}
                         className="text-red-400 hover:text-red-300 hover:bg-red-900/20 flex-shrink-0 ml-2"
                         size="sm"
                       >

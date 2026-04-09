@@ -185,7 +185,7 @@ export async function renameVariant(variantId: string, newName: string) {
  */
 export async function updateVariant(
   variantId: string,
-  fields: { name: string; description: string | null; color: string; sortOrder: number }
+  fields: { name: string; description: string | null; color: string; sortOrder: number; isQuickAdd: boolean; shortLabel: string | null }
 ) {
   try {
     await requireAdmin()
@@ -250,10 +250,12 @@ export async function updateVariant(
     const { data, error } = await supabase
       .from('variants')
       .update({
-        name:        trimmedName,
-        description: fields.description?.trim() || null,
-        color:       fields.color,
-        sort_order:  fields.sortOrder,
+        name:         trimmedName,
+        description:  fields.description?.trim() || null,
+        color:        fields.color,
+        sort_order:   fields.sortOrder,
+        is_quick_add: fields.isQuickAdd,
+        short_label:  fields.shortLabel?.trim() || null,
       })
       .eq('id', variantId)
       .select()
