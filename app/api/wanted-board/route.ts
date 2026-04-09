@@ -64,15 +64,16 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json({ matches: [] })
     }
 
-    // ── 2. My owned card IDs (quantity > 0) ──────────────────────────────────
-    const { data: myCardRows, error: myCardsError } = await supabaseAdmin
-      .from('user_cards')
+    // ── 2. My owned card IDs (quantity > 0) — use user_card_variants ─────────
+    const { data: myVariantRows, error: myCardsError } = await supabaseAdmin
+      .from('user_card_variants')
       .select('card_id')
       .eq('user_id', me)
       .gt('quantity', 0)
 
     if (myCardsError) throw myCardsError
-    const myCardIds = (myCardRows ?? []).map(c => c.card_id as string)
+    // De-duplicate (a card may have multiple variant rows)
+    const myCardIds = [...new Set((myVariantRows ?? []).map(c => c.card_id as string))]
 
     // ── 3. My wanted card IDs ────────────────────────────────────────────────
     const { data: myWantedRows, error: myWantedError } = await supabaseAdmin
@@ -96,18 +97,23 @@ export async function GET(_request: NextRequest) {
       theyWantRows.push(...(data ?? []) as { user_id: string; card_id: string }[])
     }
 
-    // ── 5. "I want cards they own" ───────────────────────────────────────────
+    // ── 5. "I want cards they own" — use user_card_variants ──────────────────
     const iWantRows: { user_id: string; card_id: string }[] = []
     if (myWantedIds.length > 0) {
       const { data, error } = await supabaseAdmin
-        .from('user_cards')
+        .from('user_card_variants')
         .select('user_id, card_id')
         .in('user_id', friendIds)
         .in('card_id', myWantedIds)
         .gt('quantity', 0)
 
       if (error) throw error
-      iWantRows.push(...(data ?? []) as { user_id: string; card_id: string }[])
+      // De-duplicate per (user_id, card_id) — a friend may have multiple variants
+      const seen = new Set<string>()
+      for (const row of (data ?? []) as { user_id: string; card_id: string }[]) {
+        const key = `${row.user_id}:${row.card_id}`
+        if (!seen.has(key)) { seen.add(key); iWantRows.push(row) }
+      }
     }
 
     // ── Early exit if no matches ─────────────────────────────────────────────

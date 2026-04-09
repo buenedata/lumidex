@@ -268,31 +268,28 @@ export default function WantedBoardPage() {
 
         {/* ── Top-level tabs ── */}
         <div className="flex gap-1 mb-6 bg-elevated border border-subtle rounded-xl p-1 w-fit flex-wrap">
-          {/* Matches tabs */}
-          {!loading && !error && (
-            <>
-              {([['all', 'All Matches', matches.length], ['mutual', 'Mutual', mutualCount]] as [PageTab, string, number][]).map(([tab, label, count]) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={cn(
-                    'flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150',
-                    activeTab === tab
-                      ? 'bg-accent text-white shadow-sm'
-                      : 'text-secondary hover:text-primary',
-                  )}
-                >
-                  {label}
-                  <span className={cn(
-                    'text-xs px-1.5 py-0.5 rounded-full font-bold',
-                    activeTab === tab ? 'bg-white/20 text-white' : 'bg-elevated border border-subtle text-muted',
-                  )}>
-                    {count}
-                  </span>
-                </button>
-              ))}
-            </>
-          )}
+          {/* Matches tabs — always shown, count shows 0 while loading or on error */}
+          {([['all', 'All Matches', loading ? '…' : matches.length], ['mutual', 'Mutual', loading ? '…' : mutualCount]] as [PageTab, string, number | string][]).map(([tab, label, count]) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab as PageTab)}
+              disabled={!!error}
+              className={cn(
+                'flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150',
+                activeTab === tab
+                  ? 'bg-accent text-white shadow-sm'
+                  : 'text-secondary hover:text-primary disabled:opacity-50',
+              )}
+            >
+              {label}
+              <span className={cn(
+                'text-xs px-1.5 py-0.5 rounded-full font-bold',
+                activeTab === tab ? 'bg-white/20 text-white' : 'bg-elevated border border-subtle text-muted',
+              )}>
+                {count}
+              </span>
+            </button>
+          ))}
           {/* Trade Offers tab */}
           <button
             onClick={() => setActiveTab('offers')}
