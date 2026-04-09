@@ -7,13 +7,22 @@ const NAV_GROUPS = [
       { href: '/browse', label: 'Browse Cards' },
       { href: '/sets', label: 'Sets' },
       { href: '/dashboard', label: 'Dashboard' },
+      { href: '/wanted-board', label: 'Wanted Board' },
     ],
   },
   {
     label: 'My Account',
     links: [
       { href: '/collection', label: 'My Collection' },
+      { href: '/lists', label: 'My Lists' },
       { href: '/profile', label: 'Profile' },
+    ],
+  },
+  {
+    label: 'Support',
+    links: [
+      { href: '/faq', label: 'FAQ' },
+      { href: 'https://discord.gg/J86x7tccbW', label: 'Discord', external: true },
     ],
   },
 ]
@@ -90,12 +99,23 @@ export default function Footer() {
                 <ul className="flex flex-col gap-2">
                   {group.links.map((link) => (
                     <li key={link.href}>
-                      <Link
-                        href={link.href}
-                        className="text-sm text-secondary hover:text-accent transition-colors"
-                      >
-                        {link.label}
-                      </Link>
+                      {'external' in link && link.external ? (
+                        <a
+                          href={link.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-secondary hover:text-accent transition-colors"
+                        >
+                          {link.label}
+                        </a>
+                      ) : (
+                        <Link
+                          href={link.href}
+                          className="text-sm text-secondary hover:text-accent transition-colors"
+                        >
+                          {link.label}
+                        </Link>
+                      )}
                     </li>
                   ))}
                 </ul>

@@ -51,7 +51,7 @@ interface CardPriceRow {
   variant_cm_urls:   Record<string, string> | null
 }
 
-type ModalTab = 'card' | 'price' | 'trade' | 'friends'
+type ModalTab = 'card' | 'price' | 'friends'
 
 type SortBy    = 'number' | 'name' | 'price'
 type FilterTab = 'all' | 'owned' | 'missing' | 'duplicates'
@@ -1328,12 +1328,6 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                     Price
                   </button>
                   <button
-                    className={modalTab === 'trade' ? 'tab-active pb-2 text-sm font-medium' : 'tab-inactive pb-2 text-sm'}
-                    onClick={() => setModalTab('trade')}
-                  >
-                    Trade
-                  </button>
-                  <button
                     className={modalTab === 'friends' ? 'tab-active pb-2 text-sm font-medium' : 'tab-inactive pb-2 text-sm'}
                     onClick={() => {
                       setModalTab('friends')
@@ -2060,18 +2054,6 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                   </div>
                 )}
               </div>}
-
-              {/* ── Trade Tab ─── */}
-              {modalTab === 'trade' && (
-                <div className="flex-1 flex flex-col items-center justify-center py-12 px-4 text-center">
-                  <span className="text-5xl mb-4">🔄</span>
-                  <h3 className="text-lg font-semibold text-primary mb-2">Trading Coming Soon</h3>
-                  <p className="text-secondary text-sm max-w-xs leading-relaxed">
-                    Trade your duplicates with other Lumidex collectors.
-                    We&rsquo;re building this feature — check back soon!
-                  </p>
-                </div>
-              )}
 
               {/* ── Friends Tab ─── */}
               {modalTab === 'friends' && (
