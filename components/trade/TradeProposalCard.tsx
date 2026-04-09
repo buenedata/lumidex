@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useAuthStore } from '@/lib/store'
+import { fmtCardPrice, sumAndFormatPrices } from '@/lib/currency'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface TPUser {
@@ -68,13 +70,6 @@ function fmtCash(amount: number, code: string): string {
   }).format(amount)
 }
 
-function fmtEur(v: number) {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(v)
-}
-function fmtUsd(v: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(v)
-}
-
 const STATUS_STYLES: Record<string, string> = {
   pending:   'bg-amber-500/15 text-amber-400 border-amber-500/30',
   accepted:  'bg-price/15 text-price border-price/30',
@@ -92,14 +87,16 @@ const STATUS_LABELS: Record<string, string> = {
 function CardDetailTile({
   item,
   price,
+  currency,
 }: {
   item: TPItem
   price: { eur: number | null; usd: number | null } | undefined
+  currency: string
 }) {
   const card = item.cards
   if (!card) return null
   const setInfo = (Array.isArray(card.sets) ? card.sets[0] : card.sets) as { name: string | null; logo_url: string | null } | null
-  const priceStr = price?.eur != null ? fmtEur(price.eur) : price?.usd != null ? fmtUsd(price.usd) : null
+  const priceStr = fmtCardPrice(price, currency)
 
   return (
     <div className="flex flex-col items-start gap-1.5 w-[90px] shrink-0">
@@ -155,6 +152,7 @@ function CardSidePanel({
   items,
   cashAmount,
   currencyCode,
+  userCurrency,
   prices,
 }: {
   label: string
@@ -162,30 +160,18 @@ function CardSidePanel({
   items: TPItem[]
   cashAmount: number
   currencyCode: string
+  userCurrency: string
   prices: Record<string, { eur: number | null; usd: number | null }>
 }) {
-  const totalEur = items.reduce((sum, item) => {
-    const p = item.cards ? prices[item.cards.id] : undefined
-    if (!p) return sum
-    return sum + (p.eur ?? 0)
-  }, 0)
-  const totalUsd = items.reduce((sum, item) => {
-    const p = item.cards ? prices[item.cards.id] : undefined
-    if (!p || p.eur != null) return sum
-    return sum + (p.usd ?? 0)
-  }, 0)
-
-  const hasTotal = totalEur > 0 || totalUsd > 0
+  const cardIds  = items.map(i => i.cards?.id).filter((id): id is string => !!id)
+  const totalStr = sumAndFormatPrices(cardIds, prices, userCurrency)
 
   return (
     <div className="px-5 py-4 flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <p className={`text-xs font-semibold uppercase tracking-wider ${labelClass}`}>{label}</p>
-        {hasTotal && (
-          <p className="text-xs font-bold text-primary">
-            {totalEur > 0 ? fmtEur(totalEur) : fmtUsd(totalUsd)}
-            {totalEur > 0 && totalUsd > 0 ? ` + ${fmtUsd(totalUsd)}` : ''}
-          </p>
+        {totalStr && (
+          <p className="text-xs font-bold text-primary">{totalStr}</p>
         )}
       </div>
 
@@ -196,6 +182,7 @@ function CardSidePanel({
               key={item.id}
               item={item}
               price={item.cards ? prices[item.cards.id] : undefined}
+              currency={userCurrency}
             />
           ))}
         </div>
@@ -221,6 +208,9 @@ export default function TradeProposalCard({ proposal, onStatusChange }: TradePro
   const [acting,  setActing]  = useState(false)
   const [error,   setError]   = useState<string | null>(null)
   const [prices,  setPrices]  = useState<Record<string, { eur: number | null; usd: number | null }>>({})
+
+  const { profile } = useAuthStore()
+  const userCurrency: string = (profile as any)?.preferred_currency ?? 'USD'
 
   const { otherUser, isProposer, status } = proposal
   const otherName = otherUser?.display_name ?? otherUser?.username ?? 'Trainer'
@@ -312,6 +302,7 @@ export default function TradeProposalCard({ proposal, onStatusChange }: TradePro
           items={myOfferItems}
           cashAmount={myCashOffer}
           currencyCode={proposal.currency_code}
+          userCurrency={userCurrency}
           prices={prices}
         />
         <CardSidePanel
@@ -320,6 +311,7 @@ export default function TradeProposalCard({ proposal, onStatusChange }: TradePro
           items={theirItems}
           cashAmount={theirCashOffer}
           currencyCode={proposal.currency_code}
+          userCurrency={userCurrency}
           prices={prices}
         />
       </div>
