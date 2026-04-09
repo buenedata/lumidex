@@ -96,11 +96,24 @@ function CardThumb({ card }: { card: WBCard }) {
 }
 
 // ── Match panel ───────────────────────────────────────────────────────────────
-function MatchPanel({ match }: { match: WBMatch }) {
+interface TradeProposalSummary {
+  id: string
+  status: string
+  isProposer: boolean
+}
+
+function MatchPanel({ match, pendingProposal, onViewOffers }: {
+  match: WBMatch
+  pendingProposal: TradeProposalSummary | null
+  onViewOffers: () => void
+}) {
   return (
-    <div className="bg-elevated border border-subtle rounded-2xl overflow-hidden hover:border-accent/40 transition-colors duration-150">
+    <div className={cn(
+      'bg-elevated border rounded-2xl overflow-hidden transition-colors duration-150',
+      pendingProposal ? 'border-accent/40' : 'border-subtle hover:border-accent/40',
+    )}>
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-subtle">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-subtle gap-3 flex-wrap">
         <div className="flex items-center gap-3">
           <FriendAvatar user={match.user} size={10} />
           <div>
@@ -117,12 +130,28 @@ function MatchPanel({ match }: { match: WBMatch }) {
             </span>
           )}
         </div>
-        <Link
-          href={buildTradeUrl(match)}
-          className="inline-flex items-center gap-1.5 h-9 px-4 text-sm font-semibold rounded-xl bg-accent text-white hover:bg-accent-light transition-colors"
-        >
-          🔄 Propose Trade
-        </Link>
+        <div className="flex items-center gap-2 shrink-0">
+          {pendingProposal ? (
+            <>
+              <span className="text-[11px] font-bold px-2.5 py-1 rounded-full border bg-amber-500/15 text-amber-400 border-amber-500/30">
+                ⏳ Proposal pending
+              </span>
+              <button
+                onClick={onViewOffers}
+                className="inline-flex items-center gap-1.5 h-9 px-4 text-sm font-semibold rounded-xl bg-surface border border-accent/40 text-accent hover:bg-elevated transition-colors"
+              >
+                View offer →
+              </button>
+            </>
+          ) : (
+            <Link
+              href={buildTradeUrl(match)}
+              className="inline-flex items-center gap-1.5 h-9 px-4 text-sm font-semibold rounded-xl bg-accent text-white hover:bg-accent-light transition-colors"
+            >
+              🔄 Propose Trade
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Body */}
@@ -350,7 +379,22 @@ export default function WantedBoardPage() {
             {/* Match list */}
             {!loading && !error && displayed.length > 0 && (
               <div className="space-y-4">
-                {displayed.map(m => <MatchPanel key={m.user.id} match={m} />)}
+                {displayed.map(m => {
+                  const pending = proposals.find(p =>
+                    p.status === 'pending' && (
+                      (p.isProposer  && p.receiver_id === m.user.id) ||
+                      (!p.isProposer && p.proposer_id === m.user.id)
+                    ),
+                  ) ?? null
+                  return (
+                    <MatchPanel
+                      key={m.user.id}
+                      match={m}
+                      pendingProposal={pending ? { id: pending.id, status: pending.status, isProposer: pending.isProposer } : null}
+                      onViewOffers={() => setActiveTab('offers')}
+                    />
+                  )
+                })}
               </div>
             )}
           </>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -63,10 +63,15 @@ function relativeTime(iso: string): string {
 
 function fmtCash(amount: number, code: string): string {
   return new Intl.NumberFormat(undefined, {
-    style: 'currency',
-    currency: code,
-    maximumFractionDigits: 2,
+    style: 'currency', currency: code, maximumFractionDigits: 2,
   }).format(amount)
+}
+
+function fmtEur(v: number) {
+  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(v)
+}
+function fmtUsd(v: number) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(v)
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -75,7 +80,6 @@ const STATUS_STYLES: Record<string, string> = {
   declined:  'bg-red-500/15 text-red-400 border-red-500/30',
   withdrawn: 'bg-surface text-muted border-subtle',
 }
-
 const STATUS_LABELS: Record<string, string> = {
   pending:   '⏳ Pending',
   accepted:  '✅ Accepted',
@@ -83,30 +87,129 @@ const STATUS_LABELS: Record<string, string> = {
   withdrawn: '↩ Withdrawn',
 }
 
-// ── Card thumbnail ────────────────────────────────────────────────────────────
-function CardThumb({ item }: { item: TPItem }) {
+// ── Detailed card tile ────────────────────────────────────────────────────────
+function CardDetailTile({
+  item,
+  price,
+}: {
+  item: TPItem
+  price: { eur: number | null; usd: number | null } | undefined
+}) {
   const card = item.cards
   if (!card) return null
   const setInfo = (Array.isArray(card.sets) ? card.sets[0] : card.sets) as { name: string | null; logo_url: string | null } | null
+  const priceStr = price?.eur != null ? fmtEur(price.eur) : price?.usd != null ? fmtUsd(price.usd) : null
+
   return (
-    <div
-      className="relative shrink-0 group"
-      title={`${card.name ?? ''} · ${setInfo?.name ?? ''} #${card.number ?? '?'}`}
-    >
-      <div className="w-[62px] h-[86px] rounded-lg overflow-hidden border border-subtle bg-surface">
+    <div className="flex flex-col items-start gap-1.5 w-[90px] shrink-0">
+      {/* Card image */}
+      <div className="relative w-[90px] h-[125px] rounded-xl overflow-hidden border border-subtle bg-surface group">
         <img
           src={card.image ?? '/pokemon_card_backside.png'}
           alt={card.name ?? ''}
           className="w-full h-full object-cover"
           loading="lazy"
         />
+        {/* Set logo overlay */}
+        {setInfo?.logo_url && (
+          <img
+            src={setInfo.logo_url}
+            alt=""
+            className="absolute bottom-1 right-1 h-4 w-auto object-contain opacity-80"
+          />
+        )}
+        {/* Quantity badge if > 1 */}
+        {item.quantity > 1 && (
+          <span className="absolute top-1 left-1 bg-black/70 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+            ×{item.quantity}
+          </span>
+        )}
       </div>
-      {setInfo?.logo_url && (
-        <img
-          src={setInfo.logo_url}
-          alt=""
-          className="absolute bottom-0.5 right-0.5 h-3 w-auto object-contain opacity-70"
-        />
+
+      {/* Card name */}
+      <p className="text-[11px] font-semibold text-primary leading-tight line-clamp-2 w-full">
+        {card.name ?? '—'}
+      </p>
+
+      {/* Set + number */}
+      <p className="text-[10px] text-muted leading-tight truncate w-full">
+        {setInfo?.name ?? ''}
+        {card.number ? ` · #${card.number}` : ''}
+      </p>
+
+      {/* Price */}
+      {priceStr ? (
+        <p className="text-[11px] font-bold text-price leading-none">{priceStr}</p>
+      ) : (
+        <p className="text-[10px] text-muted leading-none italic">No price</p>
+      )}
+    </div>
+  )
+}
+
+// ── Card side panel ───────────────────────────────────────────────────────────
+function CardSidePanel({
+  label,
+  labelClass,
+  items,
+  cashAmount,
+  currencyCode,
+  prices,
+}: {
+  label: string
+  labelClass: string
+  items: TPItem[]
+  cashAmount: number
+  currencyCode: string
+  prices: Record<string, { eur: number | null; usd: number | null }>
+}) {
+  const totalEur = items.reduce((sum, item) => {
+    const p = item.cards ? prices[item.cards.id] : undefined
+    if (!p) return sum
+    return sum + (p.eur ?? 0)
+  }, 0)
+  const totalUsd = items.reduce((sum, item) => {
+    const p = item.cards ? prices[item.cards.id] : undefined
+    if (!p || p.eur != null) return sum
+    return sum + (p.usd ?? 0)
+  }, 0)
+
+  const hasTotal = totalEur > 0 || totalUsd > 0
+
+  return (
+    <div className="px-5 py-4 flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <p className={`text-xs font-semibold uppercase tracking-wider ${labelClass}`}>{label}</p>
+        {hasTotal && (
+          <p className="text-xs font-bold text-primary">
+            {totalEur > 0 ? fmtEur(totalEur) : fmtUsd(totalUsd)}
+            {totalEur > 0 && totalUsd > 0 ? ` + ${fmtUsd(totalUsd)}` : ''}
+          </p>
+        )}
+      </div>
+
+      {items.length > 0 ? (
+        <div className="flex flex-wrap gap-3">
+          {items.map(item => (
+            <CardDetailTile
+              key={item.id}
+              item={item}
+              price={item.cards ? prices[item.cards.id] : undefined}
+            />
+          ))}
+        </div>
+      ) : cashAmount === 0 ? (
+        <p className="text-sm text-muted italic">Nothing offered</p>
+      ) : null}
+
+      {cashAmount > 0 && (
+        <div className="inline-flex items-center gap-2 bg-price/10 border border-price/30 rounded-xl px-4 py-2.5 w-fit">
+          <span className="text-lg">💵</span>
+          <div>
+            <p className="text-xs text-muted leading-none mb-0.5">Cash</p>
+            <p className="text-base font-bold text-price leading-none">{fmtCash(cashAmount, currencyCode)}</p>
+          </div>
+        </div>
       )}
     </div>
   )
@@ -114,8 +217,9 @@ function CardThumb({ item }: { item: TPItem }) {
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function TradeProposalCard({ proposal, onStatusChange }: TradeProposalCardProps) {
-  const [acting, setActing] = useState(false)
-  const [error,  setError]  = useState<string | null>(null)
+  const [acting,  setActing]  = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+  const [prices,  setPrices]  = useState<Record<string, { eur: number | null; usd: number | null }>>({})
 
   const { otherUser, isProposer, status } = proposal
   const otherName = otherUser?.display_name ?? otherUser?.username ?? 'Trainer'
@@ -123,14 +227,22 @@ export default function TradeProposalCard({ proposal, onStatusChange }: TradePro
   const offeringItems   = proposal.trade_proposal_items.filter(i => i.direction === 'offering')
   const requestingItems = proposal.trade_proposal_items.filter(i => i.direction === 'requesting')
 
-  // From the current user's POV:
-  // proposer = "you offer" items (direction='offering') + cash_offered
-  //            "you request" items (direction='requesting') + cash_requested
-  // receiver = reverse
   const myOfferItems   = isProposer ? offeringItems   : requestingItems
   const theirItems     = isProposer ? requestingItems : offeringItems
   const myCashOffer    = isProposer ? proposal.cash_offered   : proposal.cash_requested
   const theirCashOffer = isProposer ? proposal.cash_requested : proposal.cash_offered
+
+  // Fetch prices for all cards in this proposal
+  useEffect(() => {
+    const ids = proposal.trade_proposal_items
+      .map(i => i.cards?.id)
+      .filter((id): id is string => !!id)
+    if (ids.length === 0) return
+    fetch(`/api/cards/prices?ids=${ids.join(',')}`)
+      .then(r => r.json())
+      .then(d => { if (d.prices) setPrices(d.prices) })
+      .catch(() => {})
+  }, [proposal.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function act(newStatus: 'accepted' | 'declined' | 'withdrawn') {
     setActing(true)
@@ -160,24 +272,19 @@ export default function TradeProposalCard({ proposal, onStatusChange }: TradePro
       {/* ── Header ── */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-subtle gap-3 flex-wrap">
         <div className="flex items-center gap-3 min-w-0">
-          {/* Avatar */}
           <div className="w-10 h-10 rounded-full overflow-hidden bg-surface border border-subtle shrink-0 flex items-center justify-center">
             {otherUser?.avatar_url ? (
               <Image
                 src={otherUser.avatar_url}
                 alt={otherName}
-                width={40}
-                height={40}
+                width={40} height={40}
                 className="object-cover w-full h-full"
                 unoptimized
               />
             ) : (
-              <span className="text-sm font-bold text-accent">
-                {otherName[0].toUpperCase()}
-              </span>
+              <span className="text-sm font-bold text-accent">{otherName[0].toUpperCase()}</span>
             )}
           </div>
-
           <div className="min-w-0">
             <p className="font-semibold text-primary leading-tight truncate">{otherName}</p>
             <p className="text-xs text-muted leading-tight">
@@ -186,55 +293,29 @@ export default function TradeProposalCard({ proposal, onStatusChange }: TradePro
             </p>
           </div>
         </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          {/* Status badge */}
-          <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${STATUS_STYLES[status] ?? STATUS_STYLES.pending}`}>
-            {STATUS_LABELS[status] ?? status}
-          </span>
-        </div>
+        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border shrink-0 ${STATUS_STYLES[status] ?? STATUS_STYLES.pending}`}>
+          {STATUS_LABELS[status] ?? status}
+        </span>
       </div>
 
       {/* ── Body: two panels ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-subtle">
-
-        {/* Your offer */}
-        <div className="px-5 py-4">
-          <p className="text-xs font-semibold text-accent uppercase tracking-wider mb-3">
-            Your Offer
-          </p>
-          <div className="flex flex-wrap gap-2 mb-2">
-            {myOfferItems.map(item => <CardThumb key={item.id} item={item} />)}
-            {myOfferItems.length === 0 && myCashOffer === 0 && (
-              <p className="text-sm text-muted italic">No cards offered</p>
-            )}
-          </div>
-          {myCashOffer > 0 && (
-            <div className="mt-2 inline-flex items-center gap-1.5 bg-price/10 border border-price/30 rounded-lg px-3 py-1.5">
-              <span className="text-base">💵</span>
-              <span className="text-sm font-bold text-price">{fmtCash(myCashOffer, proposal.currency_code)}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Their offer */}
-        <div className="px-5 py-4">
-          <p className="text-xs font-semibold text-price uppercase tracking-wider mb-3">
-            {otherName} Offers
-          </p>
-          <div className="flex flex-wrap gap-2 mb-2">
-            {theirItems.map(item => <CardThumb key={item.id} item={item} />)}
-            {theirItems.length === 0 && theirCashOffer === 0 && (
-              <p className="text-sm text-muted italic">No cards offered</p>
-            )}
-          </div>
-          {theirCashOffer > 0 && (
-            <div className="mt-2 inline-flex items-center gap-1.5 bg-price/10 border border-price/30 rounded-lg px-3 py-1.5">
-              <span className="text-base">💵</span>
-              <span className="text-sm font-bold text-price">{fmtCash(theirCashOffer, proposal.currency_code)}</span>
-            </div>
-          )}
-        </div>
+        <CardSidePanel
+          label="Your Offer"
+          labelClass="text-accent"
+          items={myOfferItems}
+          cashAmount={myCashOffer}
+          currencyCode={proposal.currency_code}
+          prices={prices}
+        />
+        <CardSidePanel
+          label={`${otherName} Offers`}
+          labelClass="text-price"
+          items={theirItems}
+          cashAmount={theirCashOffer}
+          currencyCode={proposal.currency_code}
+          prices={prices}
+        />
       </div>
 
       {/* ── Notes ── */}
@@ -248,8 +329,10 @@ export default function TradeProposalCard({ proposal, onStatusChange }: TradePro
       {/* ── Actions ── */}
       {status === 'pending' && (
         <div className="px-5 py-3 border-t border-subtle flex items-center justify-between gap-3 flex-wrap">
-          {error && <p className="text-xs text-red-400">{error}</p>}
-          {!error && <div />}
+          {error
+            ? <p className="text-xs text-red-400">{error}</p>
+            : <div />
+          }
           <div className="flex items-center gap-2">
             {!isProposer && (
               <>
