@@ -22,7 +22,7 @@ const FAQ_SECTIONS: { section: string; items: FAQItem[] }[] = [
       {
         question: 'Is Lumidex free to use?',
         answer:
-          'Yes — Lumidex is free. Create an account and start tracking your collection immediately.',
+          'Yes — Lumidex is free right now, We will have two memberships in the future. One paid and one free. More information about this will come at a later stage.',
       },
       {
         question: 'Which card games does Lumidex support?',
