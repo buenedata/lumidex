@@ -114,8 +114,9 @@ function CardTileInner({
         />
         {/* Diagonal partial-ownership overlay — shown in masterset/grandmasterset
             mode when some but not all required variants are owned. A 135° hard-
-            stop gradient covers the bottom-right triangle of the card. */}
-        {isPartiallyOwned && (
+            stop gradient covers the bottom-right triangle of the card.
+            Respects the user's grey_out_unowned setting — no overlay if disabled. */}
+        {isPartiallyOwned && greyOutUnowned && (
           <div
             className="absolute inset-0 pointer-events-none z-10"
             style={{
