@@ -27,13 +27,18 @@ interface BinderCalculatorModalProps {
 
 // ── Binder size data ──────────────────────────────────────────────────────────
 
-// Standard binder page counts used for recommendations (sorted ascending)
-const STANDARD_BINDER_PAGES = [20, 40, 50, 100, 160]
-
-const POCKET_SIZES: { label: string; perPage: number }[] = [
-  { label: '12-pocket pages (3×4)', perPage: 12 },
-  { label: '9-pocket pages (3×3)',  perPage: 9  },
-  { label: '4-pocket pages (2×2)',  perPage: 4  },
+/**
+ * standardSizes: real binder page counts available for that pocket format, sorted ascending.
+ * Each entry maps to a product that actually exists in the market.
+ *
+ *   12-pocket (3×4)  →  40 pages only  (480 card capacity)
+ *    9-pocket (3×3)  →  20 or 40 pages (180 / 360 card capacity)
+ *    4-pocket (2×2)  →  40 pages only  (160 card capacity)
+ */
+const POCKET_SIZES: { label: string; perPage: number; standardSizes: number[] }[] = [
+  { label: '12-pocket pages (3×4)', perPage: 12, standardSizes: [40]     },
+  { label: '9-pocket pages (3×3)',  perPage: 9,  standardSizes: [20, 40] },
+  { label: '4-pocket pages (2×2)',  perPage: 4,  standardSizes: [40]     },
 ]
 
 const GOAL_ICONS: Record<CollectionGoal, string> = {
@@ -55,11 +60,11 @@ function pagesNeeded(cardCount: number, perPage: number): number {
 }
 
 /**
- * Returns the smallest standard binder size (in pages) that fits `pagesRequired`,
- * or null if it exceeds all standard sizes.
+ * Returns the smallest available binder size (in pages) that fits `pagesRequired`,
+ * or null if it exceeds all sizes in the list.
  */
-function recommendedBinderPages(pagesRequired: number): number | null {
-  return STANDARD_BINDER_PAGES.find(size => size >= pagesRequired) ?? null
+function recommendedBinderPages(pagesRequired: number, standardSizes: number[]): number | null {
+  return standardSizes.find(size => size >= pagesRequired) ?? null
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -267,10 +272,10 @@ export default function BinderCalculatorModal({
               {/* Binder recommendations */}
               {!loading && activeCount != null && (
                 <div className="flex flex-col gap-1.5">
-                  {POCKET_SIZES.map(({ label: pocketLabel, perPage }) => {
+                  {POCKET_SIZES.map(({ label: pocketLabel, perPage, standardSizes }) => {
                     const pages = pagesNeeded(activeCount, perPage)
-                    const recommended = recommendedBinderPages(pages)
-                    const shortLabel = pocketLabel.split(' ')[0] // "9-pocket" or "4-pocket"
+                    const recommended = recommendedBinderPages(pages, standardSizes)
+                    const shortLabel = pocketLabel.split(' ')[0] // "12-pocket", "9-pocket", or "4-pocket"
 
                     if (recommended) {
                       return (
@@ -290,7 +295,7 @@ export default function BinderCalculatorModal({
                       )
                     }
 
-                    const largestStandard = STANDARD_BINDER_PAGES[STANDARD_BINDER_PAGES.length - 1]
+                    const largestStandard = standardSizes[standardSizes.length - 1]
                     const bindersNeeded = Math.ceil(pages / largestStandard)
                     return (
                       <div key={perPage} className="flex items-start gap-2 text-sm">
