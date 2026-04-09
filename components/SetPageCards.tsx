@@ -85,8 +85,11 @@ export default function SetPageCards({
   const [sortBy, setSortBy]                 = useState<SortBy>('number')
   const [sortDirection, setSortDirection]   = useState<SortDirection>('asc')
   const [collectionGoal, setCollectionGoal] = useState<CollectionGoal>(initialGoal)
-  const [legendVariants, setLegendVariants] = useState<QuickAddVariant[]>([])
-  const [binderModalOpen, setBinderModalOpen] = useState(false)
+  const [legendVariants, setLegendVariants]     = useState<QuickAddVariant[]>([])
+  const [binderModalOpen, setBinderModalOpen]   = useState(false)
+  // Set to true once the batch variant fetch detects any card-specific variants.
+  // Combined with hasPromos to determine Grandmaster Set selector visibility.
+  const [hasExtraVariants, setHasExtraVariants] = useState(false)
 
   const { userCards: storeUserCards } = useCollectionStore()
   const { user, profile } = useAuthStore()
@@ -217,19 +220,19 @@ export default function SetPageCards({
           <CollectionGoalSelector
             setId={setId}
             value={collectionGoal}
-            hasPromos={hasPromos}
+            hasPromos={hasPromos || hasExtraVariants}
             isAuthenticated={isAuthenticated}
             onChange={setCollectionGoal}
           />
 
           {/* Variant legend — mirrors CollectionGoalSelector's flex-col structure so rows align */}
-          {legendVariants.length > 0 && (
+          {legendVariants.filter(v => v.color !== 'gray').length > 0 && (
             <div className="flex flex-col gap-1.5">
               <span className="text-xs text-muted uppercase tracking-wider select-none">
                 Variant Key
               </span>
               <div className="flex flex-wrap items-center gap-3">
-                {legendVariants.map(v => (
+                {legendVariants.filter(v => v.color !== 'gray').map(v => (
                   <div key={v.color} className="flex items-center gap-1.5">
                     <div
                       className="w-3 h-3 rounded-full flex-shrink-0"
@@ -435,6 +438,7 @@ export default function SetPageCards({
               priceSource={priceSource}
               userId={userId}
               onVariantsLegendChange={setLegendVariants}
+              onHasExtraVariants={setHasExtraVariants}
               disableGreyOut={disableGreyOut}
             />
         )}

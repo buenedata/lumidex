@@ -70,7 +70,9 @@ function CardTileInner({
   onVariantGrayClick,
 }: CardTileProps) {
   const typeGlowClass   = getTypeGlowClass(card.type)
-  const shouldGrey      = greyOutUnowned && !isOwned
+  // Full grayscale for fully unowned cards only — partially owned cards skip this
+  // and instead get the diagonal overlay (rendered below the image).
+  const shouldGrey      = greyOutUnowned && !isOwned && !isPartiallyOwned
   // Card-specific variants are never shown as dots — the +N badge handles them
   const buttonsToRender = quickVariants.filter(v => v.card_id == null)
 

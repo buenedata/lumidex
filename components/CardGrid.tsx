@@ -95,6 +95,11 @@ interface CardGridProps {
   /** Called once the batch variant fetch completes with the deduplicated legend variants. */
   onVariantsLegendChange?: (variants: QuickAddVariant[]) => void
   /**
+   * Called after the batch variant fetch when any card in the set has card-specific
+   * (non-global) variants. Used to show the Grandmaster Set option in the goal selector.
+   */
+  onHasExtraVariants?: (has: boolean) => void
+  /**
    * When true, cards are never greyed out regardless of the user's grey_out_unowned setting.
    * Used on the browse/search page where collection status should not affect card appearance.
    */
@@ -252,7 +257,7 @@ function getTypeGlowClass(type: string | null | undefined): string {
   return known.includes(key) ? `card-type-${key}` : ''
 }
 
-export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', sortDirection = 'asc', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', priceSource = 'tcgplayer', onVariantsLegendChange, disableGreyOut = false, onWantedStatusChange }: CardGridProps) {
+export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', sortDirection = 'asc', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', priceSource = 'tcgplayer', onVariantsLegendChange, onHasExtraVariants, disableGreyOut = false, onWantedStatusChange }: CardGridProps) {
   const { updateCardQuantity, userCards: storeUserCards, fetchUserCards } = useCollectionStore()
   const { user, isLoading, profile } = useAuthStore()
   // Prefer the client-side profile's preferred_currency (always reliable after login)
@@ -661,13 +666,14 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
         setCardCustomVariantCounts(newCustomCounts)
         setCardVariants(newCardVariants)  // pre-populate so modal variants appear instantly
 
-        // Compute deduplicated legend variants (one entry per unique color, sorted)
+        // Compute deduplicated legend variants — global variants only (card_id == null).
+        // Card-specific variants are excluded so they never appear in the Variant Key.
         if (onVariantsLegendChange) {
           const seen = new Set<string>()
           const legendVariants: QuickAddVariant[] = []
           for (const [, cvariants] of newQuickVariants) {
             for (const v of cvariants) {
-              if (!seen.has(v.color)) {
+              if (v.card_id == null && !seen.has(v.color)) {
                 seen.add(v.color)
                 legendVariants.push(v)
               }
@@ -676,6 +682,10 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
           legendVariants.sort((a, b) => a.sort_order - b.sort_order)
           onVariantsLegendChange(legendVariants)
         }
+
+        // Signal whether any card in this set has card-specific variants.
+        // SetPageCards uses this to decide whether to show the Grandmaster Set option.
+        onHasExtraVariants?.(newCustomCounts.size > 0)
 
       } catch (error) {
         console.error('Failed to batch load variants:', error)
