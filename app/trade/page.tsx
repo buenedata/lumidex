@@ -6,6 +6,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
+import FriendCardPickerModal, { type FriendCard } from '@/components/trade/FriendCardPickerModal'
 
 // ── Normalise cards from different API shapes into TradeCard ──────────────────
 // /api/my-collection  → { image, set_name, set_logo_url, set_id }
@@ -141,6 +142,7 @@ function TradePanel({
   setActivePanel,
   addedIds,
   onAdd,
+  onOpenPicker,
 }: {
   label: string
   accentClass: string
@@ -153,6 +155,8 @@ function TradePanel({
   setActivePanel: (p: 'offer' | 'request' | null) => void
   addedIds: Set<string>
   onAdd: (card: TradeCard) => void
+  /** When set, replaces the inline search with a button that calls this */
+  onOpenPicker?: () => void
 }) {
   const isOpen = activePanel === panelKey
   const [q, setQ]                         = useState('')
@@ -196,8 +200,16 @@ function TradePanel({
         <p className="text-sm text-muted italic">No cards added yet</p>
       )}
 
-      {/* Add button */}
-      {!isOpen ? (
+      {/* Add button — picker modal (request side) or inline search (offer side) */}
+      {onOpenPicker ? (
+        <button
+          onClick={onOpenPicker}
+          className="self-start flex items-center gap-1.5 text-xs font-semibold text-accent hover:text-accent-light transition-colors"
+        >
+          <span className="w-5 h-5 rounded-full border border-accent/50 flex items-center justify-center text-sm leading-none">+</span>
+          Browse their collection
+        </button>
+      ) : !isOpen ? (
         <button
           onClick={() => setActivePanel(panelKey)}
           className="self-start flex items-center gap-1.5 text-xs font-semibold text-accent hover:text-accent-light transition-colors"
@@ -460,6 +472,7 @@ function TradeHubContent() {
   const [success,       setSuccess]       = useState(false)
   const [activePanel,   setActivePanel]   = useState<'offer' | 'request' | null>(null)
   const [cardPrices,    setCardPrices]    = useState<Record<string, CardPriceEntry>>({})
+  const [showPicker,    setShowPicker]    = useState(false)
 
   // Auth guard
   useEffect(() => {
@@ -512,6 +525,19 @@ function TradeHubContent() {
 
   const addedOfferIds   = new Set(offering.map(c => c.id))
   const addedRequestIds = new Set(requesting.map(c => c.id))
+
+  // EUR totals for the price summary and picker context
+  const EUR_USD_RATE = 1.09
+  const offerValueEur = offering.reduce((sum, c) => {
+    const p = cardPrices[c.id]
+    if (!p) return sum
+    return sum + (p.eur ?? (p.usd != null ? p.usd / EUR_USD_RATE : 0))
+  }, 0)
+  const requestedValueEur = requesting.reduce((sum, c) => {
+    const p = cardPrices[c.id]
+    if (!p) return sum
+    return sum + (p.eur ?? (p.usd != null ? p.usd / EUR_USD_RATE : 0))
+  }, 0)
 
   const handleSubmit = async () => {
     if (!withId || offering.length === 0) return
@@ -636,6 +662,7 @@ function TradeHubContent() {
               onAdd={card => {
                 if (!addedRequestIds.has(card.id)) setRequesting(prev => [...prev, card])
               }}
+              onOpenPicker={otherUser ? () => setShowPicker(true) : undefined}
             />
           </div>
         </div>
@@ -647,6 +674,38 @@ function TradeHubContent() {
             requesting={requesting}
             priceMap={cardPrices}
             otherUserName={otherUser?.display_name ?? otherUser?.username ?? 'They'}
+          />
+        )}
+
+        {/* ── Friend card picker modal ── */}
+        {showPicker && otherUser && (
+          <FriendCardPickerModal
+            otherUser={otherUser}
+            alreadyAdded={addedRequestIds}
+            offerValueEur={offerValueEur}
+            requestedValueEur={requestedValueEur}
+            onAdd={(card: FriendCard) => {
+              if (!addedRequestIds.has(card.id)) {
+                setRequesting(prev => [...prev, {
+                  id:           card.id,
+                  set_id:       card.set_id,
+                  name:         card.name,
+                  number:       card.number,
+                  image:        card.image,
+                  set_name:     card.set_name,
+                  set_logo_url: card.set_logo_url,
+                  quantity:     card.quantity,
+                }])
+                // Seed the price cache immediately so the summary updates instantly
+                if (card.price_eur != null || card.price_usd != null) {
+                  setCardPrices(prev => ({
+                    ...prev,
+                    [card.id]: { eur: card.price_eur, usd: card.price_usd },
+                  }))
+                }
+              }
+            }}
+            onClose={() => setShowPicker(false)}
           />
         )}
 
