@@ -44,6 +44,11 @@ interface TradeCard {
   quantity?: number
 }
 
+interface CardPriceEntry {
+  eur: number | null
+  usd: number | null
+}
+
 // ── Small reusable pieces ─────────────────────────────────────────────────────
 function UserAvatar({ user, size = 10 }: { user: TradeUser; size?: number }) {
   const initial = (user.display_name ?? user.username ?? '?')[0].toUpperCase()
@@ -320,6 +325,119 @@ function TradeSuccess({ otherUser }: { otherUser: TradeUser | null }) {
   )
 }
 
+// ── Price summary helpers ─────────────────────────────────────────────────────
+function sumPrices(cards: TradeCard[], priceMap: Record<string, CardPriceEntry>): { eur: number; usd: number; missing: number } {
+  let eur = 0, usd = 0, missing = 0
+  for (const c of cards) {
+    const p = priceMap[c.id]
+    if (!p) { missing++; continue }
+    if (p.eur != null)       eur += p.eur
+    else if (p.usd != null)  usd += p.usd
+    else                     missing++
+  }
+  return { eur, usd, missing }
+}
+
+function fmtEur(v: number) {
+  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(v)
+}
+function fmtUsd(v: number) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(v)
+}
+
+function TradePriceSummary({
+  offering,
+  requesting,
+  priceMap,
+  otherUserName,
+}: {
+  offering: TradeCard[]
+  requesting: TradeCard[]
+  priceMap: Record<string, CardPriceEntry>
+  otherUserName: string
+}) {
+  const offerTotals   = sumPrices(offering,   priceMap)
+  const requestTotals = sumPrices(requesting, priceMap)
+
+  // Convert everything to EUR for comparison (USD prices get divided back)
+  const EUR_USD = 1.09
+  const offerEurEq   = offerTotals.eur   + offerTotals.usd / EUR_USD
+  const requestEurEq = requestTotals.eur + requestTotals.usd / EUR_USD
+
+  const diff    = offerEurEq - requestEurEq
+  const hasDiff = (offerTotals.eur + offerTotals.usd + requestTotals.eur + requestTotals.usd) > 0
+
+  function sideLabel(totals: { eur: number; usd: number; missing: number }, count: number) {
+    if (count === 0) return <span className="text-muted text-sm italic">No cards</span>
+    const parts: string[] = []
+    if (totals.eur > 0) parts.push(fmtEur(totals.eur))
+    if (totals.usd > 0) parts.push(fmtUsd(totals.usd))
+    const priced = count - totals.missing
+    return (
+      <div className="flex flex-col items-center gap-0.5">
+        {parts.length > 0
+          ? <span className="text-primary font-bold text-lg leading-tight">{parts.join(' + ')}</span>
+          : <span className="text-muted text-sm">No price data</span>
+        }
+        {totals.missing > 0 && priced > 0 && (
+          <span className="text-[10px] text-muted">{totals.missing} card{totals.missing !== 1 ? 's' : ''} unpriced</span>
+        )}
+        {totals.missing > 0 && priced === 0 && (
+          <span className="text-[10px] text-muted">No price data available</span>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-elevated border border-subtle rounded-2xl p-5 mb-6">
+      <p className="text-xs font-semibold text-secondary uppercase tracking-wider mb-4">
+        💰 Trade Value Overview
+      </p>
+
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
+        {/* Your side */}
+        <div className="flex flex-col items-center gap-1 text-center">
+          <span className="text-[11px] font-semibold text-accent uppercase tracking-wider">Your Offer</span>
+          {sideLabel(offerTotals, offering.length)}
+        </div>
+
+        {/* VS divider */}
+        <div className="flex flex-col items-center gap-1">
+          <div className="w-px h-8 bg-subtle" />
+          <span className="text-xs font-bold text-muted">VS</span>
+          <div className="w-px h-8 bg-subtle" />
+        </div>
+
+        {/* Their side */}
+        <div className="flex flex-col items-center gap-1 text-center">
+          <span className="text-[11px] font-semibold text-price uppercase tracking-wider">{otherUserName} Offers</span>
+          {sideLabel(requestTotals, requesting.length)}
+        </div>
+      </div>
+
+      {/* Fairness indicator */}
+      {hasDiff && Math.abs(diff) > 0.01 && (
+        <div className={`mt-4 flex items-center justify-center gap-1.5 text-xs font-medium rounded-lg px-3 py-2 ${
+          Math.abs(diff) < 2
+            ? 'bg-price/10 text-price'
+            : diff > 0
+              ? 'bg-amber-500/10 text-amber-400'
+              : 'bg-blue-500/10 text-blue-400'
+        }`}>
+          {Math.abs(diff) < 2 ? (
+            <><span>✅</span> Trade looks balanced</>
+          ) : diff > 0 ? (
+            <><span>⚠️</span> You&apos;re offering ~{fmtEur(Math.abs(diff))} more than you request</>
+          ) : (
+            <><span>ℹ️</span> You&apos;re requesting ~{fmtEur(Math.abs(diff))} more than you offer</>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Main trade content (requires useSearchParams) ──────────────────────────────
 function TradeHubContent() {
   const { user, isLoading: authLoading } = useAuthStore()
@@ -341,6 +459,7 @@ function TradeHubContent() {
   const [submitting,    setSubmitting]    = useState(false)
   const [success,       setSuccess]       = useState(false)
   const [activePanel,   setActivePanel]   = useState<'offer' | 'request' | null>(null)
+  const [cardPrices,    setCardPrices]    = useState<Record<string, CardPriceEntry>>({})
 
   // Auth guard
   useEffect(() => {
@@ -370,6 +489,21 @@ function TradeHubContent() {
       .finally(() => setLoadingInit(false))
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, withId])
+
+  // Fetch prices whenever offering or requesting changes
+  useEffect(() => {
+    const allIds = [...offering.map(c => c.id), ...requesting.map(c => c.id)]
+    if (allIds.length === 0) return
+    const missing = allIds.filter(id => !(id in cardPrices))
+    if (missing.length === 0) return
+    fetch(`/api/cards/prices?ids=${missing.join(',')}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.prices) setCardPrices(prev => ({ ...prev, ...d.prices }))
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offering, requesting])
 
   // Collection search endpoint (offering panel)
   const offerSearchUrl = useCallback((q: string) => `/api/my-collection?q=${encodeURIComponent(q)}&limit=20`, [])
@@ -467,10 +601,10 @@ function TradeHubContent() {
 
         {/* ── Two-panel layout ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
-          {/* You Offer */}
+          {/* Your Offer */}
           <div className="bg-elevated border border-subtle rounded-2xl p-5">
             <TradePanel
-              label="You Offer"
+              label="Your Offer"
               accentClass="text-accent"
               cards={offering}
               onRemove={id => setOffering(prev => prev.filter(c => c.id !== id))}
@@ -486,10 +620,10 @@ function TradeHubContent() {
             />
           </div>
 
-          {/* You Request */}
+          {/* Other user offers */}
           <div className="bg-elevated border border-subtle rounded-2xl p-5">
             <TradePanel
-              label="You Request"
+              label={`${otherUser?.display_name ?? otherUser?.username ?? 'They'} Offer${(otherUser?.display_name ?? otherUser?.username ?? '').endsWith('s') ? '' : 's'}`}
               accentClass="text-price"
               cards={requesting}
               onRemove={id => setRequesting(prev => prev.filter(c => c.id !== id))}
@@ -505,6 +639,16 @@ function TradeHubContent() {
             />
           </div>
         </div>
+
+        {/* ── Price summary ── */}
+        {(offering.length > 0 || requesting.length > 0) && (
+          <TradePriceSummary
+            offering={offering}
+            requesting={requesting}
+            priceMap={cardPrices}
+            otherUserName={otherUser?.display_name ?? otherUser?.username ?? 'They'}
+          />
+        )}
 
         {/* ── Notes ── */}
         <div className="bg-elevated border border-subtle rounded-2xl p-5 mb-6">
