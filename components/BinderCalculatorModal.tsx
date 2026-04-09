@@ -28,17 +28,15 @@ interface BinderCalculatorModalProps {
 // ── Binder size data ──────────────────────────────────────────────────────────
 
 /**
- * standardSizes: real binder page counts available for that pocket format, sorted ascending.
- * Each entry maps to a product that actually exists in the market.
- *
- *   12-pocket (3×4)  →  40 pages only  (480 card capacity)
- *    9-pocket (3×3)  →  20 or 40 pages (180 / 360 card capacity)
- *    4-pocket (2×2)  →  40 pages only  (160 card capacity)
+ * typicalCapacity: total card capacity of a standard retail binder for that pocket format.
+ *   12-pocket (3×4)  →  480 cards  (40 pages × 12 cards)
+ *    9-pocket (3×3)  →  360 cards  (40 pages ×  9 cards)
+ *    4-pocket (2×2)  →  160 cards  (40 pages ×  4 cards)
  */
-const POCKET_SIZES: { label: string; perPage: number; standardSizes: number[] }[] = [
-  { label: '12-pocket pages (3×4)', perPage: 12, standardSizes: [40]     },
-  { label: '9-pocket pages (3×3)',  perPage: 9,  standardSizes: [20, 40] },
-  { label: '4-pocket pages (2×2)',  perPage: 4,  standardSizes: [40]     },
+const POCKET_SIZES: { label: string; perPage: number; typicalCapacity: number }[] = [
+  { label: '12-pocket pages (3×4)', perPage: 12, typicalCapacity: 480 },
+  { label: '9-pocket pages (3×3)',  perPage: 9,  typicalCapacity: 360 },
+  { label: '4-pocket pages (2×2)',  perPage: 4,  typicalCapacity: 160 },
 ]
 
 const GOAL_ICONS: Record<CollectionGoal, string> = {
@@ -59,13 +57,6 @@ function pagesNeeded(cardCount: number, perPage: number): number {
   return Math.ceil(cardCount / perPage)
 }
 
-/**
- * Returns the smallest available binder size (in pages) that fits `pagesRequired`,
- * or null if it exceeds all sizes in the list.
- */
-function recommendedBinderPages(pagesRequired: number, standardSizes: number[]): number | null {
-  return standardSizes.find(size => size >= pagesRequired) ?? null
-}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -272,42 +263,40 @@ export default function BinderCalculatorModal({
               {/* Binder recommendations */}
               {!loading && activeCount != null && (
                 <div className="flex flex-col gap-1.5">
-                  {POCKET_SIZES.map(({ label: pocketLabel, perPage, standardSizes }) => {
-                    const pages = pagesNeeded(activeCount, perPage)
-                    const recommended = recommendedBinderPages(pages, standardSizes)
-                    const shortLabel = pocketLabel.split(' ')[0] // "12-pocket", "9-pocket", or "4-pocket"
+                  {POCKET_SIZES.map(({ label: pocketLabel, perPage, typicalCapacity }) => {
+                    const shortLabel    = pocketLabel.split(' ')[0]           // "12-pocket", "9-pocket", "4-pocket"
+                    const typicalPages  = typicalCapacity / perPage           // always 40
+                    const pages         = pagesNeeded(activeCount, perPage)
+                    const bindersNeeded = Math.ceil(activeCount / typicalCapacity)
 
-                    if (recommended) {
+                    if (bindersNeeded <= 1) {
                       return (
                         <div key={perPage} className="flex items-start gap-2 text-sm">
                           <span className="text-emerald-400 mt-px shrink-0">✅</span>
                           <span className="text-secondary">
-                            A{' '}
+                            Fits in a standard{' '}
                             <span className="font-medium text-primary">
-                              {recommended}-page {shortLabel} binder
+                              {shortLabel} binder
                             </span>{' '}
-                            fits your {COLLECTION_GOAL_LABELS[selectedGoal].toLowerCase()}{' '}
                             <span className="text-muted">
-                              ({pages} of {recommended} pages used)
+                              ({pages} of {typicalPages} pages used, {typicalCapacity} card capacity)
                             </span>
                           </span>
                         </div>
                       )
                     }
 
-                    const largestStandard = standardSizes[standardSizes.length - 1]
-                    const bindersNeeded = Math.ceil(pages / largestStandard)
                     return (
                       <div key={perPage} className="flex items-start gap-2 text-sm">
                         <span className="text-amber-400 mt-px shrink-0">⚠️</span>
                         <span className="text-secondary">
-                          {shortLabel}: needs{' '}
-                          <span className="font-medium text-primary">{pages} pages</span>
-                          {' '}— consider{' '}
+                          Needs{' '}
                           <span className="font-medium text-primary">
-                            {bindersNeeded}×{largestStandard}-page binders
+                            {bindersNeeded}× {shortLabel} binders
                           </span>{' '}
-                          <span className="text-muted">(or a custom/ring binder)</span>
+                          <span className="text-muted">
+                            ({typicalCapacity} cards / {typicalPages} pages each)
+                          </span>
                         </span>
                       </div>
                     )
