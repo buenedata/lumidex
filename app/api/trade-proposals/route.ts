@@ -109,8 +109,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Cannot propose a trade with yourself' }, { status: 400 })
   }
 
-  // Insert proposal header
-  const { data: proposal, error: propError } = await supabaseAdmin
+  // Use serverClient for inserts so RLS auth.uid() = proposer_id / proposer check passes.
+  // supabaseAdmin bypasses RLS only when the service-role key is configured; using the
+  // authenticated serverClient is always safe regardless of key setup.
+  const { data: proposal, error: propError } = await serverClient
     .from('trade_proposals')
     .insert({ proposer_id: user.id, receiver_id: receiverId, notes: notes ?? null })
     .select('id')
@@ -118,17 +120,20 @@ export async function POST(request: NextRequest) {
 
   if (propError || !proposal) {
     console.error('[trade-proposals POST] insert error:', propError)
-    return NextResponse.json({ error: 'Failed to create proposal' }, { status: 500 })
+    return NextResponse.json(
+      { error: propError?.message ?? 'Failed to create proposal' },
+      { status: 500 },
+    )
   }
 
-  // Insert items
+  // Insert items (serverClient carries the session so items policy sees auth.uid())
   const items = [
     ...offering.map(o  => ({ proposal_id: proposal.id, card_id: o.cardId, direction: 'offering',   quantity: o.quantity })),
     ...requesting.map(r => ({ proposal_id: proposal.id, card_id: r.cardId, direction: 'requesting', quantity: r.quantity })),
   ]
 
   if (items.length > 0) {
-    const { error: itemsError } = await supabaseAdmin
+    const { error: itemsError } = await serverClient
       .from('trade_proposal_items')
       .insert(items)
 
@@ -136,7 +141,7 @@ export async function POST(request: NextRequest) {
       console.error('[trade-proposals POST] items insert error:', itemsError)
       // Best-effort rollback
       await supabaseAdmin.from('trade_proposals').delete().eq('id', proposal.id)
-      return NextResponse.json({ error: 'Failed to save proposal items' }, { status: 500 })
+      return NextResponse.json({ error: itemsError.message ?? 'Failed to save proposal items' }, { status: 500 })
     }
   }
 
