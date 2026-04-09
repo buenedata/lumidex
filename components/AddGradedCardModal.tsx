@@ -278,7 +278,7 @@ export default function AddGradedCardModal({
                 onChange={e => setSelectedGrade(e.target.value)}
                 className="w-full appearance-none bg-elevated border border-subtle rounded-lg px-3 py-2 pr-8 text-sm text-primary focus:outline-none focus:border-accent transition-colors cursor-pointer"
               >
-                {grades.map(g => (
+                {[...grades].reverse().map(g => (
                   <option key={g} value={g}>
                     {g}
                   </option>
