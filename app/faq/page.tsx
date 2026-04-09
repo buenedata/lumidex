@@ -62,6 +62,19 @@ const FAQ_SECTIONS: { section: string; items: FAQItem[] }[] = [
         ),
       },
       {
+        question: 'What does "Missing variant?" mean?',
+        answer: (
+          <>
+            If a card is missing a variant you own — for example a Shiny, First Edition, or
+            Prerelease stamp — you can suggest it to us. Open the card&rsquo;s detail modal and
+            click the <strong>Missing variant?</strong> button. A small form will appear where you
+            enter the variant name (required) and an optional description. Once you submit, our
+            team will review the suggestion and add the variant to the database if it&rsquo;s
+            valid. You need to be logged in to use this feature.
+          </>
+        ),
+      },
+      {
         question: 'What is the Wanted Board?',
         answer: (
           <>
