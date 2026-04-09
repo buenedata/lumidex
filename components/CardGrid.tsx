@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic'
 import { CardTile } from '@/components/CardTile'
 import Image from 'next/image'
 import Link from 'next/link'
-import { PokemonCard, UserCard, VariantWithQuantity, QuickAddVariant, VARIANT_COLOR_CLASSES, CollectionGoal, PriceHistoryPoint, FriendCardOwner, PriceSource } from '@/types'
+import { PokemonCard, UserCard, VariantWithQuantity, QuickAddVariant, VARIANT_COLOR_CLASSES, CollectionGoal, PriceHistoryPoint, FriendCardOwner, PriceSource, UserGradedCard } from '@/types'
 import { useCollectionStore, useAuthStore } from '@/lib/store'
 import Modal from '@/components/ui/Modal'
 import VariantSuggestionModal from '@/components/VariantSuggestionModal'
@@ -104,6 +104,15 @@ interface CardGridProps {
    * Allows parent pages (e.g. /wanted) to remove the card from their list without a refresh.
    */
   onWantedStatusChange?: (cardId: string, isWanted: boolean) => void
+}
+
+/** Badge classes per grading company — used in the "My Graded Copies" card-tab section. */
+const GRADED_COMPANY_BADGE: Record<string, string> = {
+  PSA:     'bg-blue-900/50 text-blue-300 border-blue-700',
+  BECKETT: 'bg-red-900/50 text-red-300 border-red-700',
+  CGC:     'bg-amber-900/50 text-amber-300 border-amber-700',
+  TAG:     'bg-slate-700/50 text-slate-200 border-slate-500',
+  ACE:     'bg-emerald-900/50 text-emerald-300 border-emerald-700',
 }
 
 // ── Standalone component — zero React state, RAF-gated DOM writes for buttery 3D tilt ──
@@ -323,6 +332,9 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   type GradedByCompany = Record<string, GradeData[]>
   const [gradedPriceCache, setGradedPriceCache]         = useState<Map<string, GradedByCompany>>(new Map())
   const [isLoadingGraded, setIsLoadingGraded]           = useState(false)
+  // User's own graded copies for the currently open card
+  const [userGradedCards, setUserGradedCards]           = useState<UserGradedCard[]>([])
+  const [isLoadingOwnGraded, setIsLoadingOwnGraded]     = useState(false)
   // Wanted list state
   const [wantedCardIds, setWantedCardIds]               = useState<Set<string>>(new Set())
   const [wantedLoading, setWantedLoading]               = useState(false)
@@ -891,6 +903,35 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       setIsLoadingGraded(false)
     }
   }, [gradedPriceCache])
+
+  // Fetch the authenticated user's own graded copies for a given card — called on modal open
+  // and after a successful graded-card add.
+  const fetchUserGradedCards = useCallback(async (cardId: string) => {
+    if (!userId) { setUserGradedCards([]); return }
+    setIsLoadingOwnGraded(true)
+    try {
+      const res = await fetch(`/api/graded-cards?cardId=${encodeURIComponent(cardId)}`)
+      if (res.ok) {
+        const json = await res.json()
+        setUserGradedCards(json.gradedCards ?? [])
+      } else {
+        setUserGradedCards([])
+      }
+    } catch {
+      setUserGradedCards([])
+    } finally {
+      setIsLoadingOwnGraded(false)
+    }
+  }, [userId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Trigger a fresh fetch whenever the selected card changes (or user signs in/out)
+  useEffect(() => {
+    if (selectedCard && userId) {
+      fetchUserGradedCards(selectedCard.id)
+    } else {
+      setUserGradedCards([])
+    }
+  }, [selectedCard?.id, userId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load the user's wanted card IDs once on first modal open (if authenticated)
   const fetchWantedCards = useCallback(async () => {
@@ -1886,6 +1927,41 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                   </div>
                 )}
 
+                {/* My Graded Copies */}
+                {user && (isLoadingOwnGraded || userGradedCards.length > 0) && (
+                  <div className="mt-3">
+                    <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2 px-1">
+                      My Graded Copies
+                    </h3>
+                    {isLoadingOwnGraded ? (
+                      <p className="text-xs text-muted animate-pulse px-1">Loading…</p>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {userGradedCards.map(gc => {
+                          const variantName = (cardVariants.get(selectedCard!.id) ?? [])
+                            .find(v => v.id === gc.variant_id)?.name ?? null
+                          const badgeClass = GRADED_COMPANY_BADGE[gc.grading_company]
+                            ?? 'bg-gray-700/50 text-gray-300 border-gray-600'
+                          return (
+                            <div
+                              key={gc.id}
+                              className="flex items-center gap-2 bg-elevated rounded-lg px-3 py-2 border border-subtle"
+                            >
+                              <span className={`text-xs font-bold px-2 py-0.5 rounded border shrink-0 ${badgeClass}`}>
+                                {gc.grading_company}
+                              </span>
+                              <span className="text-sm text-secondary flex-1 min-w-0 truncate">
+                                {gc.grade}{variantName ? ` · ${variantName}` : ''}
+                              </span>
+                              <span className="text-xs text-muted shrink-0">×{gc.quantity}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Missing Variant Button */}
                 <div className="border-t border-subtle pt-4 mt-3">
                   <button
@@ -2093,6 +2169,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
           setId={selectedCard.set_id ?? ''}
           variants={filteredVariants}
           userId={user.id}
+          onSuccess={() => fetchUserGradedCards(selectedCard.id)}
         />
       )}
     </>

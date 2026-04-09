@@ -64,6 +64,8 @@ interface AddGradedCardModalProps {
   /** filteredVariants already loaded in CardGrid — passed down to avoid a re-fetch */
   variants: VariantWithQuantity[]
   userId: string
+  /** Called after a card is successfully added — use to refresh the graded copies list */
+  onSuccess?: () => void
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -78,6 +80,7 @@ export default function AddGradedCardModal({
   setId,
   variants,
   userId,
+  onSuccess,
 }: AddGradedCardModalProps) {
   // ── Form state ──────────────────────────────────────────────────────────────
   const [selectedCompany, setSelectedCompany] = useState<GradingCompany>('PSA')
@@ -148,6 +151,9 @@ export default function AddGradedCardModal({
       setSuccessMessage(
         `Added ${selectedCompany} ${selectedGrade} × ${quantity} to your collection!`,
       )
+
+      // Notify parent to refresh the graded copies list immediately
+      onSuccess?.()
 
       // Auto-close after a short delay so the user sees the success message
       setTimeout(() => {
