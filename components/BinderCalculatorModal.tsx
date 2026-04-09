@@ -31,8 +31,9 @@ interface BinderCalculatorModalProps {
 const STANDARD_BINDER_PAGES = [20, 40, 50, 100, 160]
 
 const POCKET_SIZES: { label: string; perPage: number }[] = [
-  { label: '9-pocket pages (3×3)', perPage: 9 },
-  { label: '4-pocket pages (2×2)', perPage: 4 },
+  { label: '12-pocket pages (3×4)', perPage: 12 },
+  { label: '9-pocket pages (3×3)',  perPage: 9  },
+  { label: '4-pocket pages (2×2)',  perPage: 4  },
 ]
 
 const GOAL_ICONS: Record<CollectionGoal, string> = {
@@ -71,9 +72,10 @@ export default function BinderCalculatorModal({
   currentGoal,
   hasPromos,
 }: BinderCalculatorModalProps) {
-  const [stats,   setStats]   = useState<BinderStats | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error,   setError]   = useState<string | null>(null)
+  const [stats,        setStats]        = useState<BinderStats | null>(null)
+  const [loading,      setLoading]      = useState(false)
+  const [error,        setError]        = useState<string | null>(null)
+  const [selectedGoal, setSelectedGoal] = useState<CollectionGoal>(currentGoal)
 
   // Lazy-fetch: only once per modal mount (subsequent opens reuse cached state)
   const fetchStats = useCallback(async () => {
@@ -94,8 +96,11 @@ export default function BinderCalculatorModal({
   }, [setId, stats])
 
   useEffect(() => {
-    if (isOpen) fetchStats()
-  }, [isOpen, fetchStats])
+    if (isOpen) {
+      fetchStats()
+      setSelectedGoal(currentGoal)
+    }
+  }, [isOpen, fetchStats, currentGoal])
 
   // Close on Escape key
   useEffect(() => {
@@ -110,9 +115,9 @@ export default function BinderCalculatorModal({
   // ── Derived values ─────────────────────────────────────────────────────────
 
   const activeCount: number | null = stats
-    ? currentGoal === 'normal'
+    ? selectedGoal === 'normal'
       ? stats.normalCount
-      : currentGoal === 'masterset'
+      : selectedGoal === 'masterset'
         ? stats.mastersetCount
         : stats.grandmasterCount
     : null
@@ -175,16 +180,19 @@ export default function BinderCalculatorModal({
                       ? stats.mastersetCount
                       : stats.grandmasterCount
                   : null
-                const isActive = goal === currentGoal
+                const isActive = goal === selectedGoal
 
                 return (
-                  <div
+                  <button
                     key={goal}
+                    type="button"
+                    onClick={() => setSelectedGoal(goal)}
                     className={cn(
-                      'rounded-lg border px-3 py-2.5 flex flex-col gap-1 transition-colors',
+                      'rounded-lg border px-3 py-2.5 flex flex-col gap-1 transition-colors text-left',
+                      'cursor-pointer hover:border-accent/60',
                       isActive
                         ? 'border-accent bg-accent/10'
-                        : 'border-subtle bg-surface'
+                        : 'border-subtle bg-surface hover:bg-surface/80'
                     )}
                   >
                     <span className="text-base leading-none">{GOAL_ICONS[goal]}</span>
@@ -205,7 +213,7 @@ export default function BinderCalculatorModal({
                       }
                     </span>
                     <span className="text-xs text-muted leading-tight">{GOAL_DESCRIPTIONS[goal]}</span>
-                  </div>
+                  </button>
                 )
               })}
             </div>
@@ -222,7 +230,7 @@ export default function BinderCalculatorModal({
               <p className="text-xs text-muted uppercase tracking-wider mb-2.5">
                 Pages needed ·{' '}
                 <span className="text-secondary normal-case font-medium">
-                  {GOAL_ICONS[currentGoal]} {COLLECTION_GOAL_LABELS[currentGoal]}
+                  {GOAL_ICONS[selectedGoal]} {COLLECTION_GOAL_LABELS[selectedGoal]}
                   {activeCount != null && !loading && ` (${activeCount.toLocaleString()} cards)`}
                 </span>
               </p>
@@ -273,7 +281,7 @@ export default function BinderCalculatorModal({
                             <span className="font-medium text-primary">
                               {recommended}-page {shortLabel} binder
                             </span>{' '}
-                            fits your {COLLECTION_GOAL_LABELS[currentGoal].toLowerCase()}{' '}
+                            fits your {COLLECTION_GOAL_LABELS[selectedGoal].toLowerCase()}{' '}
                             <span className="text-muted">
                               ({pages} of {recommended} pages used)
                             </span>
@@ -306,7 +314,7 @@ export default function BinderCalculatorModal({
 
           {/* Hint */}
           <p className="text-xs text-muted border-t border-subtle pt-3 -mb-1">
-            💡 Switch your Collection Goal above to recalculate for a different format.
+            💡 Click a goal above to preview calculations for that format.
           </p>
         </div>
 

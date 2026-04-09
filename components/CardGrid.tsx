@@ -1728,12 +1728,17 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                                   resolvedUrl = isRev ? `${cosmosBase}?isReverseHolo=Y` : cosmosBase
                                 }
                               } else if (isRev) {
-                                // Reverse holo URL = normal url + ?isReverseHolo=Y
-                                const normalBase = overrides['normal'] ?? priceRow.cm_url ?? null
-                                resolvedUrl = normalBase ? `${normalBase}?isReverseHolo=Y` : null
+                                // Reverse holo: check a 'reverse_holo'-keyed override first,
+                                // then derive from the normal URL + ?isReverseHolo=Y
+                                const reverseSpecific = overrides['reverse_holo'] ?? null
+                                const normalBase      = overrides['normal'] ?? priceRow.cm_url ?? null
+                                resolvedUrl = reverseSpecific ?? (normalBase ? `${normalBase}?isReverseHolo=Y` : null)
                               } else {
-                                // Normal / holo / other → use override if available, else cm_url
-                                resolvedUrl = overrides['normal'] ?? priceRow.cm_url ?? null
+                                // Normal / holo / other:
+                                //   1. variant-specific override (e.g. 'holo', 'jumbo')
+                                //   2. 'normal' override (generic fallback)
+                                //   3. API-provided cm_url
+                                resolvedUrl = (vKey ? overrides[vKey] : null) ?? overrides['normal'] ?? priceRow.cm_url ?? null
                               }
 
                               if (!resolvedUrl) return null
