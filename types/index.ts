@@ -257,3 +257,84 @@ export const VARIANT_COLOR_CLASSES = {
   orange: 'bg-orange-500 hover:bg-orange-600',
   teal:   'bg-teal-500 hover:bg-teal-600',
 } as const;
+
+// ── Graded Cards ──────────────────────────────────────────────────────────────
+
+export const GRADING_COMPANIES = ['PSA', 'BECKETT', 'CGC', 'TAG', 'ACE'] as const
+export type GradingCompany = typeof GRADING_COMPANIES[number]
+
+/**
+ * Per-company grade labels in ascending order (worst → best).
+ * Grade is stored as the exact label string in the DB, so spelling
+ * and casing here must never change after data has been written.
+ */
+export const GRADES_BY_COMPANY: Record<GradingCompany, string[]> = {
+  PSA: [
+    'VG-EX 4',
+    'EX 5',
+    'EX-MT 6',
+    'NM 7',
+    'NM+ 7.5',
+    'NM-MT 8',
+    'NM-MT+ 8.5',
+    'MINT 9',
+    'GEM-MT 10',
+  ],
+  BECKETT: [
+    'EX-MT+ 6.5',
+    'Near Mint 7',
+    'Near Mint+ 7.5',
+    'NM-MT 8',
+    'NM-MT+ 8.5',
+    'Mint 9',
+    'Gem Mint 9.5',
+    'Pristine 10',
+    'Black Label 10',
+  ],
+  CGC: [
+    'Ex/MT+ 6.5',
+    'NM 7',
+    'NM+ 7.5',
+    'NM/Mint 8',
+    'NM/Mint+ 8.5',
+    'Mint 9',
+    'Mint+ 9.5',
+    'Gem Mint 10',
+    'Pristine 10',
+  ],
+  TAG: [
+    'EX MT 6',
+    'EX MT+ 6.5',
+    'NM 7',
+    'NM+ 7.5',
+    'NM MT 8',
+    'NM MT+ 8.5',
+    'MINT 9',
+    'Pristine 10',
+    'GEM MINT 10',
+  ],
+  ACE: [
+    'FAIR 2',
+    'GOOD 3',
+    'VG 4',
+    'EX 5',
+    'EX-MT 6',
+    'NM 7',
+    'NM-MT 8',
+    'MINT 9',
+    'GEM MINT 10',
+  ],
+}
+
+/** A single graded card entry in a user's collection. */
+export interface UserGradedCard {
+  id: string
+  user_id: string
+  card_id: string
+  variant_id: string | null
+  grading_company: GradingCompany
+  grade: string
+  quantity: number
+  created_at: string
+  updated_at: string
+}

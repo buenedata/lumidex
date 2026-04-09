@@ -9,6 +9,7 @@ import { PokemonCard, UserCard, VariantWithQuantity, QuickAddVariant, VARIANT_CO
 import { useCollectionStore, useAuthStore } from '@/lib/store'
 import Modal from '@/components/ui/Modal'
 import VariantSuggestionModal from '@/components/VariantSuggestionModal'
+import AddGradedCardModal from '@/components/AddGradedCardModal'
 import { formatPrice, EUR_TO_USD } from '@/lib/pricing'
 import type { PriceChartRange } from '@/components/PriceChart'
 import { updateVariant, deleteVariant, removeVariantFromCard } from '@/app/admin/variants/actions'
@@ -305,6 +306,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   // Cache for related-card results — avoids re-fetching on every modal open for the same card.
   const relatedCardsCacheRef  = useRef(new Map<string, { cards: RelatedCard[], total: number }>())
   const [showVariantSuggestionModal, setShowVariantSuggestionModal] = useState(false)
+  const [showGradedModal, setShowGradedModal] = useState(false)
   const [relatedCards, setRelatedCards] = useState<RelatedCard[]>([])
   const [relatedCardsTotal, setRelatedCardsTotal] = useState(0)
   const [isFetchingRelated, setIsFetchingRelated] = useState(false)
@@ -361,6 +363,12 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     document.addEventListener('mousedown', handleClickAway)
     return () => document.removeEventListener('mousedown', handleClickAway)
   }, [editingVariantId])
+
+  // Close the graded card modal whenever the user navigates to a different card
+  // or closes the main card details modal, so it doesn't auto-open on the next card.
+  useEffect(() => {
+    setShowGradedModal(false)
+  }, [selectedCard?.id])
 
   // Admin: save variant field edits and patch local state
   async function handleVariantEditSave(variantId: string) {
@@ -1866,8 +1874,20 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                   </div>
                 </div>
 
+                {/* Add Graded Card Button */}
+                {user && (
+                  <div className="border-t border-subtle pt-3 mt-4">
+                    <button
+                      onClick={() => setShowGradedModal(true)}
+                      className="w-full py-2.5 px-4 bg-elevated hover:bg-card-item border border-subtle text-primary rounded-lg transition-colors font-medium text-sm flex items-center justify-center gap-2"
+                    >
+                      🏅 Add Graded Card
+                    </button>
+                  </div>
+                )}
+
                 {/* Missing Variant Button */}
-                <div className="border-t border-subtle pt-4 mt-6">
+                <div className="border-t border-subtle pt-4 mt-3">
                   <button
                     onClick={() => setShowVariantSuggestionModal(true)}
                     className="w-full py-3 px-4 bg-accent hover:opacity-90 text-white rounded-lg transition-colors font-medium"
@@ -2062,6 +2082,19 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
         userId={userId || ''}
         onClose={() => setShowVariantSuggestionModal(false)}
       />
+      {selectedCard && user && (
+        <AddGradedCardModal
+          isOpen={showGradedModal}
+          onClose={() => setShowGradedModal(false)}
+          card={selectedCard}
+          setName={setName}
+          setComplete={setComplete}
+          setTotal={setTotal}
+          setId={selectedCard.set_id ?? ''}
+          variants={filteredVariants}
+          userId={user.id}
+        />
+      )}
     </>
   )
 }

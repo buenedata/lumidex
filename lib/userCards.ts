@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import type { GradingCompany, UserGradedCard } from '@/types'
 
 export async function getUserCardVariants(userId: string, cardId: string) {
   const { data, error } = await supabase
@@ -146,4 +147,97 @@ export async function getUserOwnedCardsCount(userId: string, setId?: string) {
   // Return unique card IDs
   const uniqueCardIds = [...new Set(data.map(item => item.card_id))]
   return uniqueCardIds.length
+}
+
+// ── Graded Cards ──────────────────────────────────────────────────────────────
+
+/**
+ * Fetch all graded card entries for the given user + card combination.
+ * Returns an empty array if no graded copies are tracked yet.
+ */
+export async function getUserGradedCards(
+  userId: string,
+  cardId: string,
+): Promise<UserGradedCard[]> {
+  const { data, error } = await supabase
+    .from('user_graded_cards')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('card_id', cardId)
+    .order('grading_company')
+    .order('grade')
+
+  if (error) throw error
+  return (data ?? []) as UserGradedCard[]
+}
+
+/**
+ * Upsert a graded card entry for the authenticated user.
+ *
+ * - If a row already exists for (user, card, variant, company, grade) its
+ *   quantity is replaced with the new value (not incremented — the caller
+ *   is responsible for computing the correct final quantity).
+ * - Rows are never inserted with quantity < 1 (the DB constraint enforces
+ *   this); callers should delete rows explicitly when the quantity should
+ *   reach 0 (use deleteUserGradedCard instead).
+ * - Auto-adds the set to user_sets on the first graded card added (same
+ *   behaviour as upsertUserCardVariant).
+ */
+export async function upsertUserGradedCard({
+  userId,
+  cardId,
+  variantId,
+  gradingCompany,
+  grade,
+  quantity,
+  setId,
+}: {
+  userId: string
+  cardId: string
+  variantId: string | null
+  gradingCompany: GradingCompany
+  grade: string
+  quantity: number
+  setId: string
+}): Promise<UserGradedCard | null> {
+  if (quantity < 1) return null
+
+  const { data, error } = await supabase
+    .from('user_graded_cards')
+    .upsert(
+      {
+        user_id: userId,
+        card_id: cardId,
+        variant_id: variantId ?? null,
+        grading_company: gradingCompany,
+        grade,
+        quantity,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,card_id,variant_id,grading_company,grade' },
+    )
+    .select()
+    .single()
+
+  if (error) throw error
+
+  // Auto-add set when first graded card is added (mirrors upsertUserCardVariant)
+  await supabase
+    .from('user_sets')
+    .upsert({ user_id: userId, set_id: setId }, { onConflict: 'user_id,set_id' })
+
+  return data as UserGradedCard
+}
+
+/**
+ * Delete a single graded card entry by its primary key.
+ * Used when the user reduces quantity to 0.
+ */
+export async function deleteUserGradedCard(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('user_graded_cards')
+    .delete()
+    .eq('id', id)
+
+  if (error) throw error
 }
