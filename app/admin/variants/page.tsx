@@ -33,7 +33,11 @@ export default function AdminVariantsPage() {
     if (user && profile?.role === 'admin') {
       fetchAdminData()
     }
-  }, [user, profile])
+  // Depend on stable primitives, not object references — Supabase fires
+  // TOKEN_REFRESHED on every tab focus which creates a new user object but
+  // does not change the user's identity or role, so we must not re-fetch here.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, profile?.role])
 
   const fetchAdminData = async () => {
     try {
