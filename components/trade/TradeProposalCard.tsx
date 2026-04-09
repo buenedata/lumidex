@@ -293,9 +293,14 @@ export default function TradeProposalCard({ proposal, onStatusChange }: TradePro
             </p>
           </div>
         </div>
-        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border shrink-0 ${STATUS_STYLES[status] ?? STATUS_STYLES.pending}`}>
-          {STATUS_LABELS[status] ?? status}
-        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[11px] font-semibold px-2 py-1 rounded-full bg-surface border border-subtle text-muted">
+            {proposal.currency_code}
+          </span>
+          <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border ${STATUS_STYLES[status] ?? STATUS_STYLES.pending}`}>
+            {STATUS_LABELS[status] ?? status}
+          </span>
+        </div>
       </div>
 
       {/* ── Body: two panels ── */}
