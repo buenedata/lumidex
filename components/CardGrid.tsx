@@ -465,9 +465,20 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
         : !!(userCard && userCard.quantity > 0)
 
       // isOwned for normal goal = anyOwned.
-      // For Masterset/Grandmasterset: every quick-add variant must have qty > 0.
+      // Masterset: only GLOBAL (non-card-specific) quick-add variants must all be qty > 0.
+      //   Card-specific variants (card_id != null) are grandmasterset territory only.
+      // Grandmasterset: ALL variants (including card-specific) must have qty > 0.
       let isOwned: boolean
-      if (collectionGoal === 'masterset' || collectionGoal === 'grandmasterset') {
+      if (collectionGoal === 'masterset') {
+        if (quickVariants && quickVariants.length > 0) {
+          const globalVariants = quickVariants.filter(v => v.card_id == null)
+          isOwned = globalVariants.length > 0
+            ? globalVariants.every(v => v.quantity > 0)
+            : anyOwned
+        } else {
+          isOwned = anyOwned
+        }
+      } else if (collectionGoal === 'grandmasterset') {
         if (quickVariants && quickVariants.length > 0) {
           isOwned = quickVariants.every(v => v.quantity > 0)
         } else {
@@ -1160,18 +1171,40 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     <>
       <div className="flex flex-wrap gap-4">
         {filteredCards.map(card => {
-          const userCard           = userCards.get(card.id)
+          const userCard      = userCards.get(card.id)
           // quickVariants: same array reference for unchanged cards → React.memo skips re-render
-          const quickVariants      = cardQuickVariants.get(card.id) || []
-          // isOwned: use quickVariants as the source of truth when they are loaded
-          // and non-empty — they update optimistically on every variant click so the
-          // card un-greys and gains the green border instantly.
-          // Fall back to the Zustand store aggregate for:
-          //   - cards whose quickVariants haven't loaded yet ([] before batch fetch)
-          //   - promo/card-specific-variant-only cards ([] even after batch fetch)
-          const isOwned = quickVariants.length > 0
+          const quickVariants = cardQuickVariants.get(card.id) || []
+
+          // anyOwned: at least one variant owned (or userCard fallback before batch fetch)
+          const anyOwned = quickVariants.length > 0
             ? quickVariants.some(v => v.quantity > 0)
             : !!(userCard && userCard.quantity > 0)
+
+          // isOwned: mirrors filteredCards logic so the green border / grey-out
+          // exactly matches the Have/Need tab counts.
+          // Masterset: only global variants (card_id == null) must all be owned.
+          // Grandmasterset: ALL variants including card-specific must all be owned.
+          let isOwned: boolean
+          if (collectionGoal === 'masterset') {
+            const globalVariants = quickVariants.filter(v => v.card_id == null)
+            isOwned = globalVariants.length > 0
+              ? globalVariants.every(v => v.quantity > 0)
+              : anyOwned
+          } else if (collectionGoal === 'grandmasterset') {
+            isOwned = quickVariants.length > 0
+              ? quickVariants.every(v => v.quantity > 0)
+              : anyOwned
+          } else {
+            isOwned = anyOwned
+          }
+
+          // Partial ownership: masterset/grandmasterset goal + at least one required
+          // variant is owned but the goal isn't fully complete yet.
+          // Triggers the diagonal half-grey overlay on the card image.
+          const isPartiallyOwned =
+            (collectionGoal === 'masterset' || collectionGoal === 'grandmasterset') &&
+            anyOwned && !isOwned
+
           const customVariantCount = cardCustomVariantCounts.get(card.id) ?? 0
           return (
             <CardTile
@@ -1179,6 +1212,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
               card={card}
               quickVariants={quickVariants}
               isOwned={isOwned}
+              isPartiallyOwned={isPartiallyOwned}
               customVariantCount={customVariantCount}
               greyOutUnowned={greyOutUnowned}
               cardPricesUSD={cardPricesUSD}

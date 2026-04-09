@@ -36,6 +36,9 @@ export interface CardTileProps {
   isOwned:            boolean
   customVariantCount: number
   greyOutUnowned:     boolean
+  /** When true (masterset/grandmasterset goal), renders a diagonal grey overlay
+   *  over the bottom-right half of the card to show partial variant ownership. */
+  isPartiallyOwned?:  boolean
   cardPricesUSD?:     Record<string, number>
   effectiveCurrency:  string
   // Stable callbacks — wrapped in useCallback + ref in CardGrid so React.memo works
@@ -55,6 +58,7 @@ function CardTileInner({
   isOwned,
   customVariantCount,
   greyOutUnowned,
+  isPartiallyOwned = false,
   cardPricesUSD,
   effectiveCurrency,
   onCardBadgeClick,
@@ -108,6 +112,17 @@ function CardTileInner({
             if (!t.src.endsWith('/pokemon_card_backside.png')) t.src = '/pokemon_card_backside.png'
           }}
         />
+        {/* Diagonal partial-ownership overlay — shown in masterset/grandmasterset
+            mode when some but not all required variants are owned. A 135° hard-
+            stop gradient covers the bottom-right triangle of the card. */}
+        {isPartiallyOwned && (
+          <div
+            className="absolute inset-0 pointer-events-none z-10"
+            style={{
+              background: 'linear-gradient(135deg, transparent 50%, rgba(0,0,0,0.65) 50%)',
+            }}
+          />
+        )}
         {/* Hover overlay */}
         <div className="absolute inset-0 z-10" />
       </div>
