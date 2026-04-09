@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface TPUser {
@@ -338,7 +339,7 @@ export default function TradeProposalCard({ proposal, onStatusChange }: TradePro
             ? <p className="text-xs text-red-400">{error}</p>
             : <div />
           }
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {!isProposer && (
               <>
                 <button
@@ -348,6 +349,17 @@ export default function TradeProposalCard({ proposal, onStatusChange }: TradePro
                 >
                   Decline
                 </button>
+                {/* Counter offer — swap offer/request and link to trade page */}
+                <Link
+                  href={`/trade?with=${proposal.proposer_id}&counter=${proposal.id}&offer=${
+                    proposal.trade_proposal_items.filter(i => i.direction === 'requesting').map(i => i.cards?.id).filter(Boolean).join(',')
+                  }&request=${
+                    proposal.trade_proposal_items.filter(i => i.direction === 'offering').map(i => i.cards?.id).filter(Boolean).join(',')
+                  }`}
+                  className="h-9 px-4 rounded-xl border border-accent/40 text-accent text-sm font-medium hover:bg-accent/10 transition-colors inline-flex items-center gap-1.5"
+                >
+                  ↩ Counter
+                </Link>
                 <button
                   onClick={() => act('accepted')}
                   disabled={acting}

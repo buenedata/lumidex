@@ -4,6 +4,26 @@ import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
+import { useRouter } from 'next/navigation'
+
+// ── Minimal type for pending proposals ────────────────────────────────────────
+interface PendingProposal {
+  id: string
+  proposer_id: string
+  receiver_id: string
+  isProposer: boolean
+  status: string
+  cash_offered: number
+  cash_requested: number
+  currency_code: string
+  created_at: string
+  otherUser: { id: string; display_name: string | null; username: string | null; avatar_url: string | null } | null
+  trade_proposal_items: Array<{
+    id: string
+    direction: string
+    cards: { id: string; name: string | null; image: string | null } | null
+  }>
+}
 
 interface WBUser {
   id: string
@@ -159,10 +179,69 @@ function SectionHeader({ matchCount }: { matchCount: number | null }) {
   )
 }
 
+// ── Pending proposal compact card ─────────────────────────────────────────────
+function PendingProposalBanner({ proposal }: { proposal: PendingProposal }) {
+  const router = useRouter()
+  const name = proposal.otherUser?.display_name ?? proposal.otherUser?.username ?? 'Trainer'
+  const offeringCards = proposal.trade_proposal_items.filter(i => i.direction === 'offering')
+  const hasCash = proposal.cash_offered > 0
+
+  function relTime(iso: string) {
+    const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000)
+    if (mins < 60) return `${mins}m ago`
+    const hours = Math.floor(mins / 60)
+    if (hours < 24) return `${hours}h ago`
+    return `${Math.floor(hours / 24)}d ago`
+  }
+
+  return (
+    <div className="flex items-center gap-3 bg-amber-500/8 border border-amber-500/30 rounded-xl px-4 py-3">
+      {/* Avatar */}
+      <div className="w-8 h-8 rounded-full bg-surface border border-subtle shrink-0 flex items-center justify-center overflow-hidden">
+        {proposal.otherUser?.avatar_url ? (
+          <Image src={proposal.otherUser.avatar_url} alt={name} width={32} height={32} className="object-cover w-full h-full" unoptimized />
+        ) : (
+          <span className="text-xs font-bold text-accent">{name[0].toUpperCase()}</span>
+        )}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-primary leading-tight truncate">
+          <span className="text-amber-400">📬</span> {name} proposed a trade
+        </p>
+        <p className="text-xs text-muted leading-tight">
+          {offeringCards.length} card{offeringCards.length !== 1 ? 's' : ''}
+          {hasCash ? ` + ${proposal.currency_code} cash` : ''}
+          {' · '}{relTime(proposal.created_at)}
+        </p>
+      </div>
+
+      {/* Card thumbnails (up to 3) */}
+      <div className="hidden sm:flex gap-1 shrink-0">
+        {offeringCards.slice(0, 3).map(item => item.cards && (
+          <div key={item.id} className="w-8 h-11 rounded overflow-hidden border border-subtle bg-surface">
+            <img src={item.cards.image ?? '/pokemon_card_backside.png'} alt={item.cards.name ?? ''} className="w-full h-full object-cover" loading="lazy" />
+          </div>
+        ))}
+      </div>
+
+      {/* CTA */}
+      <button
+        onClick={() => router.push('/wanted-board')}
+        className="shrink-0 h-8 px-3 rounded-lg bg-amber-500 text-white text-xs font-semibold hover:bg-amber-400 transition-colors"
+      >
+        View →
+      </button>
+    </div>
+  )
+}
+
 export default function WantedBoard() {
   const { user } = useAuthStore()
-  const [matches,  setMatches]  = useState<WBMatch[]>([])
-  const [loading,  setLoading]  = useState(true)
+  const [matches,   setMatches]   = useState<WBMatch[]>([])
+  const [proposals, setProposals] = useState<PendingProposal[]>([])
+  const [loading,   setLoading]   = useState(true)
 
   useEffect(() => {
     if (!user) return
@@ -173,10 +252,31 @@ export default function WantedBoard() {
       .finally(() => setLoading(false))
   }, [user])
 
+  useEffect(() => {
+    if (!user) return
+    fetch('/api/trade-proposals')
+      .then(r => r.json())
+      .then(d => {
+        const received = (d.proposals ?? []).filter(
+          (p: PendingProposal) => p.status === 'pending' && !p.isProposer,
+        )
+        setProposals(received)
+      })
+      .catch(() => {})
+  }, [user])
+
+  // Received pending proposals banner
+  const pendingBanner = proposals.length > 0 ? (
+    <div className="mb-4 flex flex-col gap-2">
+      {proposals.map(p => <PendingProposalBanner key={p.id} proposal={p} />)}
+    </div>
+  ) : null
+
   // ── Loading skeleton — full section shell always visible ──────────────────
   if (loading) {
     return (
       <section className="mb-6">
+        {pendingBanner}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <div className="skeleton h-5 w-5 rounded" />
@@ -195,6 +295,7 @@ export default function WantedBoard() {
   if (matches.length === 0) {
     return (
       <section className="mb-6">
+        {pendingBanner}
         <SectionHeader matchCount={null} />
 
         <div className="bg-elevated border border-subtle rounded-xl px-6 py-8 flex flex-col items-center text-center gap-4">
@@ -242,6 +343,7 @@ export default function WantedBoard() {
 
   return (
     <section className="mb-6">
+      {pendingBanner}
       <SectionHeader matchCount={matches.length} />
 
       {/* ── Match cards ── */}

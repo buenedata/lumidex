@@ -456,11 +456,12 @@ function TradeHubContent() {
   const router       = useRouter()
   const searchParams = useSearchParams()
 
-  const withId      = searchParams.get('with')     ?? ''
-  const offerParam  = searchParams.get('offer')    ?? ''
-  const requestParam= searchParams.get('request')  ?? ''
-  const offerIds    = offerParam.split(',').filter(Boolean)
-  const requestIds  = requestParam.split(',').filter(Boolean)
+  const withId       = searchParams.get('with')     ?? ''
+  const offerParam   = searchParams.get('offer')    ?? ''
+  const requestParam = searchParams.get('request')  ?? ''
+  const counterId    = searchParams.get('counter')  ?? ''   // ID of the proposal being countered
+  const offerIds     = offerParam.split(',').filter(Boolean)
+  const requestIds   = requestParam.split(',').filter(Boolean)
 
   const [otherUser,     setOtherUser]     = useState<TradeUser | null>(null)
   const [offering,      setOffering]      = useState<TradeCard[]>([])
@@ -552,6 +553,15 @@ function TradeHubContent() {
     setSubmitError(null)
 
     try {
+      // If countering, decline the original proposal first
+      if (counterId) {
+        await fetch(`/api/trade-proposals/${counterId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'declined' }),
+        })
+      }
+
       const res = await fetch('/api/trade-proposals', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -619,6 +629,22 @@ function TradeHubContent() {
             </h1>
           </div>
         </div>
+
+        {/* ── Counter offer banner ── */}
+        {counterId && otherUser && (
+          <div className="mb-6 flex items-center gap-3 bg-accent/10 border border-accent/30 rounded-xl px-5 py-3">
+            <span className="text-lg shrink-0">↩</span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-accent leading-tight">
+                Countering {otherUser.display_name ?? otherUser.username ?? 'their'}&apos;s proposal
+              </p>
+              <p className="text-xs text-muted leading-tight">
+                The original proposal will be declined when you send this counter offer.
+                Cards have been pre-filled from the original — adjust as needed.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* ── Trading with ── */}
         <div className="flex items-center gap-3 mb-8 px-5 py-3 bg-elevated border border-subtle rounded-xl w-fit">
