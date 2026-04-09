@@ -119,10 +119,10 @@ export default function Navbar() {
             {/* Nav links */}
             <div className="flex items-center gap-1">
               <Link href="/dashboard"            className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">Dashboard</Link>
+              <Link href={`/profile/${user.id}`} className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">Profile</Link>
               <Link href="/sets"                 className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">Sets</Link>
               <Link href="/collection"           className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">Collection</Link>
               <Link href="/wanted-board"         className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">Wanted Board</Link>
-              <Link href={`/profile/${user.id}`} className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">Profile</Link>
               <Link href="/faq"                  className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">FAQ</Link>
               {isAdmin && (
                 <Link href="/admin" className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all" title="Admin Panel">
