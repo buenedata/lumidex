@@ -12,9 +12,9 @@ import { supabaseAdmin } from '@/lib/supabase'
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const userId = params.id
+  const { id: userId } = await params
   if (!userId) {
     return NextResponse.json({ error: 'Missing user id' }, { status: 400 })
   }
