@@ -2102,6 +2102,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                         </div>
                       )
                     }
+                    const isWanted = selectedCard ? wantedCardIds.has(selectedCard.id) : false
                     return (
                       <div className="space-y-2">
                         {friends.map(friend => (
@@ -2131,7 +2132,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                               {friend.username ?? 'Unknown collector'}
                             </a>
                             {/* Variant badges */}
-                            <div className="flex flex-wrap gap-1 ml-auto">
+                            <div className="flex flex-wrap gap-1 ml-auto items-center gap-x-2">
                               {friend.variants.map(v => (
                                 <span
                                   key={v.variantName}
@@ -2140,6 +2141,16 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                                   {v.variantName} ×{v.quantity}
                                 </span>
                               ))}
+                              {/* Propose trade button — only when card is on current user's wanted list */}
+                              {isWanted && selectedCard && (
+                                <a
+                                  href={`/trade?with=${friend.userId}&request=${selectedCard.id}`}
+                                  className="ml-1 inline-flex items-center gap-1 text-[11px] font-semibold text-accent hover:text-accent-light border border-accent/40 hover:bg-accent/10 rounded-lg px-2 py-1 transition-colors whitespace-nowrap"
+                                  title={`Propose a trade with ${friend.username ?? 'this collector'}`}
+                                >
+                                  🔄 Propose trade
+                                </a>
+                              )}
                             </div>
                           </div>
                         ))}
