@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin'
 import { supabaseAdmin } from '@/lib/supabase'
 import { compressImageToWebP, COMPRESSED_CONTENT_TYPE } from '@/lib/imageCompress'
+import { uploadToR2, getR2Url } from '@/lib/r2'
 
 /** Standardised filename for a set logo: "{setId}-logo.jpg" */
 function generateSetLogoFilename(setId: string): string {
@@ -45,8 +46,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Image must be smaller than 5 MB' }, { status: 400 })
   }
 
-  // 4. Compress to WebP then upload to set-images bucket (service role bypasses RLS)
+  // 4. Compress to WebP then upload to R2
   const filename   = generateSetLogoFilename(setId)
+  const r2Key      = `set-images/${filename}`
   const fileBuffer = await file.arrayBuffer()
 
   let uploadBuffer: Buffer | ArrayBuffer
@@ -60,26 +62,18 @@ export async function POST(request: NextRequest) {
     uploadContentType = file.type
   }
 
-  const { error: uploadError } = await supabaseAdmin.storage
-    .from('set-images')
-    .upload(filename, uploadBuffer, {
-      upsert: true,
-      contentType: uploadContentType,
-    })
-
-  if (uploadError) {
-    console.error('[upload-set-image] Storage error:', uploadError)
+  try {
+    await uploadToR2(r2Key, uploadBuffer, uploadContentType)
+  } catch (err) {
+    console.error('[upload-set-image] R2 upload error:', err)
     return NextResponse.json(
-      { error: `Storage upload failed: ${uploadError.message}` },
+      { error: `Storage upload failed: ${err instanceof Error ? err.message : 'Unknown error'}` },
       { status: 502 },
     )
   }
 
   // 5. Resolve public URL
-  const { data: urlData } = supabaseAdmin.storage
-    .from('set-images')
-    .getPublicUrl(filename)
-  const logoUrl = urlData.publicUrl
+  const logoUrl = getR2Url(r2Key)
 
   // 6. Update sets table — note: PK column is set_id, not id
   const { error: dbError } = await supabaseAdmin

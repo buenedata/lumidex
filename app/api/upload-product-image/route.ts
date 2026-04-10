@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin'
 import { supabaseAdmin } from '@/lib/supabase'
 import { compressImageToWebP, COMPRESSED_CONTENT_TYPE } from '@/lib/imageCompress'
+import { uploadToR2, getR2Url } from '@/lib/r2'
 
 /** Standardised filename for a product image: "{productId}.jpg" */
 function generateProductImageFilename(productId: string): string {
@@ -138,7 +139,7 @@ export async function POST(request: NextRequest) {
   )
 }
 
-/** Upload buffer to the product-images bucket and update set_products. */
+/** Upload buffer to R2 and update set_products. */
 async function uploadAndRecord(
   filename: string,
   buffer: ArrayBuffer,
@@ -157,18 +158,14 @@ async function uploadAndRecord(
     uploadContentType = contentType
   }
 
-  // Upload to Supabase storage (service-role — bypasses RLS)
-  const { error: uploadError } = await supabaseAdmin.storage
-    .from('product-images')
-    .upload(filename, uploadBuffer, {
-      upsert: true,
-      contentType: uploadContentType,
-    })
-
-  if (uploadError) {
-    console.error('[upload-product-image] Storage error:', uploadError)
+  // Upload to R2
+  const r2Key = `product-images/${filename}`
+  try {
+    await uploadToR2(r2Key, uploadBuffer, uploadContentType)
+  } catch (err) {
+    console.error('[upload-product-image] R2 upload error:', err)
     return NextResponse.json(
-      { error: `Storage upload failed: ${uploadError.message}` },
+      { error: `Storage upload failed: ${err instanceof Error ? err.message : 'Unknown error'}` },
       { status: 502 }
     )
   }
@@ -176,10 +173,7 @@ async function uploadAndRecord(
   // Resolve public URL — store the stable URL in the DB so every request
   // hits the same CDN cache key; return a cache-busted URL to the browser
   // only so the uploading client sees the new image immediately.
-  const { data: urlData } = supabaseAdmin.storage
-    .from('product-images')
-    .getPublicUrl(filename)
-  const stableUrl = urlData.publicUrl                  // clean URL — stored in DB
+  const stableUrl = getR2Url(r2Key)                   // clean URL — stored in DB
   const imageUrl  = `${stableUrl}?v=${Date.now()}`    // cache-bust — for browser only
 
   // Update set_products table (service-role — bypasses RLS)

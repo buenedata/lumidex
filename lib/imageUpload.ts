@@ -1,10 +1,9 @@
 /**
  * Image Upload Utilities
- * Handles Pokemon card image uploads to Supabase Storage
+ * Handles Pokemon card image uploads to Cloudflare R2
  * with automatic filename generation and database updates
  */
 
-import { supabase } from './supabase'
 import type { PokemonCard } from '../types'
 
 /**
@@ -26,15 +25,14 @@ export function generateImageFilename(setId: string, number: string, cardId?: st
 }
 
 /**
- * Get the public URL for a card image
+ * Get the public R2 URL for a card image (legacy key format).
+ * New uploads store their URL directly in the cards.image column —
+ * this function is only used as a last-resort fallback.
  */
 export function getCardImageUrl(setId: string, number: string): string {
   const filename = generateImageFilename(setId, number)
-  const { data } = supabase.storage
-    .from('card-images')
-    .getPublicUrl(filename)
-  
-  return data.publicUrl
+  const base     = (process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? '').replace(/\/$/, '')
+  return `${base}/card-images/${filename}`
 }
 
 /**
@@ -131,18 +129,15 @@ export async function uploadCardImageFromUrl(
 }
 
 /**
- * Check if card has an image in Supabase Storage
+ * Check if card has an image in R2 Storage via a lightweight HEAD request.
  */
 export async function checkCardImageExists(card: PokemonCard): Promise<boolean> {
   if (!card.set_id || !card.number) return false
-  
+
   try {
-    const filename = generateImageFilename(card.set_id, card.number)
-    const { data, error } = await supabase.storage
-      .from('card-images')
-      .list('', { search: filename })
-    
-    return !error && data && data.length > 0
+    const url      = getCardImageUrl(card.set_id, card.number)
+    const response = await fetch(url, { method: 'HEAD' })
+    return response.ok
   } catch {
     return false
   }

@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin'
 import { supabaseAdmin } from '@/lib/supabase'
 import { generateImageFilename } from '@/lib/imageUpload'
+import { uploadToR2, getR2Url } from '@/lib/r2'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const STORAGE_BUCKET = 'card-images'
+const R2_KEY_PREFIX = 'card-images'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -52,23 +53,13 @@ async function downloadAndStoreCardImage(
     // Use the card-ID-scoped filename to prevent collisions between cards in the
     // same set that share the same number (e.g. Pokémon #3 vs Energy #3).
     const filename = generateImageFilename(setId, cardNumber, cardId)
+    const r2Key    = `${R2_KEY_PREFIX}/${filename}`
 
-    const { error: uploadErr } = await supabaseAdmin.storage
-      .from(STORAGE_BUCKET)
-      .upload(filename, imageBuffer, { contentType, upsert: true })
-
-    if (uploadErr) {
-      console.error('[import-card-data] upload error:', uploadErr)
-      return null
-    }
+    await uploadToR2(r2Key, imageBuffer, contentType)
 
     // Append a version timestamp so CDN / browser cache is bypassed for
     // any file that gets upserted (overwritten) in a subsequent import.
-    const { data: urlData } = supabaseAdmin.storage
-      .from(STORAGE_BUCKET)
-      .getPublicUrl(filename)
-
-    return urlData.publicUrl ? `${urlData.publicUrl}?v=${Date.now()}` : null
+    return `${getR2Url(r2Key)}?v=${Date.now()}`
   } catch (err) {
     console.warn('[import-card-data] downloadAndStoreCardImage error:', err)
     return null

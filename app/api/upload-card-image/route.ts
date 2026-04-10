@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin'
 import { supabaseAdmin } from '@/lib/supabase'
 import { compressImageToWebP, COMPRESSED_CONTENT_TYPE } from '@/lib/imageCompress'
+import { uploadToR2, getR2Url } from '@/lib/r2'
 
 /**
  * Mirror of the client-side helper so server doesn't import from lib/imageUpload.
@@ -152,7 +153,7 @@ export async function POST(request: NextRequest) {
   )
 }
 
-/** Upload buffer to storage and update the cards table. */
+/** Upload buffer to R2 and update the cards table. */
 async function uploadAndRecord(
   filename: string,
   buffer: ArrayBuffer,
@@ -171,18 +172,14 @@ async function uploadAndRecord(
     uploadContentType = contentType
   }
 
-  // 5. Upload to Supabase storage (service-role — bypasses RLS)
-  const { error: uploadError } = await supabaseAdmin.storage
-    .from('card-images')
-    .upload(filename, uploadBuffer, {
-      upsert: true,
-      contentType: uploadContentType,
-    })
-
-  if (uploadError) {
-    console.error('[upload-card-image] Storage error:', uploadError)
+  // 5. Upload to R2
+  const r2Key = `card-images/${filename}`
+  try {
+    await uploadToR2(r2Key, uploadBuffer, uploadContentType)
+  } catch (err) {
+    console.error('[upload-card-image] R2 upload error:', err)
     return NextResponse.json(
-      { error: `Storage upload failed: ${uploadError.message}` },
+      { error: `Storage upload failed: ${err instanceof Error ? err.message : 'Unknown error'}` },
       { status: 502 }
     )
   }
@@ -190,10 +187,7 @@ async function uploadAndRecord(
   // 6. Resolve public URL — store the stable URL in the DB so every request
   //    hits the same CDN cache key; return a cache-busted URL to the browser
   //    only so the uploading client sees the new image immediately.
-  const { data: urlData } = supabaseAdmin.storage
-    .from('card-images')
-    .getPublicUrl(filename)
-  const stableUrl = urlData.publicUrl                   // clean URL — stored in DB
+  const stableUrl = getR2Url(r2Key)                    // clean URL — stored in DB
   const imageUrl  = `${stableUrl}?v=${Date.now()}`     // cache-bust — for browser only
 
   // 7. Update cards table (service-role — bypasses RLS)

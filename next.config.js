@@ -1,17 +1,5 @@
 /** @type {import('next').NextConfig} */
 
-// next.config.js is evaluated after Next.js loads .env.local, so
-// NEXT_PUBLIC_SUPABASE_URL is available here at startup time.
-// We extract the exact hostname so next/image can serve Supabase Storage images.
-let supabaseHostname = '*.supabase.co' // safe fallback
-if (process.env.NEXT_PUBLIC_SUPABASE_URL) {
-  try {
-    supabaseHostname = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname
-  } catch {
-    // malformed URL — leave the wildcard fallback
-  }
-}
-
 const nextConfig = {
   experimental: {
     // Reduces webpack memory usage during `next build` by reusing memory
@@ -31,6 +19,12 @@ const nextConfig = {
 
     remotePatterns: [
       {
+        // Cloudflare R2 public bucket — all images are served from here
+        protocol: 'https',
+        hostname: 'pub-5781f5d7c220456fb6732e5213993cc7.r2.dev',
+        pathname: '/**',
+      },
+      {
         protocol: 'https',
         hostname: 'images.pokemontcg.io',
         port: '',
@@ -41,13 +35,6 @@ const nextConfig = {
         hostname: 'images.scrydex.com',
         port: '',
         pathname: '/**',
-      },
-      {
-        // Supabase Storage — exact project hostname derived from NEXT_PUBLIC_SUPABASE_URL
-        protocol: 'https',
-        hostname: supabaseHostname,
-        port: '',
-        pathname: '/storage/v1/object/public/**',
       },
     ],
   },

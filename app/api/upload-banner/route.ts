@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import { supabaseAdmin } from '@/lib/supabase'
 import { compressImageToWebP, COMPRESSED_CONTENT_TYPE } from '@/lib/imageCompress'
+import { uploadToR2, getR2Url } from '@/lib/r2'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
 const MAX_SIZE_BYTES = 5 * 1024 * 1024 // 5 MB
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
 
   // 4. Build storage path and compress to WebP
   const storagePath = `${user.id}/${user.id}-banner.webp`
+  const r2Key       = `banners/${storagePath}`
   const fileBuffer  = await file.arrayBuffer()
   let uploadBuffer: Buffer | ArrayBuffer = fileBuffer
   let uploadContentType: string = file.type
@@ -54,27 +56,19 @@ export async function POST(request: NextRequest) {
     // Fallback: upload original bytes if compression unexpectedly fails
   }
 
-  // 5. Upload via admin client (bypasses storage RLS; session already verified above)
-  const { error: uploadError } = await supabaseAdmin.storage
-    .from('banners')
-    .upload(storagePath, uploadBuffer, {
-      upsert: true,
-      contentType: uploadContentType,
-    })
-
-  if (uploadError) {
-    console.error('[upload-banner] Storage error:', uploadError)
+  // 5. Upload to R2 (session already verified above)
+  try {
+    await uploadToR2(r2Key, uploadBuffer, uploadContentType)
+  } catch (err) {
+    console.error('[upload-banner] R2 upload error:', err)
     return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
   }
 
   // 6. Get public URL
-  const { data: { publicUrl } } = supabaseAdmin.storage
-    .from('banners')
-    .getPublicUrl(storagePath)
+  const stableUrl = getR2Url(r2Key)
 
   // Store stable URL in DB so every request hits the same CDN cache key;
   // return a cache-busted URL to the browser so the client sees the new image immediately.
-  const stableUrl = publicUrl
   const bannerUrl = `${stableUrl}?t=${Date.now()}`
 
   // 7. Persist URL on the users row

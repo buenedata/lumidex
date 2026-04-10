@@ -3,8 +3,9 @@ import { requireAdmin } from '@/lib/admin'
 import { supabaseAdmin } from '@/lib/supabase'
 import { generateImageFilename } from '@/lib/imageUpload'
 import { compressImageToWebP, COMPRESSED_CONTENT_TYPE } from '@/lib/imageCompress'
+import { uploadToR2, getR2Url } from '@/lib/r2'
 
-const STORAGE_BUCKET = 'card-images'
+const R2_KEY_PREFIX = 'card-images'
 const CONCURRENCY = 3
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -557,21 +558,13 @@ export async function POST(request: NextRequest) {
             // Use the card-ID-scoped filename to prevent collisions between
             // cards in the same set that share the same number (e.g. #3).
             const filename = generateImageFilename(card.set_id, card.number, card.id)
+            const r2Key    = `${R2_KEY_PREFIX}/${filename}`
 
-            const { error: uploadErr } = await supabaseAdmin.storage
-              .from(STORAGE_BUCKET)
-              .upload(filename, uploadBuffer, { contentType: uploadContentType, upsert: true })
-
-            if (uploadErr) {
-              throw new Error(`Storage upload failed: ${uploadErr.message}`)
-            }
+            await uploadToR2(r2Key, uploadBuffer, uploadContentType)
 
             // Append a version timestamp so each upload produces a distinct URL,
-            // bypassing Supabase CDN / browser cache for overwritten files.
-            const { data: urlData } = supabaseAdmin.storage
-              .from(STORAGE_BUCKET)
-              .getPublicUrl(filename)
-            const imageUrl = `${urlData.publicUrl}?v=${Date.now()}`
+            // bypassing CDN / browser cache for overwritten files.
+            const imageUrl = `${getR2Url(r2Key)}?v=${Date.now()}`
 
             const { error: dbUpdateErr } = await supabaseAdmin
               .from('cards')

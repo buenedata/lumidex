@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/admin'
 import { supabaseAdmin } from '@/lib/supabase'
 import { compressImageToWebP, COMPRESSED_CONTENT_TYPE } from '@/lib/imageCompress'
+import { uploadToR2, getR2Url } from '@/lib/r2'
 
 /**
  * POST /api/upload-variant-image
@@ -78,31 +79,24 @@ export async function POST(request: NextRequest) {
     uploadContentType = file.type
   }
 
-  // 4. Upload to Supabase Storage
-  // Path: variants/<cardId>-<variantId>.webp
-  // Using the card-images bucket (same bucket as regular card images)
+  // 4. Upload to R2
+  // Path: card-images/variants/<cardId>-<variantId>.webp
+  // Using the card-images prefix (same logical bucket as regular card images)
   const storagePath = `variants/${cardId}-${variantId}.webp`
+  const r2Key       = `card-images/${storagePath}`
 
-  const { error: uploadError } = await supabaseAdmin.storage
-    .from('card-images')
-    .upload(storagePath, uploadBuffer, {
-      upsert: true,
-      contentType: uploadContentType,
-    })
-
-  if (uploadError) {
-    console.error('[upload-variant-image] Storage error:', uploadError)
+  try {
+    await uploadToR2(r2Key, uploadBuffer, uploadContentType)
+  } catch (err) {
+    console.error('[upload-variant-image] R2 upload error:', err)
     return NextResponse.json(
-      { error: `Storage upload failed: ${uploadError.message}` },
+      { error: `Storage upload failed: ${err instanceof Error ? err.message : 'Unknown error'}` },
       { status: 502 },
     )
   }
 
   // 5. Resolve public URL with cache-busting version param
-  const { data: urlData } = supabaseAdmin.storage
-    .from('card-images')
-    .getPublicUrl(storagePath)
-  const imageUrl = `${urlData.publicUrl}?v=${Date.now()}`
+  const imageUrl = `${getR2Url(r2Key)}?v=${Date.now()}`
 
   // 6. Upsert card_variant_images row
   const { error: dbError } = await supabaseAdmin
