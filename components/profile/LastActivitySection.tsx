@@ -56,35 +56,35 @@ function variantLabel(key: string | null): string {
 
 // ── Delta badge ───────────────────────────────────────────────────────────────
 
-/** Arrow-based quantity badge.
- *  - delta > 0  → green ↑  "×N"
- *  - delta < 0  → red   ↓  "×N"
- *  - delta null → grey       "×N"  (row predates delta tracking)
+/** Arrow-based quantity badge showing "before → after".
+ *  - delta > 0  → green ↑  "N → M"
+ *  - delta < 0  → red   ↓  "N → M"
+ *  - delta null → grey  "×M"  (row predates delta tracking)
  */
 function DeltaBadge({ delta, quantity }: { delta: number | null; quantity: number }) {
   if (delta !== null && delta > 0) {
+    const before = quantity - delta
     return (
       <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-green-400">
-        {/* up arrow */}
         <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 12 12" fill="currentColor">
           <path d="M6 1 L11 8 H7 V11 H5 V8 H1 Z" />
         </svg>
-        ×{quantity}
+        {before} → {quantity}
       </span>
     )
   }
   if (delta !== null && delta < 0) {
+    const before = quantity - delta
     return (
       <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-red-400">
-        {/* down arrow */}
         <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 12 12" fill="currentColor">
           <path d="M6 11 L1 4 H5 V1 H7 V4 H11 Z" />
         </svg>
-        ×{quantity}
+        {before} → {quantity}
       </span>
     )
   }
-  // Unknown direction (null delta or delta === 0 — no change)
+  // Unknown direction (null delta or no change)
   return (
     <span className="inline-flex items-center text-[11px] font-semibold text-muted">
       ×{quantity}
