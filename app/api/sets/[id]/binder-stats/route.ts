@@ -127,7 +127,7 @@ export async function GET(
 
     return NextResponse.json(
       { normalCount, mastersetCount, grandmasterCount },
-      { headers: { 'Cache-Control': 'public, max-age=3600, stale-while-revalidate=86400' } }
+      { headers: { 'Cache-Control': 'no-store' } }
     )
   } catch (err) {
     console.error('[binder-stats] Error computing binder stats for set', setId, err)

@@ -79,7 +79,7 @@ export default function BinderCalculatorModal({
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/sets/${setId}/binder-stats`)
+      const res = await fetch(`/api/sets/${setId}/binder-stats`, { cache: 'no-store' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data: BinderStats = await res.json()
       setStats(data)
