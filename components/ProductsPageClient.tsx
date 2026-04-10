@@ -199,7 +199,6 @@ export default function ProductsPageClient({
                     alt={setGroup.setName}
                     width={80}
                     height={40}
-                    unoptimized
                     className="object-contain h-7 w-auto"
                   />
                 )}

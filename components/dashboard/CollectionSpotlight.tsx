@@ -127,7 +127,6 @@ export default function CollectionSpotlight({
                 alt={set.name}
                 width={180}
                 height={80}
-                unoptimized
                 className="relative z-10 object-contain max-h-20 w-auto drop-shadow-lg"
               />
             </>

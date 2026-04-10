@@ -365,7 +365,6 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId, seriesWi
                           alt=""
                           width={60}
                           height={30}
-                          unoptimized
                           aria-hidden
                           className="object-contain"
                         />
