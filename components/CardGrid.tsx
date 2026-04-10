@@ -100,6 +100,15 @@ interface CardGridProps {
    */
   onHasExtraVariants?: (has: boolean) => void
   /**
+   * The FULL (unsearch-filtered) card list for the current set.
+   * CardGrid receives only the search-filtered subset via `cards`; passing the full
+   * list here lets the goal-aware count computation cover all cards so the Have/Need
+   * badge numbers always match the full set (not just the visible search subset).
+   */
+  allCards?: PokemonCard[]
+  /** Called whenever the goal-aware Have/Need counts change after variant data loads. */
+  onCountsChange?: (have: number, need: number) => void
+  /**
    * When true, cards are never greyed out regardless of the user's grey_out_unowned setting.
    * Used on the browse/search page where collection status should not affect card appearance.
    */
@@ -257,7 +266,7 @@ function getTypeGlowClass(type: string | null | undefined): string {
   return known.includes(key) ? `card-type-${key}` : ''
 }
 
-export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', sortDirection = 'asc', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', priceSource = 'tcgplayer', onVariantsLegendChange, onHasExtraVariants, disableGreyOut = false, onWantedStatusChange }: CardGridProps) {
+export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', sortDirection = 'asc', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', priceSource = 'tcgplayer', onVariantsLegendChange, onHasExtraVariants, allCards, onCountsChange, disableGreyOut = false, onWantedStatusChange }: CardGridProps) {
   const { updateCardQuantity, userCards: storeUserCards, fetchUserCards } = useCollectionStore()
   const { user, isLoading, profile } = useAuthStore()
   // Prefer the client-side profile's preferred_currency (always reliable after login)
@@ -315,6 +324,10 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   useEffect(() => { cardQuickVariantsRef.current  = cardQuickVariants  }, [cardQuickVariants])
   useEffect(() => { cardVariantsRef.current       = cardVariants       }, [cardVariants])
   useEffect(() => { isLoadingVariantsRef.current  = isLoadingVariants  }, [isLoadingVariants])
+  // Stable ref for onCountsChange — lets the emit-effect depend only on the
+  // computed value, not on the callback identity, preventing render cascades.
+  const onCountsChangeRef = useRef(onCountsChange)
+  useEffect(() => { onCountsChangeRef.current = onCountsChange }, [onCountsChange])
   // Tracks cards whose full variants (incl. variant_image_url) have been loaded via GET.
   const cardVariantsLoadedRef = useRef(new Set<string>())
   // Cache for related-card results — avoids re-fetching on every modal open for the same card.
@@ -527,6 +540,49 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       return dir * (diff !== 0 ? diff : (a.number ?? '').localeCompare(b.number ?? ''))
     })
   }, [cards, userCards, filter, sortBy, sortDirection, collectionGoal, cardQuickVariants, cardPricesUSD])
+
+  // ── Goal-aware Have / Need counts ────────────────────────────────────────────
+  // Uses allCards (the full unsearch-filtered set) when provided, so the numbers
+  // always reflect the whole set — matching the SetPageCards haveCount / needCount
+  // behaviour even when the user has an active search filter.
+  // Recomputes after every variant click (cardQuickVariants dep) and goal change.
+  const goalAwareCounts = useMemo(() => {
+    const source = allCards ?? cards
+    let have = 0
+    for (const card of source) {
+      const userCard      = userCards.get(card.id)
+      const quickVariants = cardQuickVariants.get(card.id)
+      const anyOwned = quickVariants && quickVariants.length > 0
+        ? quickVariants.some(v => v.quantity > 0)
+        : !!(userCard && userCard.quantity > 0)
+
+      let owned: boolean
+      if (collectionGoal === 'masterset') {
+        if (quickVariants && quickVariants.length > 0) {
+          const globalVariants = quickVariants.filter(v => v.card_id == null)
+          owned = globalVariants.length > 0 ? globalVariants.every(v => v.quantity > 0) : anyOwned
+        } else {
+          owned = anyOwned
+        }
+      } else if (collectionGoal === 'grandmasterset') {
+        if (quickVariants && quickVariants.length > 0) {
+          owned = quickVariants.every(v => v.quantity > 0)
+        } else {
+          owned = anyOwned
+        }
+      } else {
+        owned = anyOwned
+      }
+      if (owned) have++
+    }
+    return { have, need: source.length - have }
+  }, [allCards, cards, userCards, collectionGoal, cardQuickVariants])
+
+  // Emit goal-aware counts whenever they change — uses the ref so the effect
+  // deps list is just the counts object, preventing callback identity re-renders.
+  useEffect(() => {
+    onCountsChangeRef.current?.(goalAwareCounts.have, goalAwareCounts.need)
+  }, [goalAwareCounts])
 
   // Load variants for a specific card — stable (useCallback + isLoadingVariantsRef)
   const loadCardVariants = useCallback(async (cardId: string, quickAddOnly = false) => {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { Listbox, ListboxButton, ListboxOption, ListboxOptions } from '@headlessui/react'
 import { ChevronUpDownIcon, CheckIcon, ArrowUpIcon, ArrowDownIcon } from '@heroicons/react/20/solid'
 import { cn } from '@/lib/utils'
@@ -90,6 +90,14 @@ export default function SetPageCards({
   // Set to true once the batch variant fetch detects any card-specific variants.
   // Combined with hasPromos to determine Grandmaster Set selector visibility.
   const [hasExtraVariants, setHasExtraVariants] = useState(false)
+  // Goal-aware Have/Need counts emitted by CardGrid after the batch variant load.
+  // null until first emission — tab badges fall back to the basic Zustand counts.
+  const [goalHave, setGoalHave] = useState<number | null>(null)
+  const [goalNeed, setGoalNeed] = useState<number | null>(null)
+  const handleCountsChange = useCallback((have: number, need: number) => {
+    setGoalHave(have)
+    setGoalNeed(need)
+  }, [])
 
   const { userCards: storeUserCards } = useCollectionStore()
   const { user, profile } = useAuthStore()
@@ -140,14 +148,16 @@ export default function SetPageCards({
   const tabs = useMemo<{ label: string; value: FilterTab; count?: number; dimCount?: boolean }[]>(() => {
     const list: { label: string; value: FilterTab; count?: number; dimCount?: boolean }[] = [
       { label: 'Show All',   value: 'all' },
-      { label: 'Have',       value: 'owned',   count: isAuthenticated ? haveCount : undefined },
-      { label: 'Need',       value: 'missing', count: isAuthenticated ? needCount : undefined, dimCount: true },
+      // Use goal-aware counts once CardGrid emits them; fall back to the basic
+      // Zustand-aggregate counts until the batch variant fetch completes.
+      { label: 'Have',       value: 'owned',   count: isAuthenticated ? (goalHave ?? haveCount) : undefined },
+      { label: 'Need',       value: 'missing', count: isAuthenticated ? (goalNeed ?? needCount) : undefined, dimCount: true },
     ]
     if (isAuthenticated && hasDuplicates) {
       list.push({ label: 'Duplicates', value: 'duplicates', count: duplicatesCount })
     }
     return list
-  }, [isAuthenticated, haveCount, needCount, duplicatesCount, hasDuplicates])
+  }, [isAuthenticated, haveCount, needCount, goalHave, goalNeed, duplicatesCount, hasDuplicates])
 
   // Make sure activeFilter stays valid if Duplicates tab disappears
   const safeFilter: FilterTab =
@@ -437,6 +447,8 @@ export default function SetPageCards({
               currency={effectiveCurrency}
               priceSource={priceSource}
               userId={userId}
+              allCards={cards}
+              onCountsChange={handleCountsChange}
               onVariantsLegendChange={setLegendVariants}
               onHasExtraVariants={setHasExtraVariants}
               disableGreyOut={disableGreyOut}
