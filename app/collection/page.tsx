@@ -4,14 +4,34 @@ import { useState, useEffect } from 'react'
 import LastActivitySection from '@/components/profile/LastActivitySection'
 import { useAuthStore, useCollectionStore } from '@/lib/store'
 import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
 import SetCard from '@/components/SetCard'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { SetProgress } from '@/types'
 import { cn } from '@/lib/utils'
 
+// ── Currency formatter ────────────────────────────────────────────────────────
+const EXCHANGE_RATES: Record<string, number> = {
+  USD: 1.00, EUR: 0.92, GBP: 0.79, NOK: 10.55,
+  SEK: 10.35, DKK: 6.88, CAD: 1.36, AUD: 1.52, JPY: 149.00, CHF: 0.90,
+}
+const CURRENCY_LOCALES: Record<string, string> = {
+  USD: 'en-US', EUR: 'de-DE', GBP: 'en-GB', NOK: 'nb-NO',
+  SEK: 'sv-SE', DKK: 'da-DK', CAD: 'en-CA', AUD: 'en-AU', JPY: 'ja-JP', CHF: 'de-CH',
+}
+function formatCollectionValue(usdAmount: number, toCurrency = 'USD'): string {
+  const rate   = EXCHANGE_RATES[toCurrency] ?? 1
+  const locale = CURRENCY_LOCALES[toCurrency] ?? 'en-US'
+  const curr   = toCurrency in EXCHANGE_RATES ? toCurrency : 'USD'
+  return new Intl.NumberFormat(locale, {
+    style: 'currency', currency: curr,
+    minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format(usdAmount * rate)
+}
+
 export default function CollectionPage() {
-  const { user, isLoading: authLoading } = useAuthStore()
+  const { user, isLoading: authLoading, profile } = useAuthStore()
   const {
     userSets,
     userCards,
@@ -23,7 +43,8 @@ export default function CollectionPage() {
   } = useCollectionStore()
   const router = useRouter()
 
-  const [searchTerm, setSearchTerm] = useState('')
+  const [searchTerm, setSearchTerm]               = useState('')
+  const [collectionValueUsd, setCollectionValueUsd] = useState<number | null>(null)
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -40,6 +61,39 @@ export default function CollectionPage() {
     if (userSets.length === 0) fetchUserSets()
     if (userCardCountBySet.size === 0) fetchUserCards()
   }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Fetch collection value from card_prices ──────────────────────────────
+  useEffect(() => {
+    if (!user || userCards.size === 0) return
+    let cancelled = false
+
+    async function fetchValue() {
+      const cardIds = [...userCards.keys()]
+      const { data: prices } = await supabase
+        .from('card_prices')
+        .select('card_id, tcgp_market, tcgp_normal, cm_trend')
+        .in('card_id', cardIds)
+
+      if (cancelled || !prices || prices.length === 0) return
+
+      const priceSource: string = (profile as any)?.price_source ?? 'tcgplayer'
+      const priceMap = new Map(prices.map(p => [p.card_id as string, p]))
+      let total = 0
+      for (const [cardId, userCard] of userCards) {
+        const row = priceMap.get(cardId)
+        if (!row || !userCard.quantity) continue
+        const unitPrice =
+          priceSource === 'cardmarket'
+            ? ((row.cm_trend as number | null)    ?? (row.tcgp_market as number | null) ?? 0)
+            : ((row.tcgp_market as number | null) ?? (row.tcgp_normal as number | null) ?? 0)
+        total += unitPrice * userCard.quantity
+      }
+      if (!cancelled) setCollectionValueUsd(total)
+    }
+
+    fetchValue()
+    return () => { cancelled = true }
+  }, [user, userCards]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Derive set progress from the store ──────────────────────────────────
   const buildProgress = (setId: string): SetProgress => {
@@ -152,8 +206,13 @@ export default function CollectionPage() {
                 <span className="text-2xl font-bold text-primary">{totalOwnedCards.toLocaleString()}</span>
               </div>
               <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1 col-span-2 md:col-span-1">
-                <span className="text-xs text-muted uppercase tracking-wider">Avg. Completion</span>
-                <span className="text-2xl font-bold text-accent">{avgCompletion}%</span>
+                <span className="text-xs text-muted uppercase tracking-wider">My Collection Value</span>
+                <span className="text-2xl font-bold text-accent">
+                  {collectionValueUsd === null
+                    ? '…'
+                    : formatCollectionValue(collectionValueUsd, (profile as any)?.preferred_currency ?? 'USD')
+                  }
+                </span>
               </div>
             </div>
 
