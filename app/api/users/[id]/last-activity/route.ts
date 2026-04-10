@@ -6,15 +6,12 @@ import { createSupabaseServerClient } from '@/lib/supabaseServer'
 
 export type CardActivityItem = {
   type: 'card'
+  /** ISO 8601 timestamp of this specific change event */
   timestamp: string
-  /** ISO 8601 — used with timestamp to detect first-add vs quantity update */
-  created_at: string
+  /** Quantity after the change */
   quantity: number
-  /**
-   * Signed integer: positive = increase, negative = decrease, null = unknown
-   * (rows that predate the quantity_delta column or were set via the RPC).
-   */
-  quantity_delta: number | null
+  /** Signed delta: positive = increase, negative = decrease. Always set. */
+  quantity_delta: number
   card_id: string
   card_name: string
   card_number: string
@@ -46,14 +43,15 @@ export type ActivityItem = CardActivityItem | SealedProductActivityItem
 /**
  * GET /api/users/[id]/last-activity
  *
- * Returns the 10 most recently added or updated card variants and sealed
- * products for the given user, merged and sorted by updated_at DESC.
+ * Returns the 10 most recent card changes (from user_card_activity_log) and
+ * sealed product updates, merged and sorted by timestamp DESC.
+ *
+ * Card activity uses the activity log so multiple changes to the same card show
+ * as separate events (e.g. ↓2→1 and ↑1→2 are both visible).
  *
  * Privacy:
- *  - If the target profile has profile_private = true, only the profile owner
- *    (determined via the session cookie) may see the activity; everyone else
- *    receives an empty array.
- *  - Public profiles are readable by anyone (including unauthenticated visitors).
+ *  - profile_private = true → only the profile owner can see activity.
+ *  - Public profiles are readable by anyone.
  */
 export async function GET(
   request: NextRequest,
@@ -73,7 +71,7 @@ export async function GET(
     ])
 
     const { data: { user: requestingUser } } = await serverClient.auth.getUser()
-    const isOwner  = requestingUser?.id === userId
+    const isOwner   = requestingUser?.id === userId
     const isPrivate = userResult.data?.profile_private ?? false
 
     if (isPrivate && !isOwner) {
@@ -81,14 +79,16 @@ export async function GET(
     }
 
     // ── 2. Fetch raw activity rows in parallel ────────────────────────────────
-    const [cardVariantsResult, sealedProductsResult] = await Promise.all([
+    const [cardLogResult, sealedProductsResult] = await Promise.all([
+      // Card activity from the append-only log — each row is a discrete event
       supabaseAdmin
-        .from('user_card_variants')
-        .select('card_id, variant_type, quantity, quantity_delta, created_at, updated_at')
+        .from('user_card_activity_log')
+        .select('card_id, variant_id, old_quantity, new_quantity, changed_at')
         .eq('user_id', userId)
-        .order('updated_at', { ascending: false })
+        .order('changed_at', { ascending: false })
         .limit(10),
 
+      // Sealed products still use the current-state table (one row per product)
       supabaseAdmin
         .from('user_sealed_products')
         .select('product_id, quantity, created_at, updated_at')
@@ -97,21 +97,32 @@ export async function GET(
         .limit(5),
     ])
 
-    const cardVariants  = cardVariantsResult.data  ?? []
+    const cardLogRows    = cardLogResult.data    ?? []
     const sealedProducts = sealedProductsResult.data ?? []
 
-    // ── 3. Enrich card variants ───────────────────────────────────────────────
+    // ── 3. Enrich card log rows ───────────────────────────────────────────────
     const cardItems: CardActivityItem[] = []
 
-    if (cardVariants.length > 0) {
-      const cardIds = [...new Set(cardVariants.map(r => r.card_id))]
+    if (cardLogRows.length > 0) {
+      // Deduplicate card_ids for the cards lookup
+      const cardIds    = [...new Set(cardLogRows.map(r => r.card_id))]
+      const variantIds = [...new Set(cardLogRows.map(r => r.variant_id))]
 
-      const { data: cardsData } = await supabaseAdmin
-        .from('cards')
-        .select('id, name, number, image, type, set_id')
-        .in('id', cardIds)
+      const [cardsResult, variantsResult] = await Promise.all([
+        supabaseAdmin
+          .from('cards')
+          .select('id, name, number, image, type, set_id')
+          .in('id', cardIds),
+        supabaseAdmin
+          .from('variants')
+          .select('id, key')
+          .in('id', variantIds),
+      ])
 
-      if (cardsData && cardsData.length > 0) {
+      const cardsData    = cardsResult.data    ?? []
+      const variantsData = variantsResult.data ?? []
+
+      if (cardsData.length > 0) {
         const setIds = [...new Set(cardsData.map(c => c.set_id).filter(Boolean))]
 
         const { data: setsData } = await supabaseAdmin
@@ -119,28 +130,29 @@ export async function GET(
           .select('set_id, name, logo_url')
           .in('set_id', setIds)
 
-        const cardMap = new Map(cardsData.map(c  => [c.id,      c]))
-        const setMap  = new Map((setsData ?? []).map(s => [s.set_id, s]))
+        const cardMap    = new Map(cardsData.map(c    => [c.id,      c]))
+        const variantMap = new Map(variantsData.map(v => [v.id,      v]))
+        const setMap     = new Map((setsData ?? []).map(s => [s.set_id, s]))
 
-        for (const variant of cardVariants) {
-          const card = cardMap.get(variant.card_id)
+        for (const log of cardLogRows) {
+          const card    = cardMap.get(log.card_id)
+          const variant = variantMap.get(log.variant_id)
           if (!card) continue
           const set = setMap.get(card.set_id)
 
           cardItems.push({
             type:           'card',
-            timestamp:      variant.updated_at,
-            created_at:     variant.created_at,
-            quantity:       variant.quantity ?? 1,
-            quantity_delta: variant.quantity_delta ?? null,
+            timestamp:      log.changed_at,
+            quantity:       log.new_quantity,
+            quantity_delta: log.new_quantity - log.old_quantity,
             card_id:        card.id,
-            card_name:    card.name,
-            card_number:  card.number ?? '',
-            card_image:   card.image  ?? null,
-            card_type:    card.type   ?? null,
-            variant_type: variant.variant_type ?? null,
-            set_id:       card.set_id,
-            set_name:     set?.name ?? '',
+            card_name:      card.name,
+            card_number:    card.number ?? '',
+            card_image:     card.image  ?? null,
+            card_type:      card.type   ?? null,
+            variant_type:   variant?.key ?? null,
+            set_id:         card.set_id,
+            set_name:       set?.name ?? '',
           })
         }
       }
@@ -165,7 +177,7 @@ export async function GET(
           .select('set_id, name')
           .in('set_id', productSetIds)
 
-        const productMap    = new Map(productsData.map(p => [p.id,      p]))
+        const productMap    = new Map(productsData.map(p     => [p.id,      p]))
         const productSetMap = new Map((productSetsData ?? []).map(s => [s.set_id, s]))
 
         for (const up of sealedProducts) {
@@ -189,7 +201,7 @@ export async function GET(
       }
     }
 
-    // ── 5. Merge, sort and cap at 10 ─────────────────────────────────────────
+    // ── 5. Merge, sort by timestamp DESC, cap at 10 ───────────────────────────
     const merged: ActivityItem[] = [...cardItems, ...productItems]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 10)

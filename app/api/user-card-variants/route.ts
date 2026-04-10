@@ -2,7 +2,32 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { checkAndUnlockAchievements } from '@/lib/achievements'
 
-// POST — set a variant quantity directly (used by the modal's numeric input)
+// ── Shared helper ─────────────────────────────────────────────────────────────
+
+/** Appends one row to user_card_activity_log. Fire-and-forget — never throws. */
+function logActivity(
+  userId:      string,
+  cardId:      string,
+  variantId:   string,
+  oldQuantity: number,
+  newQuantity: number,
+) {
+  if (oldQuantity === newQuantity) return  // no change — skip
+  supabaseAdmin
+    .from('user_card_activity_log')
+    .insert({
+      user_id:      userId,
+      card_id:      cardId,
+      variant_id:   variantId,
+      old_quantity: oldQuantity,
+      new_quantity: newQuantity,
+    })
+    .then(({ error }) => {
+      if (error) console.error('[activity-log] insert failed:', error.message)
+    })
+}
+
+// ── POST — set a variant quantity directly (modal numeric input) ──────────────
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -22,6 +47,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Read current quantity — needed for both delta tracking and the activity log.
+    const { data: existingPost } = await supabaseAdmin
+      .from('user_card_variants')
+      .select('quantity')
+      .eq('user_id', userId)
+      .eq('card_id', cardId)
+      .eq('variant_id', variantId)
+      .maybeSingle()
+
+    const oldQty           = existingPost?.quantity ?? 0
+    const quantityDeltaPost = quantity - oldQty
+
     if (quantity === 0) {
       const { error: deleteError } = await supabaseAdmin
         .from('user_card_variants')
@@ -38,26 +75,13 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Fire-and-forget achievement check
+      logActivity(userId, cardId, variantId, oldQty, 0)
       checkAndUnlockAchievements(userId, supabaseAdmin).catch(err =>
         console.error('[user-card-variants POST] achievement sync failed:', err)
       )
-
       return NextResponse.json({ message: 'Card variant removed successfully', quantity: 0 })
     }
 
-    // Read current quantity to compute the signed delta for Last Activity display
-    const { data: existingPost } = await supabaseAdmin
-      .from('user_card_variants')
-      .select('quantity')
-      .eq('user_id', userId)
-      .eq('card_id', cardId)
-      .eq('variant_id', variantId)
-      .maybeSingle()
-
-    const quantityDeltaPost = quantity - (existingPost?.quantity ?? 0)
-
-    // Single upsert — variant_type is a legacy column, skip the extra variants.key lookup
     const { error } = await supabaseAdmin
       .from('user_card_variants')
       .upsert({
@@ -80,11 +104,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Fire-and-forget achievement check
+    logActivity(userId, cardId, variantId, oldQty, quantity)
     checkAndUnlockAchievements(userId, supabaseAdmin).catch(err =>
       console.error('[user-card-variants POST] achievement sync failed:', err)
     )
-
     return NextResponse.json({ message: 'Card variant updated successfully', quantity })
 
   } catch (error) {
@@ -93,16 +116,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PATCH — increment or decrement a variant quantity by ±1.
+// ── PATCH — increment or decrement a variant quantity by ±1 ──────────────────
 //
 // Performance: the client passes `currentQuantity` (its locally-known value) so
 // the server can compute the new quantity without a prior SELECT round-trip.
 // This collapses what was previously 3 sequential DB calls into 1 upsert.
-//
-// Race-condition note: if two sessions update the same variant simultaneously,
-// the second write wins (last-write-wins). For a personal collection tracker
-// this is acceptable; for full atomicity run the migration_increment_user_card_variant_rpc.sql
-// and switch the upsert below to supabaseAdmin.rpc('increment_user_card_variant', ...).
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
@@ -115,9 +133,7 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    // Derive new quantity from the client-supplied current value.
-    // Falls back to 0 when currentQuantity is omitted (older clients / first click).
-    const base       = typeof currentQuantity === 'number' ? currentQuantity : 0
+    const base        = typeof currentQuantity === 'number' ? currentQuantity : 0
     const newQuantity = Math.max(0, base + increment)
 
     if (newQuantity === 0) {
@@ -136,15 +152,13 @@ export async function PATCH(request: NextRequest) {
         )
       }
 
-      // Fire-and-forget achievement check
+      logActivity(userId, cardId, variantId, base, 0)
       checkAndUnlockAchievements(userId, supabaseAdmin).catch(err =>
         console.error('[user-card-variants PATCH] achievement sync failed:', err)
       )
-
       return NextResponse.json({ quantity: 0 })
     }
 
-    // Single upsert — increment IS the signed delta, so no extra SELECT needed.
     // updated_at is set explicitly because the BEFORE UPDATE trigger is not
     // guaranteed to fire when supabaseAdmin (service role) issues the upsert.
     const { error } = await supabaseAdmin
@@ -169,11 +183,10 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    // Fire-and-forget achievement check
+    logActivity(userId, cardId, variantId, base, newQuantity)
     checkAndUnlockAchievements(userId, supabaseAdmin).catch(err =>
       console.error('[user-card-variants PATCH] achievement sync failed:', err)
     )
-
     return NextResponse.json({ quantity: newQuantity })
 
   } catch (error) {
