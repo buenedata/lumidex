@@ -47,8 +47,8 @@ const GOAL_ICONS: Record<CollectionGoal, string> = {
 
 const GOAL_DESCRIPTIONS: Record<CollectionGoal, string> = {
   normal:         '1 of any variant per card',
-  masterset:      'All variants, excl. promos',
-  grandmasterset: 'All variants, incl. promos',
+  masterset:      'All variants, excl. card-specific & promos',
+  grandmasterset: 'All variants, incl. card-specific & promos',
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

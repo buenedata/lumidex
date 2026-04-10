@@ -10,24 +10,18 @@ function extractCardNumber(cardNumber: string | null): number {
 }
 
 /**
- * Compute the number of variant slots a collector needs for one card,
- * mirroring the logic in lib/variants.ts getAvailableVariants().
+ * Compute the BASE number of variant slots for a card using rarity rules only.
+ * Used for Masterset (standard variants, no card-specific overrides, no promos).
  *
- * Priority:
- *  1. If there are admin-configured overrides (card_variant_availability rows) → use that count.
- *  2. Otherwise derive from rarity rules:
- *     - Secret rare (number > setTotal) → 1  (Holo only)
- *     - EX / V card (name or rarity)    → 1  (Holo only)
- *     - Holo rarity (not non-holo)      → 2  (Reverse Holo + Holo)
- *     - Everything else                 → 2  (Normal + Reverse Holo)
+ *  - Secret rare (number > setTotal) → 1  (Holo only)
+ *  - EX / V card (name or rarity)    → 1  (Holo only)
+ *  - Holo rarity (not non-holo)      → 2  (Reverse Holo + Holo)
+ *  - Everything else                 → 2  (Normal + Reverse Holo)
  */
-function computeVariantCount(
+function computeBaseVariantCount(
   card: { name: string | null; number: string | null; rarity: string | null },
   setTotal: number,
-  overrideCount: number
 ): number {
-  if (overrideCount > 0) return overrideCount
-
   const name   = card.name?.toLowerCase()   ?? ''
   const rarity = card.rarity?.toLowerCase() ?? ''
   const num    = extractCardNumber(card.number)
@@ -46,6 +40,23 @@ function computeVariantCount(
 
   // Common / regular cards: Normal + Reverse Holo
   return 2
+}
+
+/**
+ * Compute the FULL number of variant slots for a card.
+ * Used for Grandmaster Set (all variants including card-specific overrides, including promos).
+ *
+ * Priority:
+ *  1. If there are admin-configured overrides (card_variant_availability rows) → use that count.
+ *  2. Otherwise fall back to rarity rules (same as computeBaseVariantCount).
+ */
+function computeFullVariantCount(
+  card: { name: string | null; number: string | null; rarity: string | null },
+  setTotal: number,
+  overrideCount: number
+): number {
+  if (overrideCount > 0) return overrideCount
+  return computeBaseVariantCount(card, setTotal)
 }
 
 // ── Route handler ─────────────────────────────────────────────────────────────
@@ -102,13 +113,13 @@ export async function GET(
       const overrides     = (card as Record<string, unknown>)['card_variant_availability']
       const overrideCount = Array.isArray(overrides) ? overrides.length : 0
 
-      const variantCount = computeVariantCount(card, setTotal, overrideCount)
-
       const isPromo = card.rarity?.toLowerCase().includes('promo') ?? false
 
-      // Masterset excludes promo cards; Grandmaster includes everything
-      if (!isPromo) mastersetCount += variantCount
-      grandmasterCount += variantCount
+      // Masterset: standard rarity-based variants only (no card-specific overrides), non-promo cards
+      if (!isPromo) mastersetCount += computeBaseVariantCount(card, setTotal)
+
+      // Grandmaster: all variants including card-specific overrides, all cards incl. promos
+      grandmasterCount += computeFullVariantCount(card, setTotal, overrideCount)
     }
 
     // Normal set = one of any variant per card (one slot per unique card design)
