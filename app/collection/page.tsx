@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import LastActivitySection from '@/components/profile/LastActivitySection'
 import { useAuthStore, useCollectionStore } from '@/lib/store'
 import { useRouter } from 'next/navigation'
 import SetCard from '@/components/SetCard'
@@ -155,6 +156,9 @@ export default function CollectionPage() {
                 <span className="text-2xl font-bold text-accent">{avgCompletion}%</span>
               </div>
             </div>
+
+            {/* ── Last Activity ────────────────────────────────────────── */}
+            <LastActivitySection userId={user.id} isOwnProfile compact />
 
             {/* ── Search / Filter ──────────────────────────────────────── */}
             <div className="mb-6">

@@ -18,6 +18,7 @@ import FriendRequests from '@/components/profile/FriendRequests'
 import OutgoingRequests from '@/components/profile/OutgoingRequests'
 import AddFriendModal from '@/components/profile/AddFriendModal'
 import ProfileLists from '@/components/profile/ProfileLists'
+import LastActivitySection from '@/components/profile/LastActivitySection'
 import ProfileWantedCards from '@/components/profile/ProfileWantedCards'
 import { type SettingsValues } from '@/components/profile/SettingsForm'
 import { User, Achievement, PokemonSet, SetProgress } from '@/types'
@@ -679,6 +680,9 @@ export default function ProfilePage() {
                 </span>
               </div>
             </div>
+
+            {/* ── Last Activity ─────────────────────────────────────────────────── */}
+            <LastActivitySection userId={userId} isOwnProfile={isOwnProfile} />
 
             {/* ── Friend Requests — incoming (own profile only) ─────────────────── */}
             {isOwnProfile && pendingIncoming.length > 0 && (
