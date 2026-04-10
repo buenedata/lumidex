@@ -463,7 +463,7 @@ export default function SetPageCards({
         setId={setId}
         setName={setName}
         currentGoal={collectionGoal}
-        hasPromos={hasPromos}
+        hasPromos={hasPromos || hasExtraVariants}
       />
     </div>
   )
