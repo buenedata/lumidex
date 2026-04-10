@@ -60,7 +60,6 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: userId } = await params
-  console.log('[last-activity] userId:', userId)
 
   try {
     // ── 1. Privacy check ──────────────────────────────────────────────────────
@@ -98,19 +97,8 @@ export async function GET(
         .limit(5),
     ])
 
-    if (cardVariantsResult.error) {
-      console.error('[last-activity] cardVariants query error:', cardVariantsResult.error)
-    }
     const cardVariants  = cardVariantsResult.data  ?? []
     const sealedProducts = sealedProductsResult.data ?? []
-
-    console.log('[last-activity] raw cardVariants count:', cardVariants.length)
-    console.log('[last-activity] top 3 updated_at:', cardVariants.slice(0, 3).map(r => ({
-      card_id: r.card_id,
-      quantity: r.quantity,
-      quantity_delta: r.quantity_delta,
-      updated_at: r.updated_at,
-    })))
 
     // ── 3. Enrich card variants ───────────────────────────────────────────────
     const cardItems: CardActivityItem[] = []
@@ -206,21 +194,7 @@ export async function GET(
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 10)
 
-    // ── DEBUG (remove after issue resolved) ──────────────────────────────────
-    const _debug = {
-      userId,
-      rawVariantCount: cardVariants.length,
-      cardVariantsError: cardVariantsResult.error?.message ?? null,
-      top3Raw: cardVariants.slice(0, 3).map(r => ({
-        card_id:        r.card_id,
-        quantity:       r.quantity,
-        quantity_delta: (r as Record<string, unknown>).quantity_delta ?? 'COLUMN_MISSING',
-        updated_at:     r.updated_at,
-        created_at:     r.created_at,
-      })),
-    }
-
-    return NextResponse.json({ data: merged, _debug })
+    return NextResponse.json({ data: merged })
   } catch (err) {
     console.error('[last-activity] unexpected error:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

@@ -46,15 +46,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Card variant removed successfully', quantity: 0 })
     }
 
+    // Read current quantity to compute the signed delta for Last Activity display
+    const { data: existingPost } = await supabaseAdmin
+      .from('user_card_variants')
+      .select('quantity')
+      .eq('user_id', userId)
+      .eq('card_id', cardId)
+      .eq('variant_id', variantId)
+      .maybeSingle()
+
+    const quantityDeltaPost = quantity - (existingPost?.quantity ?? 0)
+
     // Single upsert — variant_type is a legacy column, skip the extra variants.key lookup
     const { error } = await supabaseAdmin
       .from('user_card_variants')
       .upsert({
-        user_id:      userId,
-        card_id:      cardId,
-        variant_id:   variantId,
-        variant_type: null,
+        user_id:        userId,
+        card_id:        cardId,
+        variant_id:     variantId,
+        variant_type:   null,
         quantity,
+        quantity_delta: quantityDeltaPost,
+        updated_at:     new Date().toISOString(),
       }, {
         onConflict: 'user_id,card_id,variant_id',
       })
@@ -131,15 +144,19 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ quantity: 0 })
     }
 
-    // Single upsert — no prior SELECT, no variants.key lookup
+    // Single upsert — increment IS the signed delta, so no extra SELECT needed.
+    // updated_at is set explicitly because the BEFORE UPDATE trigger is not
+    // guaranteed to fire when supabaseAdmin (service role) issues the upsert.
     const { error } = await supabaseAdmin
       .from('user_card_variants')
       .upsert({
-        user_id:      userId,
-        card_id:      cardId,
-        variant_id:   variantId,
-        variant_type: null,   // legacy column; populated by DB trigger if needed
-        quantity:     newQuantity,
+        user_id:        userId,
+        card_id:        cardId,
+        variant_id:     variantId,
+        variant_type:   null,
+        quantity:       newQuantity,
+        quantity_delta: increment,        // ±1 — the exact change
+        updated_at:     new Date().toISOString(),
       }, {
         onConflict: 'user_id,card_id,variant_id',
       })
