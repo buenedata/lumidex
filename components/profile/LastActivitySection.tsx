@@ -222,7 +222,7 @@ export default function LastActivitySection({
     async function load() {
       setLoading(true)
       try {
-        const res  = await fetch(`/api/users/${userId}/last-activity`)
+        const res  = await fetch(`/api/users/${userId}/last-activity`, { cache: 'no-store' })
         const json = await res.json()
         if (!cancelled) setItems(json.data ?? [])
       } catch {

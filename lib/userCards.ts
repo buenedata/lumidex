@@ -53,7 +53,12 @@ export async function upsertUserCardVariant({
         card_id: cardId,
         variant_id: variantId,
         variant_type: variantDef?.key ?? null,
-        quantity
+        quantity,
+        // Explicitly refresh updated_at on every upsert so the Last Activity
+        // section always surfaces the most recently touched variant even when
+        // only the quantity changed (the DB trigger is not guaranteed to fire
+        // when the conflict resolution produces identical column values).
+        updated_at: new Date().toISOString(),
       },
       { onConflict: 'user_id,card_id,variant_id' }
     )
