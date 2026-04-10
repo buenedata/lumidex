@@ -2,8 +2,14 @@
  * Responsive Card Image Component
  * Handles all card image sizing with CSS scaling
  * Uses single image with automatic fallback to placeholder
+ *
+ * Uses next/image so requests are served through the Next.js image optimizer
+ * (cached server-side) instead of hitting Supabase Storage on every browser load.
  */
+'use client'
 
+import { useState } from 'react'
+import Image from 'next/image'
 import { getCardImageWithFallback } from '../lib/imageUpload'
 import { PokemonCard } from '../types'
 
@@ -14,6 +20,14 @@ interface CardImageProps {
   alt?: string
 }
 
+/** Intrinsic pixel dimensions per size variant (portrait ~2.5:3.5 aspect ratio). */
+const sizeDims = {
+  small:  { width: 64,  height: 89  },
+  medium: { width: 128, height: 179 },
+  large:  { width: 256, height: 358 },
+  xlarge: { width: 256, height: 358 },
+} as const
+
 export function CardImage({
   card,
   size,
@@ -22,6 +36,9 @@ export function CardImage({
 }: CardImageProps) {
   // Get image URL with automatic fallback logic
   const imageUrl = getCardImageWithFallback(card)
+  // State-based src so we can swap to the backside on error
+  // (next/image does not support imperative src mutation via e.target.src)
+  const [imgSrc, setImgSrc] = useState(imageUrl)
   
   // Define responsive size classes
   const sizeClasses = {
@@ -32,14 +49,17 @@ export function CardImage({
   }
 
   const sizeClass = size ? sizeClasses[size] : ''
+  const dims = size ? sizeDims[size] : sizeDims.medium
 
   // Generate alt text if not provided
   const altText = alt || `${card.name || 'Pokemon Card'} ${card.set_id ? `(${card.set_id.toUpperCase()})` : ''}`
 
   return (
-    <img
-      src={imageUrl}
+    <Image
+      src={imgSrc}
       alt={altText}
+      width={dims.width}
+      height={dims.height}
       className={`
         ${sizeClass}
         object-cover
@@ -50,11 +70,10 @@ export function CardImage({
         ${className}
       `}
       loading="lazy"
-      onError={(e) => {
+      onError={() => {
         // Fallback to card backside if image fails to load
-        const target = e.target as HTMLImageElement
-        if (!target.src.endsWith('/pokemon_card_backside.png')) {
-          target.src = '/pokemon_card_backside.png'
+        if (!imgSrc.endsWith('/pokemon_card_backside.png')) {
+          setImgSrc('/pokemon_card_backside.png')
         }
       }}
     />

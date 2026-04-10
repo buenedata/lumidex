@@ -34,27 +34,22 @@ function SetCard({ set, progress, onRemove, isFavorited, onFavorite }: SetCardPr
       >
         {/* Set image area */}
         <div className="relative h-36 bg-elevated overflow-hidden">
-          {/* Background blur — plain <img> intentionally; this is a decorative blur effect
-              and does not need Next.js image optimisation.  Using next/image here would
-              spin up an extra sharp job per card per page load, wasting Node.js heap. */}
+          {/* Background blur — CSS background-image on a div re-uses the same in-memory
+              image cache as the foreground <Image> below, avoiding a second network request
+              to Supabase Storage entirely. */}
           {set.logo_url && (
-            <div className="absolute inset-0">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={set.logo_url}
-                alt=""
-                aria-hidden
-                className="absolute inset-0 w-full h-full object-cover blur-xl scale-110 opacity-30"
-              />
-            </div>
+            <div
+              className="absolute inset-0 scale-110 opacity-30 blur-xl bg-cover bg-center"
+              style={{ backgroundImage: `url(${set.logo_url})` }}
+              aria-hidden
+            />
           )}
 
           {/* Bottom-to-top gradient: black → transparent (reveals bg-elevated above) */}
           <div className="absolute inset-0 z-[5] bg-gradient-to-t from-black via-black/40 to-transparent" />
 
-          {/* Set logo centered — unoptimized skips Sharp (logos are pre-encoded in
-              Supabase Storage; re-encoding 218 logos per cold load was exhausting
-              ~420 concurrent Sharp jobs and filling the Node.js heap to OOM). */}
+          {/* Set logo centered — served through Next.js image optimizer so the response
+              is cached at the edge and not fetched from Supabase Storage on every request. */}
           <div className="relative z-10 flex items-center justify-center h-full p-4">
             {set.logo_url ? (
               <Image
@@ -63,7 +58,6 @@ function SetCard({ set, progress, onRemove, isFavorited, onFavorite }: SetCardPr
                 width={160}
                 height={80}
                 loading="lazy"
-                unoptimized
                 className="object-contain max-h-20 w-auto drop-shadow-lg group-hover:scale-105 transition-transform duration-200"
               />
             ) : (
@@ -73,16 +67,11 @@ function SetCard({ set, progress, onRemove, isFavorited, onFavorite }: SetCardPr
             )}
           </div>
 
-          {/* Set symbol badge — bottom-right corner.
-              Plain <img> intentionally: symbols are 28 px decorative badges.
-              Using next/image (fill mode) would make Sharp decode the full-resolution
-              source image just to produce a 28 px output — one extra heap allocation
-              per set card per cold load. */}
+          {/* Set symbol badge — bottom-right corner, served via Next.js image optimizer. */}
           {set.symbol_url && (
             <div className="absolute bottom-1.5 right-1.5 z-20">
               <div className="w-7 h-7 rounded bg-black/50 backdrop-blur-sm p-0.5 flex items-center justify-center">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src={set.symbol_url}
                   alt={`${set.name} symbol`}
                   width={24}

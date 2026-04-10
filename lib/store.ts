@@ -154,7 +154,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
 
     const { data, error } = await supabase
       .from('user_sets')
-      .select('*')
+      .select('id, user_id, set_id, collection_goal, created_at')
       .eq('user_id', user.id)
 
     if (data && !error) {

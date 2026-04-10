@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import { supabaseAdmin } from '@/lib/supabase'
+import { compressImageToWebP, COMPRESSED_CONTENT_TYPE } from '@/lib/imageCompress'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']
 const MAX_SIZE_BYTES = 5 * 1024 * 1024 // 5 MB
@@ -41,17 +42,24 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // 4. Build storage path: {userId}/{userId}-banner.{ext}
-  const ext = file.type.split('/')[1].replace('jpeg', 'jpg')
-  const storagePath = `${user.id}/${user.id}-banner.${ext}`
-  const fileBuffer = await file.arrayBuffer()
+  // 4. Build storage path and compress to WebP
+  const storagePath = `${user.id}/${user.id}-banner.webp`
+  const fileBuffer  = await file.arrayBuffer()
+  let uploadBuffer: Buffer | ArrayBuffer = fileBuffer
+  let uploadContentType: string = file.type
+  try {
+    uploadBuffer = await compressImageToWebP(fileBuffer)
+    uploadContentType = COMPRESSED_CONTENT_TYPE
+  } catch {
+    // Fallback: upload original bytes if compression unexpectedly fails
+  }
 
   // 5. Upload via admin client (bypasses storage RLS; session already verified above)
   const { error: uploadError } = await supabaseAdmin.storage
     .from('banners')
-    .upload(storagePath, fileBuffer, {
+    .upload(storagePath, uploadBuffer, {
       upsert: true,
-      contentType: file.type,
+      contentType: uploadContentType,
     })
 
   if (uploadError) {
@@ -64,13 +72,15 @@ export async function POST(request: NextRequest) {
     .from('banners')
     .getPublicUrl(storagePath)
 
-  // Add cache-bust query param so browsers reload the new image immediately
-  const bannerUrl = `${publicUrl}?t=${Date.now()}`
+  // Store stable URL in DB so every request hits the same CDN cache key;
+  // return a cache-busted URL to the browser so the client sees the new image immediately.
+  const stableUrl = publicUrl
+  const bannerUrl = `${stableUrl}?t=${Date.now()}`
 
   // 7. Persist URL on the users row
   const { error: updateError } = await supabaseAdmin
     .from('users')
-    .update({ banner_url: bannerUrl })
+    .update({ banner_url: stableUrl })
     .eq('id', user.id)
 
   if (updateError) {

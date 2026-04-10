@@ -187,17 +187,19 @@ async function uploadAndRecord(
     )
   }
 
-  // 6. Resolve public URL — append a version timestamp so the new upload
-  //    bypasses any CDN / browser cache that may have the old file content.
+  // 6. Resolve public URL — store the stable URL in the DB so every request
+  //    hits the same CDN cache key; return a cache-busted URL to the browser
+  //    only so the uploading client sees the new image immediately.
   const { data: urlData } = supabaseAdmin.storage
     .from('card-images')
     .getPublicUrl(filename)
-  const imageUrl = `${urlData.publicUrl}?v=${Date.now()}`
+  const stableUrl = urlData.publicUrl                   // clean URL — stored in DB
+  const imageUrl  = `${stableUrl}?v=${Date.now()}`     // cache-bust — for browser only
 
   // 7. Update cards table (service-role — bypasses RLS)
   const { error: dbError } = await supabaseAdmin
     .from('cards')
-    .update({ image: imageUrl })
+    .update({ image: stableUrl })
     .eq('id', cardId)
 
   if (dbError) {

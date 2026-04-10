@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     // Card-specific variants (card_id IS NOT NULL) are merged separately per-card.
     let query = supabaseAdmin
       .from('variants')
-      .select('*')
+      .select('id, name, key, description, color, short_label, is_quick_add, sort_order, is_official, card_id, created_by, created_at')
       .eq('is_official', true)
       .is('card_id', null)
 
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
       // 1b. Fetch card-specific variants (variants.card_id IN cardIdList)
       const { data: cardSpecificRows, error: cardSpecificErr } = await supabaseAdmin
         .from('variants')
-        .select('*')
+        .select('id, name, key, description, color, short_label, is_quick_add, sort_order, is_official, card_id, created_by, created_at')
         .in('card_id', cardIdList)
 
       if (cardSpecificErr) {
@@ -197,7 +197,7 @@ export async function GET(request: NextRequest) {
         }))
       })
       const batchResponse = NextResponse.json(groupedResults)
-      batchResponse.headers.set('Cache-Control', 'no-store')
+      batchResponse.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
       return batchResponse
     }
 
@@ -217,7 +217,7 @@ export async function GET(request: NextRequest) {
       // are consistent.
       const { data: cardSpecificRows } = await supabaseAdmin
         .from('variants')
-        .select('*')
+        .select('id, name, key, description, color, short_label, is_quick_add, sort_order, is_official, card_id, created_by, created_at')
         .eq('card_id', cardId)
 
       const cardSpecificVariants = (cardSpecificRows ?? []) as Variant[]
@@ -312,7 +312,7 @@ export async function GET(request: NextRequest) {
     }))
 
     const singleResponse = NextResponse.json(variantsWithZeroQuantities)
-    singleResponse.headers.set('Cache-Control', 'no-store')
+    singleResponse.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
     return singleResponse
 
   } catch (error) {
@@ -353,7 +353,7 @@ export async function POST(request: NextRequest) {
       // 1. Global variant catalogue
       const { data: variants, error: variantsError } = await supabaseAdmin
         .from('variants')
-        .select('*')
+        .select('id, name, key, description, color, short_label, is_quick_add, sort_order, is_official, card_id, created_by, created_at')
         .eq('is_official', true)
         .is('card_id', null)
         .order('sort_order', { ascending: true })
@@ -391,7 +391,7 @@ export async function POST(request: NextRequest) {
       // 3. Card-specific variants
       const { data: cardSpecificRows, error: cardSpecificErr } = await supabaseAdmin
         .from('variants')
-        .select('*')
+        .select('id, name, key, description, color, short_label, is_quick_add, sort_order, is_official, card_id, created_by, created_at')
         .in('card_id', cardIdList)
 
       if (cardSpecificErr) {
@@ -517,7 +517,7 @@ export async function POST(request: NextRequest) {
         }))
       })
       const r = NextResponse.json(grouped)
-      r.headers.set('Cache-Control', 'no-store')
+      r.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
       return r
     }
 
@@ -541,7 +541,7 @@ export async function POST(request: NextRequest) {
         is_official:  is_official !== undefined ? is_official : true,
         created_by:   created_by   || null,
       }, { onConflict: 'key', ignoreDuplicates: false })
-      .select('*')
+      .select('id, name, key, description, color, short_label, is_quick_add, sort_order, is_official, card_id, created_by, created_at')
       .single()
 
     if (variantError) {
@@ -582,7 +582,7 @@ export async function PATCH(request: NextRequest) {
       .from('variants')
       .update(updates)
       .eq('id', id)
-      .select('*')
+      .select('id, name, key, description, color, short_label, is_quick_add, sort_order, is_official, card_id, created_by, created_at')
       .single()
 
     if (error) {

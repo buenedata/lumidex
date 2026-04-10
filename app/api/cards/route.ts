@@ -24,7 +24,9 @@ export async function GET(request: NextRequest) {
       image_url: card.image || ''
     }))
 
-    return NextResponse.json({ cards: transformedCards })
+    const response = NextResponse.json({ cards: transformedCards })
+    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+    return response
   } catch (error) {
     console.error('Database error fetching cards:', error)
     return NextResponse.json({ error: 'Failed to fetch cards' }, { status: 500 })

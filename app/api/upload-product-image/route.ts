@@ -173,16 +173,19 @@ async function uploadAndRecord(
     )
   }
 
-  // Resolve public URL — append version timestamp to bust CDN cache
+  // Resolve public URL — store the stable URL in the DB so every request
+  // hits the same CDN cache key; return a cache-busted URL to the browser
+  // only so the uploading client sees the new image immediately.
   const { data: urlData } = supabaseAdmin.storage
     .from('product-images')
     .getPublicUrl(filename)
-  const imageUrl = `${urlData.publicUrl}?v=${Date.now()}`
+  const stableUrl = urlData.publicUrl                  // clean URL — stored in DB
+  const imageUrl  = `${stableUrl}?v=${Date.now()}`    // cache-bust — for browser only
 
   // Update set_products table (service-role — bypasses RLS)
   const { error: dbError } = await supabaseAdmin
     .from('set_products')
-    .update({ image_url: imageUrl })
+    .update({ image_url: stableUrl })
     .eq('id', productId)
 
   if (dbError) {

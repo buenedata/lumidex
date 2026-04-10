@@ -155,7 +155,7 @@ export const getCardsBySet = unstable_cache(
     // Supabase FK join: source:source_card_id(image) fetches the linked row's image
     const { data, error } = await supabase
       .from('cards')
-      .select('*, source:source_card_id(image)')
+      .select('id, set_id, name, number, rarity, type, image, own_image, source_card_id, artist, default_variant_id, api_id, source:source_card_id(image)')
       .eq('set_id', setId)
       .order('number', { ascending: true })
 
@@ -188,7 +188,7 @@ export async function searchCards(query: string, limit: number = 50): Promise<Db
   
   const { data, error } = await supabase
     .from('cards')
-    .select('*')
+    .select('id, set_id, name, number, rarity, type, image, own_image, source_card_id, artist, default_variant_id, api_id, created_at')
     .ilike('name', `%${query}%`)
     .order('name')
     .limit(limit)
@@ -207,7 +207,7 @@ export async function searchCards(query: string, limit: number = 50): Promise<Db
 export async function getVariants(): Promise<DbVariant[]> {
   const { data, error } = await supabase
     .from('variants')
-    .select('*')
+    .select('id, name, key, created_at')
     .order('name')
   
   if (error) {
@@ -224,7 +224,7 @@ export async function getVariants(): Promise<DbVariant[]> {
 export async function getUserCardVariants(userId: string, cardId?: string): Promise<DbUserCardVariant[]> {
   let query = supabase
     .from('user_card_variants')
-    .select('*')
+    .select('id, user_id, card_id, variant_key, quantity, created_at')
     .eq('user_id', userId)
   
   if (cardId) {

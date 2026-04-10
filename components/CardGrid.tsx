@@ -145,6 +145,12 @@ function CardGlareImage({
   const glareRef = useRef<HTMLDivElement>(null)
   const rafRef   = useRef<number | null>(null)
 
+  // ── Base image src — state-tracked so onError can swap to backside without
+  //    mutating e.target.src (which next/image does not support).
+  const [displaySrc, setDisplaySrc] = useState(src || '/pokemon_card_backside.png')
+  // Sync when the user navigates to a different card (src prop changes)
+  useEffect(() => { setDisplaySrc(src || '/pokemon_card_backside.png') }, [src])
+
   // ── Variant image cross-fade ─────────────────────────────────────────────
   const [displayedVariantSrc, setDisplayedVariantSrc] = useState<string | null>(null)
   const [variantOpacity, setVariantOpacity]           = useState(0)
@@ -222,27 +228,31 @@ function CardGlareImage({
         className="w-[389px] h-[543px] bg-elevated rounded-xl overflow-hidden relative cursor-crosshair"
         style={{ willChange: 'transform' }}
       >
-        {/* Base image */}
-        <img
-          src={src || '/pokemon_card_backside.png'}
+        {/* Base image — served through Next.js image optimizer (cached server-side) */}
+        <Image
+          src={displaySrc}
           alt={alt ?? 'Pokemon card'}
+          width={389}
+          height={543}
           className="absolute inset-0 w-full h-full object-cover"
-          onError={(e) => {
-            const t = e.currentTarget
-            if (!t.src.endsWith('/pokemon_card_backside.png')) t.src = '/pokemon_card_backside.png'
+          onError={() => {
+            if (!displaySrc.endsWith('/pokemon_card_backside.png')) {
+              setDisplaySrc('/pokemon_card_backside.png')
+            }
           }}
         />
 
         {/* Variant image — cross-fades for card-specific uploaded images */}
         {displayedVariantSrc && (
-          <img
+          <Image
             src={displayedVariantSrc}
             alt={alt ?? 'Pokemon card variant'}
+            width={389}
+            height={543}
             className="absolute inset-0 w-full h-full object-cover pointer-events-none"
             style={{ opacity: variantOpacity, transition: 'opacity 300ms ease-in-out' }}
-            onError={(e) => {
-              const t = e.currentTarget
-              if (!t.src.endsWith('/pokemon_card_backside.png')) t.src = '/pokemon_card_backside.png'
+            onError={() => {
+              setDisplayedVariantSrc('/pokemon_card_backside.png')
             }}
           />
         )}
@@ -255,6 +265,29 @@ function CardGlareImage({
         />
       </div>
     </div>
+  )
+}
+
+// Small stateful component for "Other versions" thumbnails.
+// Uses fill mode (container is already position:relative + overflow-hidden) and
+// state-tracked src so the onError fallback can swap to the card backside without
+// mutating e.target.src (which next/image does not support).
+function RelatedCardThumb({ src, alt }: { src: string; alt: string }) {
+  const [imgSrc, setImgSrc] = useState(src)
+  useEffect(() => { setImgSrc(src) }, [src])
+  return (
+    <Image
+      src={imgSrc}
+      alt={alt}
+      fill
+      sizes="(max-width: 640px) 33vw, 130px"
+      className="object-cover group-hover:scale-105 transition-transform duration-200"
+      onError={() => {
+        if (!imgSrc.endsWith('/pokemon_card_backside.png')) {
+          setImgSrc('/pokemon_card_backside.png')
+        }
+      }}
+    />
   )
 }
 
@@ -2113,17 +2146,9 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                                 className="relative bg-surface overflow-hidden"
                                 style={{ aspectRatio: '2.5/3.5' }}
                               >
-                                <img
+                                <RelatedCardThumb
                                   src={rc.image ?? '/pokemon_card_backside.png'}
                                   alt={rc.name ?? 'Card'}
-                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                                  loading="lazy"
-                                  onError={(e) => {
-                                    const t = e.target as HTMLImageElement
-                                    if (!t.src.endsWith('/pokemon_card_backside.png')) {
-                                      t.src = '/pokemon_card_backside.png'
-                                    }
-                                  }}
                                 />
                               </div>
                               {/* Meta */}

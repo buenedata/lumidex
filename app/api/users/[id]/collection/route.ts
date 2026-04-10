@@ -24,7 +24,7 @@ export async function GET(
 
   const { searchParams } = request.nextUrl
   const q     = (searchParams.get('q') ?? '').trim()
-  const limit = Math.min(parseInt(searchParams.get('limit') ?? '500', 10), 1000)
+  const limit = Math.min(parseInt(searchParams.get('limit') ?? '50', 10), 250)
 
   // 1. Aggregate quantities from user_card_variants (the real collection store)
   const { data: variantRows, error: variantError } = await supabaseAdmin
