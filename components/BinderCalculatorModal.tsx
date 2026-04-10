@@ -110,24 +110,16 @@ export default function BinderCalculatorModal({
 
   // ── Derived values ─────────────────────────────────────────────────────────
 
-  // Show the Grandmaster option only when stats confirm it adds more cards than Masterset.
-  // Before stats load we fall back to the hasPromos prop so the UI doesn't flicker on open.
-  const showGrandmaster: boolean = stats
-    ? stats.grandmasterCount > stats.mastersetCount
-    : hasPromos
-
-  const visibleGoals: CollectionGoal[] = showGrandmaster
+  // Grandmaster Set is shown whenever the set qualifies (has promos or card-specific variants).
+  // Visibility is driven by the hasPromos prop (already includes hasExtraVariants at the call site).
+  const visibleGoals: CollectionGoal[] = hasPromos
     ? ['normal', 'masterset', 'grandmasterset']
     : ['normal', 'masterset']
 
-  // If Grandmaster just became hidden (counts turned out equal), degrade gracefully to Masterset
-  const effectiveGoal: CollectionGoal =
-    selectedGoal === 'grandmasterset' && !showGrandmaster ? 'masterset' : selectedGoal
-
   const activeCount: number | null = stats
-    ? effectiveGoal === 'normal'
+    ? selectedGoal === 'normal'
       ? stats.normalCount
-      : effectiveGoal === 'masterset'
+      : selectedGoal === 'masterset'
         ? stats.mastersetCount
         : stats.grandmasterCount
     : null
@@ -186,7 +178,7 @@ export default function BinderCalculatorModal({
                       ? stats.mastersetCount
                       : stats.grandmasterCount
                   : null
-                const isActive = goal === effectiveGoal
+                const isActive = goal === selectedGoal
 
                 return (
                   <button
@@ -236,7 +228,7 @@ export default function BinderCalculatorModal({
               <p className="text-xs text-muted uppercase tracking-wider mb-2.5">
                 Pages needed ·{' '}
                 <span className="text-secondary normal-case font-medium">
-                  {GOAL_ICONS[effectiveGoal]} {COLLECTION_GOAL_LABELS[effectiveGoal]}
+                  {GOAL_ICONS[selectedGoal]} {COLLECTION_GOAL_LABELS[selectedGoal]}
                   {activeCount != null && !loading && ` (${activeCount.toLocaleString()} cards)`}
                 </span>
               </p>
