@@ -155,7 +155,7 @@ export const getCardsBySet = unstable_cache(
     // Supabase FK join: source:source_card_id(image) fetches the linked row's image
     const { data, error } = await supabase
       .from('cards')
-      .select('id, set_id, name, number, rarity, type, image, own_image, source_card_id, artist, default_variant_id, api_id, created_at, source:source_card_id(image)')
+      .select('id, set_id, name, number, rarity, type, image, source_card_id, artist, default_variant_id, api_id, created_at, source:source_card_id(image)')
       .eq('set_id', setId)
       .order('number', { ascending: true })
 
