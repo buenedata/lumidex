@@ -7,6 +7,9 @@ import { createSupabaseServerClient } from '@/lib/supabaseServer'
 export type CardActivityItem = {
   type: 'card'
   timestamp: string
+  /** ISO 8601 — used with timestamp to detect first-add vs quantity update */
+  created_at: string
+  quantity: number
   card_id: string
   card_name: string
   card_number: string
@@ -20,6 +23,8 @@ export type CardActivityItem = {
 export type SealedProductActivityItem = {
   type: 'sealed_product'
   timestamp: string
+  /** ISO 8601 — used with timestamp to detect first-add vs quantity update */
+  created_at: string
   product_id: string
   product_name: string
   product_type: string | null
@@ -74,14 +79,14 @@ export async function GET(
     const [cardVariantsResult, sealedProductsResult] = await Promise.all([
       supabaseAdmin
         .from('user_card_variants')
-        .select('card_id, variant_type, quantity, updated_at')
+        .select('card_id, variant_type, quantity, created_at, updated_at')
         .eq('user_id', userId)
         .order('updated_at', { ascending: false })
         .limit(10),
 
       supabaseAdmin
         .from('user_sealed_products')
-        .select('product_id, quantity, updated_at')
+        .select('product_id, quantity, created_at, updated_at')
         .eq('user_id', userId)
         .order('updated_at', { ascending: false })
         .limit(5),
@@ -120,6 +125,8 @@ export async function GET(
           cardItems.push({
             type:         'card',
             timestamp:    variant.updated_at,
+            created_at:   variant.created_at,
+            quantity:     variant.quantity ?? 1,
             card_id:      card.id,
             card_name:    card.name,
             card_number:  card.number ?? '',
@@ -163,6 +170,7 @@ export async function GET(
           productItems.push({
             type:          'sealed_product',
             timestamp:     up.updated_at,
+            created_at:    up.created_at,
             product_id:    product.id,
             product_name:  product.name,
             product_type:  product.product_type ?? null,

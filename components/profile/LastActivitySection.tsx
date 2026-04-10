@@ -19,6 +19,16 @@ function timeAgo(iso: string): string {
   return `${months}mo ago`
 }
 
+/**
+ * If updated_at is within 8 seconds of created_at we treat it as a fresh add
+ * (the DB timestamps are set in the same transaction). Anything further apart
+ * means the quantity was subsequently edited.
+ */
+function resolveAction(created_at: string, updated_at: string): 'added' | 'updated' {
+  const diff = new Date(updated_at).getTime() - new Date(created_at).getTime()
+  return diff < 8_000 ? 'added' : 'updated'
+}
+
 const VARIANT_COLORS: Record<string, string> = {
   normal:     'bg-green-500',
   reverse:    'bg-blue-500',
@@ -45,6 +55,27 @@ function variantLabel(key: string | null): string {
   return VARIANT_LABELS[key.toLowerCase()] ?? key
 }
 
+// ── Action pill ───────────────────────────────────────────────────────────────
+
+function ActionPill({ action, quantity }: { action: 'added' | 'updated'; quantity: number }) {
+  if (action === 'added') {
+    return (
+      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold
+                       text-green-400 bg-green-500/10 rounded px-1.5 py-0.5 leading-none">
+        <span>+</span>
+        <span>Added ×{quantity}</span>
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold
+                     text-amber-400 bg-amber-500/10 rounded px-1.5 py-0.5 leading-none">
+      <span>↕</span>
+      <span>Set to ×{quantity}</span>
+    </span>
+  )
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 /** A single card activity tile */
@@ -54,10 +85,12 @@ function CardTile({ item }: { item: Extract<ActivityItem, { type: 'card' }> }) {
     ? '/pokemon_card_backside.png'
     : item.card_image
 
+  const action = resolveAction(item.created_at, item.timestamp)
+
   return (
     <Link
       href={`/set/${item.set_id}`}
-      className="group flex-none w-24 flex flex-col items-center gap-1.5 focus:outline-none"
+      className="group flex-none w-28 flex flex-col items-center gap-1.5 focus:outline-none"
     >
       {/* Card thumbnail */}
       <div className="relative w-16 h-[88px] rounded-lg overflow-hidden shadow-md
@@ -82,14 +115,21 @@ function CardTile({ item }: { item: Extract<ActivityItem, { type: 'card' }> }) {
       </div>
 
       {/* Text */}
-      <div className="w-full text-center">
+      <div className="w-full text-center space-y-0.5">
         <p className="text-[11px] font-medium text-primary leading-tight line-clamp-1">
           {item.card_name}
         </p>
-        <p className="text-[10px] text-muted leading-tight line-clamp-1 mt-0.5">
+        <p className="text-[10px] text-muted leading-tight line-clamp-1">
           {item.set_name}
+          {item.variant_type && (
+            <span className="text-muted/60"> · {variantLabel(item.variant_type)}</span>
+          )}
         </p>
-        <p className="text-[10px] text-muted/70 mt-0.5">{timeAgo(item.timestamp)}</p>
+        {/* Action + quantity */}
+        <div className="flex justify-center pt-0.5">
+          <ActionPill action={action} quantity={item.quantity} />
+        </div>
+        <p className="text-[10px] text-muted/60">{timeAgo(item.timestamp)}</p>
       </div>
     </Link>
   )
@@ -99,11 +139,12 @@ function CardTile({ item }: { item: Extract<ActivityItem, { type: 'card' }> }) {
 function ProductTile({ item }: { item: Extract<ActivityItem, { type: 'sealed_product' }> }) {
   const [imgError, setImgError] = useState(false)
   const hasImg = !!item.product_image && !imgError
+  const action = resolveAction(item.created_at, item.timestamp)
 
   return (
     <Link
       href={`/set/${item.set_id}`}
-      className="group flex-none w-24 flex flex-col items-center gap-1.5 focus:outline-none"
+      className="group flex-none w-28 flex flex-col items-center gap-1.5 focus:outline-none"
     >
       {/* Product thumbnail */}
       <div className="relative w-16 h-[88px] rounded-lg overflow-hidden shadow-md
@@ -121,27 +162,24 @@ function ProductTile({ item }: { item: Extract<ActivityItem, { type: 'sealed_pro
         ) : (
           <span className="text-2xl select-none">📦</span>
         )}
-        {/* Quantity badge */}
-        {item.quantity > 1 && (
-          <span
-            className="absolute bottom-1 right-1 min-w-[18px] h-[18px] px-1
-                       rounded-full bg-accent text-white text-[10px]
-                       font-bold flex items-center justify-center shadow"
-          >
-            {item.quantity}
-          </span>
-        )}
       </div>
 
       {/* Text */}
-      <div className="w-full text-center">
+      <div className="w-full text-center space-y-0.5">
         <p className="text-[11px] font-medium text-primary leading-tight line-clamp-1">
           {item.product_name}
         </p>
-        <p className="text-[10px] text-muted leading-tight line-clamp-1 mt-0.5">
+        <p className="text-[10px] text-muted leading-tight line-clamp-1">
           {item.set_name}
+          {item.product_type && (
+            <span className="text-muted/60"> · {item.product_type}</span>
+          )}
         </p>
-        <p className="text-[10px] text-muted/70 mt-0.5">{timeAgo(item.timestamp)}</p>
+        {/* Action + quantity */}
+        <div className="flex justify-center pt-0.5">
+          <ActionPill action={action} quantity={item.quantity} />
+        </div>
+        <p className="text-[10px] text-muted/60">{timeAgo(item.timestamp)}</p>
       </div>
     </Link>
   )
@@ -150,10 +188,12 @@ function ProductTile({ item }: { item: Extract<ActivityItem, { type: 'sealed_pro
 /** Skeleton placeholder tiles shown while loading */
 function SkeletonTile() {
   return (
-    <div className="flex-none w-24 flex flex-col items-center gap-1.5">
+    <div className="flex-none w-28 flex flex-col items-center gap-1.5">
       <div className="skeleton w-16 h-[88px] rounded-lg" />
-      <div className="skeleton h-2.5 w-14 rounded" />
-      <div className="skeleton h-2 w-10 rounded" />
+      <div className="skeleton h-2.5 w-16 rounded" />
+      <div className="skeleton h-2 w-12 rounded" />
+      <div className="skeleton h-4 w-14 rounded" />
+      <div className="skeleton h-2 w-8 rounded" />
     </div>
   )
 }
@@ -196,8 +236,7 @@ export default function LastActivitySection({
     return () => { cancelled = true }
   }, [userId])
 
-  // Never show the section if the profile is public, not the owner, and there
-  // is genuinely nothing to display once loaded.
+  // Never show the section if viewing a public profile that has no activity.
   if (!loading && items.length === 0 && !isOwnProfile) return null
 
   return (
@@ -219,7 +258,7 @@ export default function LastActivitySection({
 
       {loading ? (
         /* ── Skeleton ────────────────────────────────────────────────────── */
-        <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin">
+        <div className="flex gap-5 overflow-x-auto pb-2 scrollbar-thin">
           {Array.from({ length: 6 }).map((_, i) => (
             <SkeletonTile key={i} />
           ))}
@@ -232,7 +271,7 @@ export default function LastActivitySection({
         </div>
       ) : (
         /* ── Activity row ────────────────────────────────────────────────── */
-        <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-thin">
+        <div className="flex gap-5 overflow-x-auto pb-2 scrollbar-thin">
           {items.map((item, idx) =>
             item.type === 'card' ? (
               <CardTile key={`card-${item.card_id}-${idx}`} item={item} />
