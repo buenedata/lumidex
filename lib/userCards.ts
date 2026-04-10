@@ -38,6 +38,19 @@ export async function upsertUserCardVariant({
     return null
   }
 
+  // ── Read current quantity so we can compute the signed delta ─────────────
+  // This allows the Last Activity section to show ↑ (increase) vs ↓ (decrease).
+  const { data: existing } = await supabase
+    .from('user_card_variants')
+    .select('quantity')
+    .eq('user_id', userId)
+    .eq('card_id', cardId)
+    .eq('variant_id', variantId)
+    .maybeSingle()
+
+  const oldQty = existing?.quantity ?? 0
+  const quantityDelta = quantity - oldQty
+
   // Look up the variant key to populate the legacy variant_type column
   const { data: variantDef } = await supabase
     .from('variants')
@@ -54,10 +67,9 @@ export async function upsertUserCardVariant({
         variant_id: variantId,
         variant_type: variantDef?.key ?? null,
         quantity,
-        // Explicitly refresh updated_at on every upsert so the Last Activity
-        // section always surfaces the most recently touched variant even when
-        // only the quantity changed (the DB trigger is not guaranteed to fire
-        // when the conflict resolution produces identical column values).
+        quantity_delta: quantityDelta,
+        // Explicitly refresh updated_at so the Last Activity section always
+        // surfaces the most recently touched variant at the top of the list.
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'user_id,card_id,variant_id' }

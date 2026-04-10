@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { ActivityItem } from '@/app/api/users/[id]/last-activity/route'
 
@@ -21,12 +21,11 @@ function timeAgo(iso: string): string {
 
 /**
  * If updated_at is within 8 seconds of created_at we treat it as a fresh add
- * (the DB timestamps are set in the same transaction). Anything further apart
- * means the quantity was subsequently edited.
+ * (the DB timestamps are set in the same transaction). Only used for sealed
+ * products where we don't yet store a signed delta.
  */
-function resolveAction(created_at: string, updated_at: string): 'added' | 'updated' {
-  const diff = new Date(updated_at).getTime() - new Date(created_at).getTime()
-  return diff < 8_000 ? 'added' : 'updated'
+function isNewAdd(created_at: string, updated_at: string): boolean {
+  return new Date(updated_at).getTime() - new Date(created_at).getTime() < 8_000
 }
 
 const VARIANT_COLORS: Record<string, string> = {
@@ -55,23 +54,64 @@ function variantLabel(key: string | null): string {
   return VARIANT_LABELS[key.toLowerCase()] ?? key
 }
 
-// ── Action pill ───────────────────────────────────────────────────────────────
+// ── Delta badge ───────────────────────────────────────────────────────────────
 
-function ActionPill({ action, quantity }: { action: 'added' | 'updated'; quantity: number }) {
-  if (action === 'added') {
+/** Arrow-based quantity badge.
+ *  - delta > 0  → green ↑  "×N"
+ *  - delta < 0  → red   ↓  "×N"
+ *  - delta null → grey       "×N"  (row predates delta tracking)
+ */
+function DeltaBadge({ delta, quantity }: { delta: number | null; quantity: number }) {
+  if (delta !== null && delta > 0) {
     return (
-      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold
-                       text-green-400 bg-green-500/10 rounded px-1.5 py-0.5 leading-none">
-        <span>+</span>
-        <span>Added ×{quantity}</span>
+      <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-green-400">
+        {/* up arrow */}
+        <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 12 12" fill="currentColor">
+          <path d="M6 1 L11 8 H7 V11 H5 V8 H1 Z" />
+        </svg>
+        ×{quantity}
+      </span>
+    )
+  }
+  if (delta !== null && delta < 0) {
+    return (
+      <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-red-400">
+        {/* down arrow */}
+        <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 12 12" fill="currentColor">
+          <path d="M6 11 L1 4 H5 V1 H7 V4 H11 Z" />
+        </svg>
+        ×{quantity}
+      </span>
+    )
+  }
+  // Unknown direction (null delta or delta === 0 — no change)
+  return (
+    <span className="inline-flex items-center text-[11px] font-semibold text-muted">
+      ×{quantity}
+    </span>
+  )
+}
+
+/** Sealed-product badge: we don't track delta yet, so use heuristic. */
+function ProductDeltaBadge({ created_at, updated_at, quantity }: {
+  created_at: string
+  updated_at: string
+  quantity: number
+}) {
+  const isNew = isNewAdd(created_at, updated_at)
+  if (isNew) {
+    return (
+      <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-green-400">
+        <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 12 12" fill="currentColor">
+          <path d="M6 1 L11 8 H7 V11 H5 V8 H1 Z" />
+        </svg>
+        ×{quantity}
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold
-                     text-amber-400 bg-amber-500/10 rounded px-1.5 py-0.5 leading-none">
-      <span>↕</span>
-      <span>Set to ×{quantity}</span>
+    <span className="inline-flex items-center text-[11px] font-semibold text-muted">
+      ×{quantity}
     </span>
   )
 }
@@ -84,8 +124,6 @@ function CardTile({ item }: { item: Extract<ActivityItem, { type: 'card' }> }) {
   const imgSrc = (!item.card_image || imgError)
     ? '/pokemon_card_backside.png'
     : item.card_image
-
-  const action = resolveAction(item.created_at, item.timestamp)
 
   return (
     <Link
@@ -125,9 +163,9 @@ function CardTile({ item }: { item: Extract<ActivityItem, { type: 'card' }> }) {
             <span className="text-muted/60"> · {variantLabel(item.variant_type)}</span>
           )}
         </p>
-        {/* Action + quantity */}
+        {/* Delta badge */}
         <div className="flex justify-center pt-0.5">
-          <ActionPill action={action} quantity={item.quantity} />
+          <DeltaBadge delta={item.quantity_delta} quantity={item.quantity} />
         </div>
         <p className="text-[10px] text-muted/60">{timeAgo(item.timestamp)}</p>
       </div>
@@ -139,7 +177,6 @@ function CardTile({ item }: { item: Extract<ActivityItem, { type: 'card' }> }) {
 function ProductTile({ item }: { item: Extract<ActivityItem, { type: 'sealed_product' }> }) {
   const [imgError, setImgError] = useState(false)
   const hasImg = !!item.product_image && !imgError
-  const action = resolveAction(item.created_at, item.timestamp)
 
   return (
     <Link
@@ -175,9 +212,13 @@ function ProductTile({ item }: { item: Extract<ActivityItem, { type: 'sealed_pro
             <span className="text-muted/60"> · {item.product_type}</span>
           )}
         </p>
-        {/* Action + quantity */}
+        {/* Delta badge (heuristic for sealed products) */}
         <div className="flex justify-center pt-0.5">
-          <ActionPill action={action} quantity={item.quantity} />
+          <ProductDeltaBadge
+            created_at={item.created_at}
+            updated_at={item.timestamp}
+            quantity={item.quantity}
+          />
         </div>
         <p className="text-[10px] text-muted/60">{timeAgo(item.timestamp)}</p>
       </div>
@@ -192,7 +233,7 @@ function SkeletonTile() {
       <div className="skeleton w-16 h-[88px] rounded-lg" />
       <div className="skeleton h-2.5 w-16 rounded" />
       <div className="skeleton h-2 w-12 rounded" />
-      <div className="skeleton h-4 w-14 rounded" />
+      <div className="skeleton h-3 w-8 rounded" />
       <div className="skeleton h-2 w-8 rounded" />
     </div>
   )
@@ -203,8 +244,7 @@ function SkeletonTile() {
 interface LastActivitySectionProps {
   userId: string
   isOwnProfile: boolean
-  /** When true the section heading is omitted (used on the Collection page
-   *  where a heading already surrounds the stats block). */
+  /** When true the heading uses a smaller compact style (Collection page). */
   compact?: boolean
 }
 
@@ -212,7 +252,7 @@ export default function LastActivitySection({
   userId,
   isOwnProfile,
   compact = false,
-}: LastActivitySectionProps) {
+}: LastActivitySectionProps): React.ReactElement | null {
   const [items,   setItems]   = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
 

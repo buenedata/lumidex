@@ -10,6 +10,11 @@ export type CardActivityItem = {
   /** ISO 8601 — used with timestamp to detect first-add vs quantity update */
   created_at: string
   quantity: number
+  /**
+   * Signed integer: positive = increase, negative = decrease, null = unknown
+   * (rows that predate the quantity_delta column or were set via the RPC).
+   */
+  quantity_delta: number | null
   card_id: string
   card_name: string
   card_number: string
@@ -79,7 +84,7 @@ export async function GET(
     const [cardVariantsResult, sealedProductsResult] = await Promise.all([
       supabaseAdmin
         .from('user_card_variants')
-        .select('card_id, variant_type, quantity, created_at, updated_at')
+        .select('card_id, variant_type, quantity, quantity_delta, created_at, updated_at')
         .eq('user_id', userId)
         .order('updated_at', { ascending: false })
         .limit(10),
@@ -123,11 +128,12 @@ export async function GET(
           const set = setMap.get(card.set_id)
 
           cardItems.push({
-            type:         'card',
-            timestamp:    variant.updated_at,
-            created_at:   variant.created_at,
-            quantity:     variant.quantity ?? 1,
-            card_id:      card.id,
+            type:           'card',
+            timestamp:      variant.updated_at,
+            created_at:     variant.created_at,
+            quantity:       variant.quantity ?? 1,
+            quantity_delta: variant.quantity_delta ?? null,
+            card_id:        card.id,
             card_name:    card.name,
             card_number:  card.number ?? '',
             card_image:   card.image  ?? null,
