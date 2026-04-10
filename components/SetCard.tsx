@@ -58,6 +58,7 @@ function SetCard({ set, progress, onRemove, isFavorited, onFavorite }: SetCardPr
                 width={160}
                 height={80}
                 loading="lazy"
+                unoptimized
                 className="object-contain max-h-20 w-auto drop-shadow-lg group-hover:scale-105 transition-transform duration-200"
               />
             ) : (
