@@ -80,13 +80,15 @@ export async function GET(
 
     // ── 2. Fetch raw activity rows in parallel ────────────────────────────────
     const [cardLogResult, sealedProductsResult] = await Promise.all([
-      // Card activity from the append-only log — each row is a discrete event
+      // Fetch more rows than we'll display so that rapid multi-click sessions
+      // (which produce many rows for the same card+variant) can be merged
+      // down to 10 unique card+variant events.
       supabaseAdmin
         .from('user_card_activity_log')
         .select('card_id, variant_id, old_quantity, new_quantity, changed_at')
         .eq('user_id', userId)
         .order('changed_at', { ascending: false })
-        .limit(10),
+        .limit(100),
 
       // Sealed products still use the current-state table (one row per product)
       supabaseAdmin
@@ -97,10 +99,52 @@ export async function GET(
         .limit(5),
     ])
 
-    const cardLogRows    = cardLogResult.data    ?? []
+    const rawLogRows     = cardLogResult.data    ?? []
     const sealedProducts = sealedProductsResult.data ?? []
 
-    // ── 3. Enrich card log rows ───────────────────────────────────────────────
+    // ── 3. Merge rapid consecutive clicks into one session event ─────────────
+    //
+    // Multiple +1/-1 clicks on the same card+variant within a 5-minute window
+    // are collapsed into one event: old_quantity = session start, new_quantity
+    // = session end, changed_at = most recent click.
+    //
+    // rawLogRows is ordered DESC so the first entry per key is the most recent.
+    const SESSION_WINDOW_MS = 5 * 60 * 1000
+
+    type LogRow = { card_id: string; variant_id: string; old_quantity: number; new_quantity: number; changed_at: string }
+    const sessionMap = new Map<string, LogRow>()
+
+    for (const log of rawLogRows) {
+      const key      = `${log.card_id}:${log.variant_id}`
+      const existing = sessionMap.get(key)
+
+      if (!existing) {
+        sessionMap.set(key, {
+          card_id:      log.card_id,
+          variant_id:   log.variant_id,
+          new_quantity: log.new_quantity,    // most recent end state
+          old_quantity: log.old_quantity,    // start (may be extended below)
+          changed_at:   log.changed_at,
+        })
+      } else {
+        // This entry is older than the one already in the map.
+        // If it falls within the session window, extend old_quantity back.
+        const newestMs = new Date(existing.changed_at).getTime()
+        const thisMs   = new Date(log.changed_at).getTime()
+        if (newestMs - thisMs <= SESSION_WINDOW_MS) {
+          sessionMap.set(key, { ...existing, old_quantity: log.old_quantity })
+        }
+        // Entries outside the window are ignored for this session — they remain
+        // available for future fetches if we ever expose multi-session history.
+      }
+    }
+
+    // Sort merged sessions by most recent changed_at, cap at 10
+    const cardLogRows = Array.from(sessionMap.values())
+      .sort((a, b) => new Date(b.changed_at).getTime() - new Date(a.changed_at).getTime())
+      .slice(0, 10)
+
+    // ── 4. Enrich card log rows ───────────────────────────────────────────────
     const cardItems: CardActivityItem[] = []
 
     if (cardLogRows.length > 0) {
@@ -158,7 +202,7 @@ export async function GET(
       }
     }
 
-    // ── 4. Enrich sealed products ─────────────────────────────────────────────
+    // ── 5. Enrich sealed products ─────────────────────────────────────────────
     const productItems: SealedProductActivityItem[] = []
 
     if (sealedProducts.length > 0) {
