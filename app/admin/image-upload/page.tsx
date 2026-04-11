@@ -10,8 +10,6 @@ import { SetSelector } from '../../../components/admin/SetSelector'
 import { CardImageGrid, type CardGridItem } from '../../../components/admin/CardImageGrid'
 import { CardImageUploadModal } from '../../../components/admin/CardImageUploadModal'
 import { BulkImageImport } from '../../../components/admin/BulkImageImport'
-import { RecompressImages } from '../../../components/admin/RecompressImages'
-
 // Set Images imports
 import { SetImageGrid, type SetGridItem } from '../../../components/admin/SetImageGrid'
 import { SetImageUploadModal } from '../../../components/admin/SetImageUploadModal'
@@ -149,18 +147,6 @@ function CardImagesTab() {
         onNextCard={handleNextCard}
         hasNextCard={hasNextCard}
       />
-
-      {/* Step 4 — Recompress */}
-      <section className="mb-8">
-        <h2 className="text-base font-semibold mb-3 text-gray-200 flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-yellow-500 text-black text-xs font-bold">4</span>
-          Recompress existing storage
-          <span className="text-gray-400 font-normal text-sm">— shrink all images already in a bucket to WebP</span>
-        </h2>
-        <div className="p-4 bg-gray-900 border border-gray-800 rounded-xl">
-          <RecompressImages defaultBucket="card-images" />
-        </div>
-      </section>
 
       {/* How it works (only when no set selected) */}
       {!selectedSetId && (
