@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { requireAdmin } from '@/lib/admin'
 import { supabaseAdmin } from '@/lib/supabase'
 import { compressImageToWebP, COMPRESSED_CONTENT_TYPE } from '@/lib/imageCompress'
@@ -203,6 +204,10 @@ async function uploadAndRecord(
       { status: 502 }
     )
   }
+
+  // 8. Invalidate the Next.js server-side data cache so getCardsBySet
+  //    returns fresh data (including the new image) on the next request.
+  revalidateTag('cards', { expire: 0 })
 
   return NextResponse.json({ success: true, imageUrl })
 }
