@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import Image from 'next/image'
 import ProductCard from '@/components/ProductCard'
 import { cn } from '@/lib/utils'
 import type { SeriesProductGroup } from '@/lib/pricing'
@@ -194,7 +193,8 @@ export default function ProductsPageClient({
               {/* Set heading */}
               <div className="flex items-center gap-3 mb-4">
                 {setGroup.logoUrl && (
-                  <Image
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
                     src={setGroup.logoUrl}
                     alt={setGroup.setName}
                     width={80}

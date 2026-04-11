@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 
 interface AvatarUploadProps {
@@ -29,8 +29,16 @@ export default function AvatarUpload({
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
+  // When the R2 object is missing (404) the <img> fires onError.
+  // Track that state so we gracefully fall back to initials instead of
+  // showing a broken-image glyph.
+  const [imgError, setImgError] = useState(false)
 
   const displayUrl = preview ?? currentUrl
+
+  // Reset the error flag whenever the displayed URL changes (e.g. after a
+  // successful upload sets a fresh preview URL).
+  useEffect(() => { setImgError(false) }, [displayUrl])
 
   const sizeClasses = {
     md: 'w-20 h-20 text-xl',
@@ -100,12 +108,13 @@ export default function AvatarUpload({
         role={editable ? 'button' : undefined}
         aria-label={editable ? 'Change avatar' : undefined}
       >
-        {/* Avatar image or initials */}
-        {displayUrl ? (
+        {/* Avatar image — falls back to initials if the URL resolves to a 404 */}
+        {(displayUrl && !imgError) ? (
           <img
             src={displayUrl}
             alt="Avatar"
             className="w-full h-full object-cover"
+            onError={() => setImgError(true)}
           />
         ) : (
           <span style={{ fontFamily: 'var(--font-space-grotesk)' }}>{initials}</span>

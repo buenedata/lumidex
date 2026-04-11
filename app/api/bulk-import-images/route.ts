@@ -562,13 +562,15 @@ export async function POST(request: NextRequest) {
 
             await uploadToR2(r2Key, uploadBuffer, uploadContentType)
 
-            // Append a version timestamp so each upload produces a distinct URL,
-            // bypassing CDN / browser cache for overwritten files.
-            const imageUrl = `${getR2Url(r2Key)}?v=${Date.now()}`
+            // Store the stable URL in the DB; the cache-busting ?v= is only
+            // included in the SSE progress event so the admin UI sees the new
+            // image immediately without a stale CDN/browser cache hit.
+            const stableUrl = getR2Url(r2Key)
+            const imageUrl  = `${stableUrl}?v=${Date.now()}`
 
             const { error: dbUpdateErr } = await supabaseAdmin
               .from('cards')
-              .update({ image: imageUrl })
+              .update({ image: stableUrl })
               .eq('id', card.id)
 
             if (dbUpdateErr) {

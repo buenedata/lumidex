@@ -2,7 +2,6 @@
 
 import { memo } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid'
 import { StarIcon as StarIconOutline } from '@heroicons/react/24/outline'
 import { cn } from '@/lib/utils'
@@ -52,7 +51,8 @@ function SetCard({ set, progress, onRemove, isFavorited, onFavorite }: SetCardPr
               is cached at the edge and not fetched from Supabase Storage on every request. */}
           <div className="relative z-10 flex items-center justify-center h-full p-4">
             {set.logo_url ? (
-              <Image
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
                 src={set.logo_url}
                 alt={set.name}
                 width={160}
@@ -71,7 +71,8 @@ function SetCard({ set, progress, onRemove, isFavorited, onFavorite }: SetCardPr
           {set.symbol_url && (
             <div className="absolute bottom-1.5 right-1.5 z-20">
               <div className="w-7 h-7 rounded bg-black/50 backdrop-blur-sm p-0.5 flex items-center justify-center">
-                <Image
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
                   src={set.symbol_url}
                   alt={`${set.name} symbol`}
                   width={24}

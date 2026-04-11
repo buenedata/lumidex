@@ -57,9 +57,9 @@ async function downloadAndStoreCardImage(
 
     await uploadToR2(r2Key, imageBuffer, contentType)
 
-    // Append a version timestamp so CDN / browser cache is bypassed for
-    // any file that gets upserted (overwritten) in a subsequent import.
-    return `${getR2Url(r2Key)}?v=${Date.now()}`
+    // Return the stable URL — no query string.  Any cache-busting for the
+    // admin UI should be applied by the caller, not persisted to the DB.
+    return getR2Url(r2Key)
   } catch (err) {
     console.warn('[import-card-data] downloadAndStoreCardImage error:', err)
     return null

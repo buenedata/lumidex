@@ -1,7 +1,6 @@
 'use client'
 
 import type { ReactNode } from 'react'
-import Image from 'next/image'
 import Link from 'next/link'
 import type { PokemonSet, SetProgress } from '@/types'
 
@@ -122,7 +121,8 @@ export default function CollectionSpotlight({
                 aria-hidden
                 className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-20"
               />
-              <Image
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
                 src={set.logo_url}
                 alt={set.name}
                 width={180}

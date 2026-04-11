@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { CardTile } from '@/components/CardTile'
-import Image from 'next/image'
 import Link from 'next/link'
 import { PokemonCard, UserCard, VariantWithQuantity, QuickAddVariant, VARIANT_COLOR_CLASSES, CollectionGoal, PriceHistoryPoint, FriendCardOwner, PriceSource, UserGradedCard } from '@/types'
 import { useCollectionStore, useAuthStore } from '@/lib/store'
@@ -228,8 +227,9 @@ function CardGlareImage({
         className="w-[389px] h-[543px] bg-elevated rounded-xl overflow-hidden relative cursor-crosshair"
         style={{ willChange: 'transform' }}
       >
-        {/* Base image — served through Next.js image optimizer (cached server-side) */}
-        <Image
+        {/* Base image — served directly from Cloudflare R2 (already WebP-compressed CDN) */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src={displaySrc}
           alt={alt ?? 'Pokemon card'}
           width={389}
@@ -244,7 +244,8 @@ function CardGlareImage({
 
         {/* Variant image — cross-fades for card-specific uploaded images */}
         {displayedVariantSrc && (
-          <Image
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
             src={displayedVariantSrc}
             alt={alt ?? 'Pokemon card variant'}
             width={389}
@@ -276,12 +277,11 @@ function RelatedCardThumb({ src, alt }: { src: string; alt: string }) {
   const [imgSrc, setImgSrc] = useState(src)
   useEffect(() => { setImgSrc(src) }, [src])
   return (
-    <Image
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
       src={imgSrc}
       alt={alt}
-      fill
-      sizes="(max-width: 640px) 33vw, 130px"
-      className="object-cover group-hover:scale-105 transition-transform duration-200"
+      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
       onError={() => {
         if (!imgSrc.endsWith('/pokemon_card_backside.png')) {
           setImgSrc('/pokemon_card_backside.png')
@@ -2229,12 +2229,13 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                             {/* Avatar */}
                             <div className="w-8 h-8 rounded-full bg-surface flex items-center justify-center overflow-hidden flex-shrink-0 ring-1 ring-subtle">
                               {friend.avatarUrl ? (
-                                <Image
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
                                   src={friend.avatarUrl}
                                   alt={friend.username ?? ''}
                                   width={32}
                                   height={32}
-                                  className="object-cover"
+                                  className="w-full h-full object-cover"
                                 />
                               ) : (
                                 <span className="text-base">👤</span>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
 
 interface BannerUploadProps {
@@ -26,8 +26,12 @@ export default function BannerUpload({
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
+  // Gracefully fall back to the gradient when the R2 object is missing (404).
+  const [imgError, setImgError] = useState(false)
 
   const displayUrl = preview ?? currentUrl
+
+  useEffect(() => { setImgError(false) }, [displayUrl])
 
   const heightClass = variant === 'hero' ? 'h-48 md:h-56' : 'h-32'
 
@@ -81,12 +85,13 @@ export default function BannerUpload({
 
   return (
     <div className={cn('relative w-full overflow-hidden rounded-xl', heightClass, className)}>
-      {/* Banner image or gradient fallback */}
-      {displayUrl ? (
+      {/* Banner image — falls back to gradient if the URL resolves to a 404 */}
+      {(displayUrl && !imgError) ? (
         <img
           src={displayUrl}
           alt="Profile banner"
           className="w-full h-full object-cover"
+          onError={() => setImgError(true)}
         />
       ) : (
         <div
@@ -98,8 +103,8 @@ export default function BannerUpload({
         />
       )}
 
-      {/* Scrim for readability when an image is set */}
-      {displayUrl && (
+      {/* Scrim for readability — only when the image is actually visible */}
+      {(displayUrl && !imgError) && (
         <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
       )}
 

@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import SetCard from '@/components/SetCard'
 import { supabase } from '@/lib/supabase'
 import type { DbSet } from '@/lib/db'
@@ -360,7 +359,8 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId, seriesWi
                     {/* Set logo faded in corner for context */}
                     {seriesLogoUrl && (
                       <div className="absolute bottom-2 right-2 z-10 opacity-40">
-                        <Image
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
                           src={seriesLogoUrl}
                           alt=""
                           width={60}

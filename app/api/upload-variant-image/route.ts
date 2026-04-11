@@ -95,14 +95,16 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // 5. Resolve public URL with cache-busting version param
-  const imageUrl = `${getR2Url(r2Key)}?v=${Date.now()}`
+  // 5. Resolve public URL — stable URL stored in DB; cache-busting only in the response
+  //    so the uploading client bypasses any CDN/browser cache for the new image.
+  const stableUrl = getR2Url(r2Key)
+  const imageUrl  = `${stableUrl}?v=${Date.now()}`
 
-  // 6. Upsert card_variant_images row
+  // 6. Upsert card_variant_images row — always store the clean stable URL
   const { error: dbError } = await supabaseAdmin
     .from('card_variant_images')
     .upsert(
-      { card_id: cardId, variant_id: variantId, image_url: imageUrl },
+      { card_id: cardId, variant_id: variantId, image_url: stableUrl },
       { onConflict: 'card_id,variant_id' },
     )
 

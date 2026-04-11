@@ -17,13 +17,11 @@ const nextConfig = {
     deviceSizes: [640, 1080, 1920],
     imageSizes: [64, 128, 256],
 
+    // R2 images are served via plain <img> tags (already WebP-compressed CDN),
+    // so no remotePatterns entry is needed for the R2 hostname.
+    // The two external card-image domains are kept here for any future
+    // next/image usage against pokemontcg.io or scrydex.com source images.
     remotePatterns: [
-      {
-        // Cloudflare R2 public bucket — all images are served from here
-        protocol: 'https',
-        hostname: 'pub-5781f5d7c220456fb6732e5213993cc7.r2.dev',
-        pathname: '/**',
-      },
       {
         protocol: 'https',
         hostname: 'images.pokemontcg.io',

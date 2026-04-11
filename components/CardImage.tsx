@@ -3,13 +3,13 @@
  * Handles all card image sizing with CSS scaling
  * Uses single image with automatic fallback to placeholder
  *
- * Uses next/image so requests are served through the Next.js image optimizer
- * (cached server-side) instead of hitting Supabase Storage on every browser load.
+ * Images are served directly from Cloudflare R2 (already WebP-compressed CDN).
+ * We use a plain <img> tag so no next/image remotePatterns are required and
+ * no double-optimisation is applied to already-compressed assets.
  */
 'use client'
 
 import { useState } from 'react'
-import Image from 'next/image'
 import { getCardImageWithFallback } from '../lib/imageUpload'
 import { PokemonCard } from '../types'
 
@@ -55,7 +55,8 @@ export function CardImage({
   const altText = alt || `${card.name || 'Pokemon Card'} ${card.set_id ? `(${card.set_id.toUpperCase()})` : ''}`
 
   return (
-    <Image
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
       src={imgSrc}
       alt={altText}
       width={dims.width}
