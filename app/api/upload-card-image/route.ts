@@ -207,7 +207,7 @@ async function uploadAndRecord(
 
   // 8. Invalidate the Next.js server-side data cache so getCardsBySet
   //    returns fresh data (including the new image) on the next request.
-  revalidateTag('cards')
+  revalidateTag('cards', { expire: 0 })
 
   return NextResponse.json({ success: true, imageUrl })
 }
