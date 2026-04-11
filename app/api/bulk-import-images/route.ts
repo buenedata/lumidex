@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { requireAdmin } from '@/lib/admin'
 import { supabaseAdmin } from '@/lib/supabase'
 import { generateImageFilename } from '@/lib/imageUpload'
@@ -651,6 +652,10 @@ export async function POST(request: NextRequest) {
           type: 'complete',
           payload: { succeeded, skipped, failed, no_match },
         })
+
+        // Invalidate the Next.js unstable_cache used by getCardsBySet so the
+        // public set page and admin card grid see fresh image URLs immediately.
+        revalidateTag('cards', { expire: 0 })
       } catch (err) {
         emit({
           type: 'error',

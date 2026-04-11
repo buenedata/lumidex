@@ -1,6 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+
+// ── Exported type ─────────────────────────────────────────────────────────────
+// Also imported by CardImageUploadModal — keep fields in sync.
 
 export interface CardGridItem {
   id: string
@@ -8,14 +11,20 @@ export interface CardGridItem {
   name: string
   number: string
   rarity: string
-  /** Own uploaded image — null if this card has never had an image uploaded directly. */
+  /**
+   * The card's own uploaded image URL stored in cards.image.
+   * null when no image has ever been uploaded for this specific card row.
+   */
   image: string | null
-  /** Image inherited from source_card_id (Prize Pack / reprint link). null when own image exists or no source set. */
+  /**
+   * Inherited image from source_card_id (Prize Pack / reprint link).
+   * null when an own image exists or there is no source link.
+   */
   source_image: string | null
-  /** FK to the original card row this reprint is linked to. */
   source_card_id: string | null
-  image_url: string
 }
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props {
   setId: string
@@ -25,72 +34,79 @@ interface Props {
   refreshKey?: number
 }
 
-export function CardImageGrid({ setId, onCardSelect, onCardsLoaded, selectedCardId, refreshKey = 0 }: Props) {
-  const [cards, setCards] = useState<CardGridItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+export function CardImageGrid({
+  setId,
+  onCardSelect,
+  onCardsLoaded,
+  selectedCardId,
+  refreshKey = 0,
+}: Props) {
+  const [cards, setCards]               = useState<CardGridItem[]>([])
+  const [loading, setLoading]           = useState(true)
+  const [error, setError]               = useState<string | null>(null)
   const [internalSelectedId, setInternalSelectedId] = useState<string | null>(null)
 
-  useEffect(() => {
+  // ── Fetch ──────────────────────────────────────────────────────────────────
+  // Uses the admin-only uncached endpoint so freshly-uploaded R2 images are
+  // visible immediately instead of waiting for the 60 s unstable_cache TTL.
+  const fetchCards = useCallback(async () => {
     if (!setId) return
-
     setLoading(true)
     setError(null)
-    setInternalSelectedId(null)
 
-    async function fetchCards() {
-      try {
-        const res = await fetch(`/api/cards/${encodeURIComponent(setId)}?_t=${refreshKey}`)
-        if (!res.ok) throw new Error(`Failed to fetch cards: ${res.status}`)
-        const data: CardGridItem[] = await res.json()
-        const sorted = [...data].sort((a, b) => {
-          const numA = parseInt(a.number.split('/')[0], 10)
-          const numB = parseInt(b.number.split('/')[0], 10)
-          if (!isNaN(numA) && !isNaN(numB)) return numA - numB
+    try {
+      const res = await fetch(
+        `/api/admin/cards/${encodeURIComponent(setId)}?t=${Date.now()}`,
+        { cache: 'no-store' },
+      )
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? `Fetch failed (${res.status})`)
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const raw: any[] = await res.json()
+
+      const sorted: CardGridItem[] = raw
+        .map((c) => ({
+          id:             c.id,
+          set_id:         c.set_id,
+          name:           c.name   ?? 'Unknown',
+          number:         c.number ?? '',
+          rarity:         c.rarity ?? '',
+          image:          c.own_image     ?? null,
+          source_image:   c.source_image  ?? null,
+          source_card_id: c.source_card_id ?? null,
+        }))
+        .sort((a, b) => {
+          const na = parseInt(a.number.split('/')[0], 10)
+          const nb = parseInt(b.number.split('/')[0], 10)
+          if (!isNaN(na) && !isNaN(nb)) return na - nb
           return a.number.localeCompare(b.number)
         })
-        setCards(sorted)
-        onCardsLoaded?.(sorted)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load cards')
-      } finally {
-        setLoading(false)
-      }
-    }
 
+      setCards(sorted)
+      onCardsLoaded?.(sorted)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load cards')
+    } finally {
+      setLoading(false)
+    }
+  }, [setId, onCardsLoaded])
+
+  useEffect(() => {
+    setInternalSelectedId(null)
     fetchCards()
+  // refreshKey intentionally triggers a re-fetch
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setId, refreshKey])
 
-  if (loading) {
-    return (
-      <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-2">
-        {Array.from({ length: 24 }).map((_, i) => (
-          <div
-            key={i}
-            className="aspect-[2/3] rounded bg-gray-800 animate-pulse"
-          />
-        ))}
-      </div>
-    )
-  }
-
-  if (error) {
-    return <p className="text-red-400 text-sm">⚠️ {error}</p>
-  }
-
-  if (cards.length === 0) {
-    return (
-      <p className="text-gray-500 text-sm py-4 text-center">
-        No cards found for set <code className="text-yellow-400">{setId}</code>. Check that the set ID matches cards in the database.
-      </p>
-    )
-  }
-
+  // ── Derived stats ──────────────────────────────────────────────────────────
   const withOwnImage    = cards.filter((c) => !!c.image).length
   const withSourceImage = cards.filter((c) => !c.image && !!c.source_image).length
   const withImage       = withOwnImage + withSourceImage
   const total           = cards.length
+  const progressPct     = total > 0 ? Math.round((withImage / total) * 100) : 0
 
   // Prefer externally-controlled selection; fall back to internal click tracking
   const selectedId = selectedCardId !== undefined ? selectedCardId : internalSelectedId
@@ -100,9 +116,32 @@ export function CardImageGrid({ setId, onCardSelect, onCardsLoaded, selectedCard
     onCardSelect(card)
   }
 
+  // ── Loading skeleton ───────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-2">
+        {Array.from({ length: 24 }).map((_, i) => (
+          <div key={i} className="aspect-[2/3] rounded bg-gray-800 animate-pulse" />
+        ))}
+      </div>
+    )
+  }
+
+  if (error) return <p className="text-red-400 text-sm">⚠️ {error}</p>
+
+  if (cards.length === 0) {
+    return (
+      <p className="text-gray-500 text-sm py-4 text-center">
+        No cards found for set <code className="text-yellow-400">{setId}</code>.{' '}
+        Check that the set ID matches cards in the database.
+      </p>
+    )
+  }
+
   return (
     <div className="space-y-3">
-      {/* Summary bar */}
+
+      {/* ── Summary bar ─────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between text-sm">
         <span className="text-gray-400">
           <span className="text-green-400 font-semibold">{withOwnImage}</span>
@@ -118,17 +157,15 @@ export function CardImageGrid({ setId, onCardSelect, onCardsLoaded, selectedCard
             <div className="h-1.5 w-32 bg-gray-700 rounded-full overflow-hidden">
               <div
                 className="h-full bg-green-500 rounded-full transition-all"
-                style={{ width: `${(withImage / total) * 100}%` }}
+                style={{ width: `${progressPct}%` }}
               />
             </div>
-            <span className="text-gray-500 text-xs">
-              {Math.round((withImage / total) * 100)}%
-            </span>
+            <span className="text-gray-500 text-xs">{progressPct}%</span>
           </div>
         )}
       </div>
 
-      {/* Legend */}
+      {/* ── Legend ──────────────────────────────────────────────────────── */}
       <div className="flex items-center gap-4 text-xs text-gray-500">
         <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-4 rounded bg-gray-700 border border-gray-600" />
@@ -148,12 +185,12 @@ export function CardImageGrid({ setId, onCardSelect, onCardsLoaded, selectedCard
         </span>
       </div>
 
-      {/* Card grid */}
+      {/* ── Card grid ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-1.5">
         {cards.map((card) => {
           const hasOwnImage    = !!card.image
           const hasSourceImage = !card.image && !!card.source_image
-          const displayImage   = card.image ?? card.source_image
+          const displayImage   = card.image ?? card.source_image ?? null
           const isSelected     = card.id === selectedId
 
           const titleSuffix = hasOwnImage
@@ -176,26 +213,41 @@ export function CardImageGrid({ setId, onCardSelect, onCardsLoaded, selectedCard
               `}
             >
               {displayImage ? (
-                /* Thumbnail — own or inherited */
+                /* Card thumbnail — own or inherited */
                 <img
                   src={displayImage}
                   alt={card.name}
                   className={`w-full h-full object-cover ${hasSourceImage ? 'opacity-80' : ''}`}
                   loading="lazy"
+                  onError={(e) => {
+                    // Broken R2 URL — swap to grey placeholder without leaving a
+                    // cracked-image icon.  A grey tile still shows the card number.
+                    const img = e.currentTarget
+                    img.style.display = 'none'
+                    const el = img.parentElement
+                    if (el) {
+                      el.classList.add('bg-gray-800', 'border', 'border-red-800/50')
+                      const span = document.createElement('span')
+                      span.className = 'text-red-700 text-[9px] font-mono absolute bottom-0.5 left-0 right-0 text-center'
+                      span.textContent = `#${card.number}`
+                      el.appendChild(span)
+                    }
+                  }}
                 />
               ) : (
                 /* Grey placeholder */
-                <div className="w-full h-full bg-gray-800 border border-gray-700 flex flex-col items-center justify-center gap-0.5">
+                <div className="w-full h-full bg-gray-800 border border-gray-700 flex flex-col items-center justify-center">
                   <span className="text-gray-600 text-[9px] font-mono leading-none">
                     #{card.number}
                   </span>
                 </div>
               )}
 
-              {/* Green dot = own image; teal chain = inherited */}
+              {/* Own-image green dot */}
               {hasOwnImage && !isSelected && (
                 <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-green-400 shadow" />
               )}
+              {/* Inherited-image chain icon */}
               {hasSourceImage && !isSelected && (
                 <span className="absolute top-0.5 right-0.5 text-[8px] leading-none">🔗</span>
               )}
