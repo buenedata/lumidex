@@ -125,7 +125,14 @@ async function extractCardsFromPkmnGg(pkmnGgUrl: string): Promise<PkmnCard[]> {
     .map((card) => ({
       // Collections pages may use "cardNumber" instead of "number"
       number: String(card.number ?? card.cardNumber ?? ''),
-      imageUrl: (card.largeImageUrl ?? card.thumbImageUrl ?? card.imageUrl ?? '') as string,
+      imageUrl: (
+        card.largeImageUrl
+          ?? card.images?.large
+          ?? card.thumbImageUrl
+          ?? card.images?.small
+          ?? card.imageUrl
+          ?? ''
+      ) as string,
     }))
     .filter((c) => c.number !== '' && c.imageUrl !== '')
 }
