@@ -159,11 +159,13 @@ function CardImagesTab() {
             <li>
               Drag an image from{' '}
               <strong className="text-yellow-400">TCGCollector</strong>
-              {' '}or{' '}
-              <strong className="text-yellow-400">pkmn.gg</strong>,
-              paste an image URL, or browse for a local file
+              {', '}
+              <strong className="text-yellow-400">pkmn.gg</strong>
+              {', or '}
+              <strong className="text-yellow-400">dext TCG</strong>
+              , paste an image URL, or browse for a local file
             </li>
-            <li>The image is fetched server-side, saved to Supabase Storage, and the card record is updated</li>
+            <li>The image is compressed to WebP server-side, saved to Cloudflare R2, and the card record is updated</li>
           </ol>
         </div>
       )}

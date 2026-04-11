@@ -611,33 +611,20 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // ── Deduplicate DB cards by normalised number ────────────────────────
-        // If the DB has duplicate rows for the same card number (e.g. from a
-        // CSV imported multiple times) we only process the first occurrence.
-        // Without this guard every duplicate row triggers a separate upload to
-        // the same storage file, multiplying work and SSE events needlessly.
-        const seenNumbers = new Set<string>()
-        const uniqueDbCards = dbCards.filter((card) => {
-          const norm = normalizeNumber(card.number)
-          if (seenNumbers.has(norm)) return false
-          seenNumbers.add(norm)
-          return true
-        })
-        if (uniqueDbCards.length !== dbCards.length) {
-          console.warn(
-            `[bulk-import] Deduplicated DB cards for set "${setId}": ` +
-              `${dbCards.length} rows → ${uniqueDbCards.length} unique numbers. ` +
-              `${dbCards.length - uniqueDbCards.length} duplicate rows skipped.`,
-          )
-        }
-
-        // ── Emit start (after dedup so total reflects actual work) ───────────
-        emit({ type: 'start', payload: { total: uniqueDbCards.length } })
+        // ── Emit start ───────────────────────────────────────────────────────
+        // NOTE: We intentionally process ALL DB cards, including those that
+        // share the same card number (e.g. two different arts both numbered "3"
+        // in some Japanese promo sets).  Storage filenames are keyed by card ID
+        // ({setId}-{number}-{cardId}.webp), so there are no collisions.
+        // Deduplicating by number would leave one card permanently grey; instead
+        // we give every card the best available source image and the admin can
+        // manually upload the correct art for whichever one differs.
+        emit({ type: 'start', payload: { total: dbCards.length } })
 
         // ── Concurrency pool (CONCURRENCY workers share a queue) ─────────────
         // JavaScript is single-threaded so queue.shift() inside async functions
         // is safe — each await yields to the next coroutine atomically.
-        const queue: DbCard[] = [...uniqueDbCards]
+        const queue: DbCard[] = [...dbCards]
         const worker = async () => {
           while (queue.length > 0) {
             const card = queue.shift()!
