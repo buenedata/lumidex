@@ -4,8 +4,8 @@
  * Converts any image buffer (PNG, JPEG, WebP, GIF, etc.) to WebP format
  * at 82 % quality with a maximum width of 500 px (aspect ratio preserved).
  *
- * This is used by every image upload route so all images land in Supabase
- * Storage as compact WebP files rather than large raw PNGs / JPEGs.
+ * Used by every image upload route so all images are stored in Cloudflare R2
+ * as compact WebP files rather than large raw PNGs / JPEGs.
  *
  * Expected savings vs raw card-image PNGs: ~85–90 % per file.
  */

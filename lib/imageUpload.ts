@@ -37,7 +37,8 @@ export function getCardImageUrl(setId: string, number: string): string {
 
 /**
  * Upload card image via the server-side API route.
- * The route uses supabaseAdmin (service role) so it bypasses storage RLS.
+ * The route compresses the image to WebP, uploads it to Cloudflare R2,
+ * and uses supabaseAdmin (service-role) only to update the cards DB row.
  */
 export async function uploadCardImage(
   card: PokemonCard,

@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/admin'
 import { supabaseAdmin } from '@/lib/supabase'
 import { generateImageFilename } from '@/lib/imageUpload'
 import { uploadToR2, getR2Url } from '@/lib/r2'
+import { compressImageToWebP, COMPRESSED_CONTENT_TYPE } from '@/lib/imageCompress'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -50,12 +51,25 @@ async function downloadAndStoreCardImage(
     const imageBuffer = await imgRes.arrayBuffer()
     if (imageBuffer.byteLength === 0) return null
 
+    // Compress to WebP before uploading — this is required for correctness because
+    // generateImageFilename always returns a .webp filename.  Without compression the
+    // stored bytes would be JPEG/PNG under a .webp key (content/extension mismatch).
+    // It also reduces storage size by ~80–90 % vs raw source images.
+    let uploadBuffer: Buffer | ArrayBuffer = imageBuffer
+    let uploadContentType: string = contentType
+    try {
+      uploadBuffer = await compressImageToWebP(imageBuffer)
+      uploadContentType = COMPRESSED_CONTENT_TYPE
+    } catch {
+      // Fallback: store original bytes if sharp unexpectedly fails
+    }
+
     // Use the card-ID-scoped filename to prevent collisions between cards in the
     // same set that share the same number (e.g. Pokémon #3 vs Energy #3).
     const filename = generateImageFilename(setId, cardNumber, cardId)
     const r2Key    = `${R2_KEY_PREFIX}/${filename}`
 
-    await uploadToR2(r2Key, imageBuffer, contentType)
+    await uploadToR2(r2Key, uploadBuffer, uploadContentType)
 
     // Return the stable URL — no query string.  Any cache-busting for the
     // admin UI should be applied by the caller, not persisted to the DB.

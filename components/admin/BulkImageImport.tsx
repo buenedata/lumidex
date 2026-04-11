@@ -186,7 +186,7 @@ export function BulkImageImport({ setId, onComplete }: Props) {
           Accepts pkmn.gg set pages (<code className="text-gray-400">pkmn.gg/series/…</code>
           {' '}or <code className="text-gray-400">/collections/…</code>) and dext TCG expansion pages
           (<code className="text-gray-400">app.dextcg.com/expansions/{'{id}'}?…</code>).
-          Images are fetched from the source and stored in Supabase Storage.
+          Images are fetched from the source, compressed to WebP, and stored in Cloudflare R2.
         </p>
       </div>
 
