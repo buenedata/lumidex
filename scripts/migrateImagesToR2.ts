@@ -35,17 +35,19 @@ const supabase: SupabaseClient = createClient(supabaseUrl, serviceRoleKey, {
 
 /**
  * Extract the R2 object key from a Supabase Storage URL.
+ * Query strings (e.g. ?v=timestamp) are stripped so the R2 key is clean.
  *
- * Input:  https://xxxx.supabase.co/storage/v1/object/public/set-images/sv9pt5-logo.webp
+ * Input:  https://xxxx.supabase.co/storage/v1/object/public/set-images/sv9pt5-logo.webp?v=123
  * Output: set-images/sv9pt5-logo.webp
  */
 function supabaseUrlToR2Key(url: string): string {
-  const marker = '/object/public/'
-  const idx = url.indexOf(marker)
-  if (idx === -1) {
-    throw new Error(`Cannot extract R2 key — URL does not contain "${marker}": ${url}`)
+  // Strip query string first so ?v=timestamp never ends up in the R2 key
+  const cleanUrl = url.split('?')[0]
+  const match = cleanUrl.match(/\/object\/public\/(.+)$/)
+  if (!match) {
+    throw new Error(`Cannot extract R2 key — URL does not contain "/object/public/": ${url}`)
   }
-  return url.slice(idx + marker.length)
+  return match[1]
 }
 
 /**
@@ -62,13 +64,20 @@ function needsMigration(url: string | null | undefined): boolean {
 /**
  * Download a file from a Supabase CDN URL, upload it to R2, and
  * return the new public R2 URL.
+ *
+ * The R2 key and the fetch URL both have query strings stripped — Supabase CDN
+ * returns 400 when ?v=timestamp (or any unexpected query param) is present.
  */
 async function migrateUrl(supabaseUrl: string): Promise<string> {
+  // Clean key: strip ?v=timestamp so R2 stores a canonical path
   const key = supabaseUrlToR2Key(supabaseUrl)
 
-  const response = await fetch(supabaseUrl)
+  // Clean fetch URL: Supabase CDN returns 400 for URLs with arbitrary query params
+  const fetchUrl = supabaseUrl.split('?')[0]
+
+  const response = await fetch(fetchUrl)
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status} fetching ${supabaseUrl}`)
+    throw new Error(`HTTP ${response.status} fetching ${fetchUrl}`)
   }
 
   const contentType = response.headers.get('content-type') ?? 'application/octet-stream'
@@ -197,6 +206,61 @@ async function processBatch(
   }
 }
 
+// ── SQL cleanup for malformed R2 URLs ────────────────────────────────────────
+
+/**
+ * Strip any `?v=…` query strings from R2 URLs that were previously stored
+ * with a malformed key (the bug in supabaseUrlToR2Key that has since been fixed).
+ *
+ * Also logs a count breakdown of Supabase vs R2 vs other image URLs in `cards`.
+ */
+async function cleanupMalformedR2Urls(): Promise<void> {
+  console.log('\n[CLEANUP] Checking for malformed R2 URLs in cards.image…')
+
+  if (DRY_RUN) {
+    console.log('[CLEANUP] DRY RUN — would run:')
+    console.log("  UPDATE cards SET image = split_part(image, '?', 1) WHERE image LIKE '%r2.dev%?%'")
+  } else {
+    // supabase-js v2 doesn't support UPDATE … SET col=expression, so we
+    // fetch malformed rows client-side, strip the query string, then update each.
+    const { data: malformed, error: fetchErr } = await supabase
+      .from('cards')
+      .select('id, image')
+      .ilike('image', '%r2.dev%?%')
+
+    if (fetchErr) {
+      console.error('[CLEANUP] ❌ Failed to query malformed R2 URLs:', fetchErr.message)
+    } else if (!malformed || malformed.length === 0) {
+      console.log('[CLEANUP] ✅ No malformed R2 URLs found.')
+    } else {
+      console.log(`[CLEANUP] Found ${malformed.length} malformed R2 URL(s) — stripping query strings…`)
+      for (const row of malformed) {
+        const cleanImage = (row.image as string).split('?')[0]
+        const { error: updateErr } = await supabase
+          .from('cards')
+          .update({ image: cleanImage })
+          .eq('id', row.id)
+        if (updateErr) {
+          console.error(`  ❌ Failed to update card id=${row.id}: ${updateErr.message}`)
+        } else {
+          console.log(`  ✔ card id=${row.id} cleaned → ${cleanImage}`)
+        }
+      }
+    }
+  }
+
+  // ── Stats ──────────────────────────────────────────────────────────────────
+  console.log('\n[CLEANUP] Card image URL distribution:')
+
+  const { count: supabaseCount } = await supabase
+    .from('cards').select('*', { count: 'exact', head: true }).ilike('image', '%supabase.co%')
+  const { count: r2Count } = await supabase
+    .from('cards').select('*', { count: 'exact', head: true }).ilike('image', '%r2.dev%')
+
+  console.log(`  Supabase URLs : ${supabaseCount ?? '?'}`)
+  console.log(`  R2 URLs       : ${r2Count ?? '?'}`)
+}
+
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 async function main(): Promise<void> {
@@ -205,6 +269,9 @@ async function main(): Promise<void> {
   console.log(`  Mode:     ${DRY_RUN ? '🔍 DRY RUN (no changes will be made)' : '🚀 LIVE'}`)
   console.log(`  Batch:    ${BATCH_SIZE} rows`)
   console.log('═══════════════════════════════════════════════════════')
+
+  // ── 0. Strip any malformed ?v= query strings from previously migrated R2 URLs
+  await cleanupMalformedR2Urls()
 
   // ── 1. sets.logo_url ──────────────────────────────────────────────────────
   await migrateTable({
