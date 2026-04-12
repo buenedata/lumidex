@@ -56,11 +56,14 @@ export async function createVariant(formData: FormData) {
       }
     }
 
-    // Check for duplicate name globally (variants are global catalog)
+    // Check for duplicate name in the global catalog only (card_id IS NULL).
+    // Card-specific variants with the same display name are scoped to their card
+    // and must not block creation of a global catalog entry.
     const { data: existing, error: checkError } = await supabase
       .from('variants')
       .select('id')
       .ilike('name', rawData.name.trim())
+      .is('card_id', null)
       .limit(1)
       .maybeSingle()
 
