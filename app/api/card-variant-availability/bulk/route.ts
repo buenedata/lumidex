@@ -8,9 +8,11 @@ import { supabaseAdmin } from '@/lib/supabase'
  *
  * Body:
  * {
- *   cardIds:          string[]        — cards to update
- *   variantIds:       string[]        — global variants to enable ([] = revert to rarity rules)
- *   defaultVariantId: string | null   — optional; applied to every card.default_variant_id
+ *   cardIds:          string[]           — cards to update
+ *   variantIds?:      string[] | null    — global variants to enable.
+ *                                          [] = revert to rarity rules (clears overrides).
+ *                                          omit / null = leave card_variant_availability untouched.
+ *   defaultVariantId: string | null      — optional; applied to every card.default_variant_id
  * }
  *
  * Response: { success: true, updatedCount: number }
@@ -20,7 +22,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { cardIds, variantIds, defaultVariantId } = body as {
       cardIds: string[]
-      variantIds: string[]
+      variantIds?: string[] | null
       defaultVariantId?: string | null
     }
 
@@ -31,37 +33,43 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!Array.isArray(variantIds)) {
+    // variantIds is optional.  When provided (even as []), the override set is
+    // replaced.  When absent / null the card_variant_availability rows are left
+    // completely untouched — only default_variant_id is updated.
+    if (variantIds !== undefined && variantIds !== null && !Array.isArray(variantIds)) {
       return NextResponse.json(
-        { error: 'variantIds must be an array' },
+        { error: 'variantIds must be an array when provided' },
         { status: 400 }
       )
     }
 
-    // 1. Delete all existing overrides for every card in the batch
-    const { error: deleteError } = await supabaseAdmin
-      .from('card_variant_availability')
-      .delete()
-      .in('card_id', cardIds)
-
-    if (deleteError) {
-      throw new Error(`Failed to clear existing overrides: ${deleteError.message}`)
-    }
-
-    // 2. Re-insert new overrides for each cardId × variantId combination
-    if (variantIds.length > 0) {
-      const rows = cardIds.flatMap((cardId) =>
-        variantIds.map((variantId) => ({ card_id: cardId, variant_id: variantId }))
-      )
-
-      const { error: insertError } = await supabaseAdmin
+    if (Array.isArray(variantIds)) {
+      // 1. Delete all existing overrides for every card in the batch
+      const { error: deleteError } = await supabaseAdmin
         .from('card_variant_availability')
-        .insert(rows)
+        .delete()
+        .in('card_id', cardIds)
 
-      if (insertError) {
-        throw new Error(`Failed to save overrides: ${insertError.message}`)
+      if (deleteError) {
+        throw new Error(`Failed to clear existing overrides: ${deleteError.message}`)
+      }
+
+      // 2. Re-insert new overrides for each cardId × variantId combination
+      if (variantIds.length > 0) {
+        const rows = cardIds.flatMap((cardId) =>
+          variantIds.map((variantId) => ({ card_id: cardId, variant_id: variantId }))
+        )
+
+        const { error: insertError } = await supabaseAdmin
+          .from('card_variant_availability')
+          .insert(rows)
+
+        if (insertError) {
+          throw new Error(`Failed to save overrides: ${insertError.message}`)
+        }
       }
     }
+    // If variantIds is undefined/null → steps 1 & 2 are skipped entirely.
 
     // 3. Optionally update cards.default_variant_id for every card
     //    undefined = no change; null or a variant ID = explicit set

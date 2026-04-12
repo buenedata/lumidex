@@ -213,11 +213,6 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
       return
     }
 
-    const variantLabel =
-      bulkVariantIds.size > 0
-        ? `${bulkVariantIds.size} variant${bulkVariantIds.size === 1 ? '' : 's'} selected`
-        : 'none (reverts selected cards to rarity-based defaults)'
-
     // Resolve the actual variant UUID for the chosen mode, with cross-fallback.
     // bulkDefaultMode can be 'normal', 'holo', or a raw variant UUID chosen from
     // the toggled-on global variants OR from a card-specific variant on the
@@ -226,6 +221,7 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
     const holoVariant   = allVariants.find(v => v.name.toLowerCase() === 'holo')
     let defaultVariantId: string | null
     let modeLabel: string
+    let isCardSpecificDefault = false
     if (bulkDefaultMode === 'normal') {
       defaultVariantId = normalVariant?.id ?? holoVariant?.id ?? null
       modeLabel = 'Normal'
@@ -244,26 +240,48 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
       const pickedVariant = globalMatch ?? cardSpecificMatch
       defaultVariantId = pickedVariant?.id ?? null
       modeLabel = pickedVariant?.name ?? 'Unknown'
+      isCardSpecificDefault = !!cardSpecificMatch
     }
+
+    // When no global variants are toggled AND the chosen Quick Add belongs to a
+    // card-specific variant, skip the card_variant_availability update entirely —
+    // touching it would wipe existing override rows (e.g. a single-variant override
+    // set for the card) while the card-specific variant itself lives in the
+    // `variants.card_id` column and would survive anyway.
+    const skipVariantUpdate = bulkVariantIds.size === 0 && isCardSpecificDefault
+
+    const variantLabel = skipVariantUpdate
+      ? 'unchanged (card-specific Quick Add only)'
+      : bulkVariantIds.size > 0
+        ? `${bulkVariantIds.size} variant${bulkVariantIds.size === 1 ? '' : 's'} selected`
+        : 'none (reverts selected cards to rarity-based defaults)'
 
     const confirmed = confirm(
       `Apply variant configuration to ${selectedCardIds.size} card${selectedCardIds.size === 1 ? '' : 's'}?\n\n` +
       `Variants: ${variantLabel}\n` +
       `Quick-add default: ${modeLabel}\n\n` +
-      `This will replace any existing overrides on the selected cards.`
+      (skipVariantUpdate
+        ? 'Only the Quick Add default will be updated — variant availability is left unchanged.'
+        : 'This will replace any existing overrides on the selected cards.')
     )
     if (!confirmed) return
+
+    // Build the request body — omit variantIds entirely when we want to
+    // preserve the existing card_variant_availability rows.
+    const requestBody: Record<string, unknown> = {
+      cardIds:          Array.from(selectedCardIds),
+      defaultVariantId: defaultVariantId,
+    }
+    if (!skipVariantUpdate) {
+      requestBody.variantIds = Array.from(bulkVariantIds)
+    }
 
     setIsSaving(true)
     try {
       const res = await fetch('/api/card-variant-availability/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          cardIds:          Array.from(selectedCardIds),
-          variantIds:       Array.from(bulkVariantIds),
-          defaultVariantId: defaultVariantId,
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       if (!res.ok) {
@@ -424,6 +442,19 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
       release_date: '',
     },
   })
+
+  // ─── Pre-render computed values ───────────────────────────────────────────
+  // True when the apply should only update default_variant_id and leave
+  // card_variant_availability rows untouched (card-specific Quick Add + no
+  // global variants toggled).
+  const isCardSpecificQA =
+    bulkDefaultMode !== 'normal' &&
+    bulkDefaultMode !== 'holo' &&
+    !allVariants.some(v => v.id === bulkDefaultMode) &&
+    Array.from(selectedCardIds)
+      .flatMap(id => cardVariantMap[id]?.cardSpecificVariants ?? [])
+      .some(v => v.id === bulkDefaultMode)
+  const willSkipVariants = bulkVariantIds.size === 0 && isCardSpecificQA
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -1121,8 +1152,12 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
                 </div>
                 <div className="flex justify-between text-gray-300 mt-1">
                   <span>Variants to apply</span>
-                  <span className="font-semibold text-white">
-                    {bulkVariantIds.size > 0 ? bulkVariantIds.size : 'none (clears overrides)'}
+                  <span className={`font-semibold ${willSkipVariants ? 'text-yellow-400' : 'text-white'}`}>
+                    {bulkVariantIds.size > 0
+                      ? bulkVariantIds.size
+                      : willSkipVariants
+                        ? 'unchanged ⚡ Quick Add only'
+                        : 'none (clears overrides)'}
                   </span>
                 </div>
               </div>
