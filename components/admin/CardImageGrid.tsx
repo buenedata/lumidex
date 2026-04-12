@@ -32,6 +32,13 @@ interface Props {
   onCardsLoaded?: (cards: CardGridItem[]) => void
   selectedCardId?: string | null
   refreshKey?: number
+  /**
+   * Map of cardId → cache-busted image URL supplied by the parent immediately
+   * after a successful upload.  Overrides the stable DB URL so the admin sees
+   * the new image straight away, even though the CDN may still serve the old
+   * cached file at the stable URL.
+   */
+  imageOverrides?: Record<string, string>
 }
 
 export function CardImageGrid({
@@ -40,6 +47,7 @@ export function CardImageGrid({
   onCardsLoaded,
   selectedCardId,
   refreshKey = 0,
+  imageOverrides = {},
 }: Props) {
   const [cards, setCards]               = useState<CardGridItem[]>([])
   const [loading, setLoading]           = useState(true)
@@ -188,9 +196,13 @@ export function CardImageGrid({
       {/* ── Card grid ───────────────────────────────────────────────────── */}
       <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 gap-1.5">
         {cards.map((card) => {
-          const hasOwnImage    = !!card.image
-          const hasSourceImage = !card.image && !!card.source_image
-          const displayImage   = card.image ?? card.source_image ?? null
+          // Prefer the cache-busted URL injected by the parent on a fresh upload
+          // so the new image is visible immediately even if the CDN still serves
+          // the old cached file at the stable R2 URL.
+          const overrideUrl    = imageOverrides[card.id] ?? null
+          const hasOwnImage    = !!(overrideUrl ?? card.image)
+          const hasSourceImage = !hasOwnImage && !!card.source_image
+          const displayImage   = overrideUrl ?? card.image ?? card.source_image ?? null
           const isSelected     = card.id === selectedId
 
           const titleSuffix = hasOwnImage

@@ -48,12 +48,20 @@ function CardImagesTab() {
   const [cardList, setCardList] = useState<CardGridItem[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [gridRefreshKey, setGridRefreshKey] = useState(0)
+  /**
+   * Cache-busted URLs returned by upload-card-image for cards that were just
+   * uploaded.  Passed to CardImageGrid so the new image is shown instantly
+   * even if the CDN still serves the old cached file at the stable R2 URL.
+   * Cleared whenever the selected set changes.
+   */
+  const [imageOverrides, setImageOverrides] = useState<Record<string, string>>({})
 
   const handleSetSelect = (setId: string, setName: string) => {
     setSelectedSetId(setId)
     setSelectedSetName(setName)
     setSelectedCard(null)
     setCardList([])
+    setImageOverrides({})
   }
 
   const handleCardSelect = (card: CardGridItem) => {
@@ -61,7 +69,11 @@ function CardImagesTab() {
     setModalOpen(true)
   }
 
-  const handleUploadSuccess = (_cardId: string, _imageUrl: string) => {
+  const handleUploadSuccess = (cardId: string, imageUrl: string) => {
+    // Immediately patch the grid with the cache-busted URL from the upload
+    // response so the admin sees the new image without waiting for the CDN.
+    setImageOverrides((prev) => ({ ...prev, [cardId]: imageUrl }))
+    // Also trigger a full re-fetch so the summary bar and DB state stay in sync.
     setGridRefreshKey((k) => k + 1)
   }
 
@@ -113,6 +125,7 @@ function CardImagesTab() {
               onCardsLoaded={setCardList}
               selectedCardId={selectedCard?.id}
               refreshKey={gridRefreshKey}
+              imageOverrides={imageOverrides}
             />
           </div>
           <p className="mt-2 text-gray-500 text-xs">
