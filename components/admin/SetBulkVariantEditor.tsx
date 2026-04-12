@@ -67,7 +67,9 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
 
   // ─── Bulk variant config state ────────────────────────────────────────────
   const [bulkVariantIds,  setBulkVariantIds]  = useState<Set<string>>(new Set())
-  const [bulkDefaultMode, setBulkDefaultMode] = useState<'normal' | 'holo'>('normal')
+  // 'normal' | 'holo' | <variant-uuid> – the last option lets admins pick any
+  // toggled-on variant (e.g. "Cracked Ice Holo") as the per-card quick-add default.
+  const [bulkDefaultMode, setBulkDefaultMode] = useState<string>('normal')
   const [isSaving,        setIsSaving]        = useState(false)
 
   // ─── Set-specific variant creation ───────────────────────────────────────
@@ -216,15 +218,25 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
         ? `${bulkVariantIds.size} variant${bulkVariantIds.size === 1 ? '' : 's'} selected`
         : 'none (reverts selected cards to rarity-based defaults)'
 
-    // Resolve the actual variant UUID for the chosen mode, with cross-fallback
+    // Resolve the actual variant UUID for the chosen mode, with cross-fallback.
+    // bulkDefaultMode can be 'normal', 'holo', or a raw variant UUID chosen from
+    // the toggled-on variants in the panel (e.g. "Cracked Ice Holo").
     const normalVariant = allVariants.find(v => v.name.toLowerCase() === 'normal')
     const holoVariant   = allVariants.find(v => v.name.toLowerCase() === 'holo')
-    const defaultVariantId =
-      bulkDefaultMode === 'normal'
-        ? (normalVariant?.id ?? holoVariant?.id ?? null)
-        : (holoVariant?.id   ?? normalVariant?.id ?? null)
-
-    const modeLabel = bulkDefaultMode === 'normal' ? 'Normal' : 'Holo'
+    let defaultVariantId: string | null
+    let modeLabel: string
+    if (bulkDefaultMode === 'normal') {
+      defaultVariantId = normalVariant?.id ?? holoVariant?.id ?? null
+      modeLabel = 'Normal'
+    } else if (bulkDefaultMode === 'holo') {
+      defaultVariantId = holoVariant?.id ?? normalVariant?.id ?? null
+      modeLabel = 'Holo'
+    } else {
+      // Specific variant UUID selected from the toggled-on variants list
+      const pickedVariant = allVariants.find(v => v.id === bulkDefaultMode)
+      defaultVariantId = pickedVariant?.id ?? null
+      modeLabel = pickedVariant?.name ?? 'Unknown'
+    }
 
     const confirmed = confirm(
       `Apply variant configuration to ${selectedCardIds.size} card${selectedCardIds.size === 1 ? '' : 's'}?\n\n` +
@@ -987,31 +999,70 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
                   Quick Add Variant
                 </label>
                 <p className="text-xs text-gray-500 mb-2">
-                  The variant added to a user's collection when they double-click a card image on the set page.
+                  The variant added to a user&apos;s collection when they double-click a card image on the set page.
                 </p>
-                <div className="flex rounded-lg overflow-hidden border border-gray-600">
+                {/* Always show Normal + Holo; also show any variant currently toggled on
+                    in the bulk config panel so the admin can pick e.g. "Cracked Ice Holo"
+                    as the quick-add default for cards where it is their only variant. */}
+                <div className="flex flex-wrap gap-1 rounded-lg overflow-hidden">
+                  {/* Normal */}
                   <button
                     type="button"
                     onClick={() => setBulkDefaultMode('normal')}
-                    className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                    className={`flex-1 min-w-[5rem] py-2 text-sm font-medium rounded-lg border transition-colors ${
                       bulkDefaultMode === 'normal'
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
+                        ? 'bg-purple-600 border-purple-500 text-white'
+                        : 'bg-gray-700 border-gray-600 text-gray-400 hover:bg-gray-600 hover:text-white'
                     }`}
                   >
                     Normal
                   </button>
+
+                  {/* Holo */}
                   <button
                     type="button"
                     onClick={() => setBulkDefaultMode('holo')}
-                    className={`flex-1 py-2 text-sm font-medium transition-colors border-l border-gray-600 ${
+                    className={`flex-1 min-w-[5rem] py-2 text-sm font-medium rounded-lg border transition-colors ${
                       bulkDefaultMode === 'holo'
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'
+                        ? 'bg-purple-600 border-purple-500 text-white'
+                        : 'bg-gray-700 border-gray-600 text-gray-400 hover:bg-gray-600 hover:text-white'
                     }`}
                   >
                     Holo
                   </button>
+
+                  {/* Extra buttons — one per toggled-on bulk variant that isn't
+                      already covered by the Normal / Holo buttons above */}
+                  {allVariants
+                    .filter(v =>
+                      bulkVariantIds.has(v.id) &&
+                      v.name.toLowerCase() !== 'normal' &&
+                      v.name.toLowerCase() !== 'holo'
+                    )
+                    .map(v => {
+                      const isActive = bulkDefaultMode === v.id
+                      const hex = COLOR_HEX[v.color] ?? COLOR_HEX.gray
+                      return (
+                        <button
+                          key={v.id}
+                          type="button"
+                          onClick={() => setBulkDefaultMode(v.id)}
+                          className={`flex-1 min-w-[5rem] py-2 text-sm font-medium rounded-lg border transition-colors ${
+                            isActive
+                              ? 'text-white'
+                              : 'bg-gray-700 border-gray-600 text-gray-400 hover:bg-gray-600 hover:text-white'
+                          }`}
+                          style={isActive ? {
+                            backgroundColor: `${hex}cc`,
+                            borderColor: hex,
+                          } : {}}
+                          title={v.name}
+                        >
+                          {localVariantNames[v.id] ?? v.name}
+                        </button>
+                      )
+                    })
+                  }
                 </div>
               </div>
 
