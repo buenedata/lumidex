@@ -220,7 +220,8 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
 
     // Resolve the actual variant UUID for the chosen mode, with cross-fallback.
     // bulkDefaultMode can be 'normal', 'holo', or a raw variant UUID chosen from
-    // the toggled-on variants in the panel (e.g. "Cracked Ice Holo").
+    // the toggled-on global variants OR from a card-specific variant on the
+    // selected cards (e.g. "Expansion Stamp").
     const normalVariant = allVariants.find(v => v.name.toLowerCase() === 'normal')
     const holoVariant   = allVariants.find(v => v.name.toLowerCase() === 'holo')
     let defaultVariantId: string | null
@@ -232,8 +233,15 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
       defaultVariantId = holoVariant?.id ?? normalVariant?.id ?? null
       modeLabel = 'Holo'
     } else {
-      // Specific variant UUID selected from the toggled-on variants list
-      const pickedVariant = allVariants.find(v => v.id === bulkDefaultMode)
+      // Specific variant UUID — search global variants first, then card-specific
+      // variants from the selected cards (card-specific variants are NOT in allVariants).
+      const globalMatch = allVariants.find(v => v.id === bulkDefaultMode)
+      const cardSpecificMatch = globalMatch
+        ? undefined
+        : Array.from(selectedCardIds)
+            .flatMap(id => cardVariantMap[id]?.cardSpecificVariants ?? [])
+            .find(v => v.id === bulkDefaultMode)
+      const pickedVariant = globalMatch ?? cardSpecificMatch
       defaultVariantId = pickedVariant?.id ?? null
       modeLabel = pickedVariant?.name ?? 'Unknown'
     }
@@ -1031,7 +1039,7 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
                     Holo
                   </button>
 
-                  {/* Extra buttons — one per toggled-on bulk variant that isn't
+                  {/* Extra buttons — one per toggled-on GLOBAL bulk variant that isn't
                       already covered by the Normal / Holo buttons above */}
                   {allVariants
                     .filter(v =>
@@ -1059,6 +1067,45 @@ export function SetBulkVariantEditor({ allVariants, onVariantCreated }: SetBulkV
                           title={v.name}
                         >
                           {localVariantNames[v.id] ?? v.name}
+                        </button>
+                      )
+                    })
+                  }
+
+                  {/* Extra buttons — one per unique CARD-SPECIFIC variant found on
+                      the currently selected cards.  These variants are not in
+                      allVariants / bulkVariantIds, but if a card's only variant is
+                      card-specific (e.g. "Expansion Stamp") the admin still needs
+                      to be able to choose it as the quick-add default. */}
+                  {Array.from(selectedCardIds)
+                    .flatMap(id => cardVariantMap[id]?.cardSpecificVariants ?? [])
+                    // Deduplicate by variant ID
+                    .filter((v, idx, arr) => arr.findIndex(x => x.id === v.id) === idx)
+                    // Don't re-show variants already covered by the Normal / Holo pills
+                    .filter(v =>
+                      v.name.toLowerCase() !== 'normal' &&
+                      v.name.toLowerCase() !== 'holo'
+                    )
+                    .map(v => {
+                      const isActive = bulkDefaultMode === v.id
+                      const hex = COLOR_HEX[v.color] ?? COLOR_HEX.gray
+                      return (
+                        <button
+                          key={v.id}
+                          type="button"
+                          onClick={() => setBulkDefaultMode(v.id)}
+                          className={`flex-1 min-w-[5rem] py-2 text-sm font-medium rounded-lg border transition-colors ${
+                            isActive
+                              ? 'text-white'
+                              : 'bg-gray-700 border-gray-600 text-gray-400 hover:bg-gray-600 hover:text-white'
+                          }`}
+                          style={isActive ? {
+                            backgroundColor: `${hex}cc`,
+                            borderColor: hex,
+                          } : {}}
+                          title={`${v.name} (card-specific)`}
+                        >
+                          {v.name}
                         </button>
                       )
                     })
