@@ -61,6 +61,7 @@ export async function createVariant(formData: FormData) {
       .from('variants')
       .select('id')
       .ilike('name', rawData.name.trim())
+      .limit(1)
       .maybeSingle()
 
     if (checkError) {
@@ -138,6 +139,7 @@ export async function renameVariant(variantId: string, newName: string) {
       .select('id')
       .ilike('name', trimmedName)
       .neq('id', variantId)
+      .limit(1)
       .maybeSingle()
 
     if (checkError) {
@@ -228,6 +230,7 @@ export async function updateVariant(
         .eq('card_id', current.card_id)
         .ilike('name', trimmedName)
         .neq('id', variantId)
+        .limit(1)
         .maybeSingle()
 
       if (dup) {
@@ -240,6 +243,7 @@ export async function updateVariant(
         .select('id')
         .ilike('name', trimmedName)
         .neq('id', variantId)
+        .limit(1)
         .maybeSingle()
 
       if (dup) {
@@ -410,6 +414,7 @@ export async function approveVariantSuggestion(suggestionId: string) {
       .select('id')
       .eq('card_id', suggestion.card_id)
       .ilike('name', suggestion.name.trim())
+      .limit(1)
       .maybeSingle()
 
     if (checkError) {
@@ -534,6 +539,7 @@ export async function createCardSpecificVariant(formData: FormData) {
       .select('id')
       .eq('card_id', cardId)
       .ilike('name', name)
+      .limit(1)
       .maybeSingle()
 
     if (existingCardSpecific) {
