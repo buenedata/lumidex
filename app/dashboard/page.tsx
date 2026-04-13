@@ -1,18 +1,21 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useAuthStore, useCollectionStore } from '@/lib/store'
 import { useRouter } from 'next/navigation'
 import { SetProgress, UserCard } from '@/types'
 
-// ── Dashboard section components ────────────────────────────────────────────
-import DashboardHero from '@/components/dashboard/DashboardHero'
+// ── Above-the-fold components (loaded eagerly) ───────────────────────────────
+import DashboardHero  from '@/components/dashboard/DashboardHero'
 import DashboardStats from '@/components/dashboard/DashboardStats'
-import QuickActions from '@/components/dashboard/QuickActions'
-import ComingSoonFeatures from '@/components/dashboard/ComingSoonFeatures'
-import CollectionSpotlight from '@/components/dashboard/CollectionSpotlight'
-import NewsStories from '@/components/dashboard/NewsStories'
-import WantedBoard from '@/components/dashboard/WantedBoard'
+import QuickActions   from '@/components/dashboard/QuickActions'
+
+// ── Below-the-fold components (lazy-loaded to reduce initial parse time) ─────
+const CollectionSpotlight = dynamic(() => import('@/components/dashboard/CollectionSpotlight'))
+const WantedBoard         = dynamic(() => import('@/components/dashboard/WantedBoard'))
+const NewsStories         = dynamic(() => import('@/components/dashboard/NewsStories'))
+const ComingSoonFeatures  = dynamic(() => import('@/components/dashboard/ComingSoonFeatures'))
 
 // ── Spotlight extra stats ────────────────────────────────────────────────────
 interface SpotlightStats {
@@ -45,8 +48,10 @@ export default function DashboardPage() {
   }, [user, isLoading, router])
 
   useEffect(() => {
-    fetchPokemonSets()
-  }, [fetchPokemonSets])
+    // Only fetch if the store is empty — avoids a redundant network request
+    // every time the user navigates back to the dashboard.
+    if (pokemonSets.size === 0) fetchPokemonSets()
+  }, [fetchPokemonSets, pokemonSets.size])
 
   // ── Derived data ─────────────────────────────────────────────────────────
   const userSetIds      = new Set(userSets.map(us => us.set_id))

@@ -20,7 +20,9 @@ interface CollectionState {
   userCardCountBySet: Map<string, number>
   pokemonSets: Map<string, PokemonSet>
   pokemonCards: Map<string, PokemonCard[]>
-  
+  /** True while a fetchPokemonSets request is in-flight — prevents duplicate concurrent calls. */
+  isFetchingSets: boolean
+
   // Actions
   addUserSet: (setId: string) => Promise<void>
   removeUserSet: (setId: string) => Promise<void>
@@ -46,6 +48,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
   userCardCountBySet: new Map(),
   pokemonSets: new Map(),
   pokemonCards: new Map(),
+  isFetchingSets: false,
 
   addUserSet: async (setId: string) => {
     const { user } = useAuthStore.getState()
@@ -220,6 +223,10 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
   },
 
   fetchPokemonSets: async () => {
+    // Skip if data is already loaded or a fetch is already in-flight.
+    if (get().pokemonSets.size > 0) return
+    if (get().isFetchingSets) return
+    set({ isFetchingSets: true })
     try {
       const response = await fetch('/api/sets')
       if (response.ok) {
@@ -230,6 +237,8 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
       }
     } catch (error) {
       console.error('Error fetching Pokemon sets:', error)
+    } finally {
+      set({ isFetchingSets: false })
     }
   },
 
