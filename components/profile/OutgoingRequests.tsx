@@ -33,7 +33,7 @@ export default function OutgoingRequests({
   }
 
   return (
-    <div className={cn('mb-6', className)}>
+    <div className={cn('mb-6 max-w-md', className)}>
       <h3 className="text-sm font-semibold text-secondary uppercase tracking-wider mb-3">
         Sent Requests
         <span className="ml-2 px-1.5 py-0.5 rounded-full text-xs font-bold bg-elevated border border-subtle text-muted">

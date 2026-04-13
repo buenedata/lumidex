@@ -84,7 +84,16 @@ function DeltaBadge({ delta, quantity }: { delta: number | null; quantity: numbe
       </span>
     )
   }
-  // Unknown direction (null delta or no change)
+  if (delta === 0) {
+    // Net-zero session (added then removed or vice versa) — API filters these
+    // out but render gracefully as a fallback
+    return (
+      <span className="inline-flex items-center text-[11px] font-semibold text-muted">
+        ={quantity}
+      </span>
+    )
+  }
+  // Null delta: row predates delta tracking
   return (
     <span className="inline-flex items-center text-[11px] font-semibold text-muted">
       ×{quantity}

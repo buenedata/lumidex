@@ -139,8 +139,12 @@ export async function GET(
       }
     }
 
-    // Sort merged sessions by most recent changed_at, cap at 10
+    // Sort merged sessions by most recent changed_at, cap at 10.
+    // Filter out net-zero sessions (e.g. user added then removed within the
+    // session window) — these produce a delta of 0 which would display as ×N
+    // rather than an arrow, which looks confusing.
     const cardLogRows = Array.from(sessionMap.values())
+      .filter(row => row.new_quantity !== row.old_quantity)
       .sort((a, b) => new Date(b.changed_at).getTime() - new Date(a.changed_at).getTime())
       .slice(0, 10)
 

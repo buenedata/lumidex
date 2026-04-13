@@ -69,6 +69,9 @@ function userToSettings(u: ProfileUser): SettingsValues {
     profile_private:           u.profile_private           ?? false,
     show_portfolio_value:      u.show_portfolio_value      ?? 'public',
     lists_public_by_default:   u.lists_public_by_default   ?? false,
+    social_cardmarket:         u.social_cardmarket          ?? '',
+    social_instagram:          u.social_instagram           ?? '',
+    social_facebook:           u.social_facebook            ?? '',
   }
 }
 
@@ -621,6 +624,76 @@ export default function ProfilePage() {
               </div>
             </div>
 
+            {/* Social / marketplace icons — right side of hero */}
+            {!isPrivate && (
+              () => {
+                const cm = profileUser.social_cardmarket?.trim() ?? ''
+                const ig = profileUser.social_instagram?.trim() ?? ''
+                const fb = profileUser.social_facebook?.trim() ?? ''
+                const igHref = ig
+                  ? ig.startsWith('http')
+                    ? ig
+                    : `https://instagram.com/${ig.replace(/^@/, '')}`
+                  : ''
+                const hasSocial = !!(cm || ig || fb)
+                if (!hasSocial) return null
+                return (
+                  <div className="shrink-0 pb-1 flex flex-col items-center md:items-end gap-2">
+                    <p className="text-[10px] text-muted uppercase tracking-wider hidden md:block">Links</p>
+                    <div className="flex items-center gap-2">
+                      {cm && (
+                        <a
+                          href={cm}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Cardmarket Profile"
+                          className="w-8 h-8 rounded-lg bg-surface border border-subtle flex items-center justify-center text-muted hover:text-accent hover:border-accent/40 transition-colors"
+                        >
+                          {/* Simple shopping-cart icon standing in for Cardmarket */}
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                              d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                          </svg>
+                        </a>
+                      )}
+                      {igHref && (
+                        <a
+                          href={igHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Instagram"
+                          className="w-8 h-8 rounded-lg bg-surface border border-subtle flex items-center justify-center text-muted hover:text-[#E1306C] hover:border-[#E1306C]/40 transition-colors"
+                        >
+                          {/* Camera icon */}
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                              d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                              d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                          </svg>
+                        </a>
+                      )}
+                      {fb && (
+                        <a
+                          href={fb.startsWith('http') ? fb : `https://facebook.com/${fb}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Facebook"
+                          className="w-8 h-8 rounded-lg bg-surface border border-subtle flex items-center justify-center text-muted hover:text-[#1877F2] hover:border-[#1877F2]/40 transition-colors"
+                        >
+                          {/* Person icon */}
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                )
+              }
+            )()}
+
             {/* Friend button — only shown when viewing another user's profile */}
             {!isOwnProfile && currentUser && !friendsLoading && (
               <div className="pb-1 shrink-0">
@@ -849,8 +922,13 @@ export default function ProfilePage() {
           isOpen={showSettingsModal}
           onClose={() => setShowSettingsModal(false)}
           userId={userId}
+          username={profileUser.username}
           initialValues={userToSettings(profileUser)}
           onSaved={handleSettingsSaved}
+          onCollectionReset={() => {
+            // Reload the page so stats + last activity reflect the cleared collection
+            window.location.reload()
+          }}
         />
       )}
 

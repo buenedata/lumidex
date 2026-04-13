@@ -38,6 +38,10 @@ export interface User {
   profile_private?: boolean;
   show_portfolio_value?: PortfolioVisibility;
   lists_public_by_default?: boolean;
+  /** Social / marketplace profile links (optional) */
+  social_cardmarket?: string | null;
+  social_instagram?: string | null;
+  social_facebook?: string | null;
   created_at: string;
 }
 
