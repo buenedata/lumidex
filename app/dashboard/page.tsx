@@ -21,7 +21,7 @@ interface SpotlightStats {
 }
 
 export default function DashboardPage() {
-  const { user, isLoading } = useAuthStore()
+  const { user, isLoading, profile } = useAuthStore()
   const {
     userSets,
     userCards,
@@ -176,6 +176,7 @@ export default function DashboardPage() {
             mostOwnedQty={mostOwnedQty}
             mostExpensiveCard={spotlightStats.mostExpensiveCard}
             statsLoading={spotlightLoading}
+            currency={profile?.preferred_currency ?? 'USD'}
           />
         </div>
 

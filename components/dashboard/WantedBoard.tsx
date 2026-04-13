@@ -237,11 +237,68 @@ function PendingProposalBanner({ proposal }: { proposal: PendingProposal }) {
   )
 }
 
+// ── Declined proposal compact card ────────────────────────────────────────────
+function DeclinedProposalBanner({ proposal }: { proposal: PendingProposal }) {
+  const router = useRouter()
+  const name = proposal.otherUser?.display_name ?? proposal.otherUser?.username ?? 'Trainer'
+  const offeringCards = proposal.trade_proposal_items.filter(i => i.direction === 'offering')
+
+  function relTime(iso: string) {
+    const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000)
+    if (mins < 60) return `${mins}m ago`
+    const hours = Math.floor(mins / 60)
+    if (hours < 24) return `${hours}h ago`
+    return `${Math.floor(hours / 24)}d ago`
+  }
+
+  return (
+    <div className="flex items-center gap-3 bg-red-500/8 border border-red-500/25 rounded-xl px-4 py-3">
+      {/* Avatar */}
+      <div className="w-8 h-8 rounded-full bg-surface border border-subtle shrink-0 flex items-center justify-center overflow-hidden">
+        {proposal.otherUser?.avatar_url ? (
+          <Image src={proposal.otherUser.avatar_url} alt={name} width={32} height={32} className="object-cover w-full h-full" unoptimized />
+        ) : (
+          <span className="text-xs font-bold text-muted">{name[0].toUpperCase()}</span>
+        )}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-primary leading-tight truncate">
+          <span className="text-red-400">❌</span> {name} declined your trade offer
+        </p>
+        <p className="text-xs text-muted leading-tight">
+          {offeringCards.length} card{offeringCards.length !== 1 ? 's' : ''}
+          {' · '}{relTime(proposal.created_at)}
+        </p>
+      </div>
+
+      {/* Card thumbnails (up to 3) */}
+      <div className="hidden sm:flex gap-1 shrink-0">
+        {offeringCards.slice(0, 3).map(item => item.cards && (
+          <div key={item.id} className="w-8 h-11 rounded overflow-hidden border border-subtle bg-surface opacity-50">
+            <img src={item.cards.image ?? '/pokemon_card_backside.png'} alt={item.cards.name ?? ''} className="w-full h-full object-cover" loading="lazy" />
+          </div>
+        ))}
+      </div>
+
+      {/* CTA */}
+      <button
+        onClick={() => router.push('/wanted-board')}
+        className="shrink-0 h-8 px-3 rounded-lg bg-surface border border-subtle text-muted text-xs font-semibold hover:text-primary hover:border-accent/40 transition-colors"
+      >
+        View →
+      </button>
+    </div>
+  )
+}
+
 export default function WantedBoard() {
   const { user } = useAuthStore()
-  const [matches,   setMatches]   = useState<WBMatch[]>([])
-  const [proposals, setProposals] = useState<PendingProposal[]>([])
-  const [loading,   setLoading]   = useState(true)
+  const [matches,          setMatches]          = useState<WBMatch[]>([])
+  const [proposals,        setProposals]        = useState<PendingProposal[]>([])
+  const [declinedProposals, setDeclinedProposals] = useState<PendingProposal[]>([])
+  const [loading,          setLoading]          = useState(true)
 
   useEffect(() => {
     if (!user) return
@@ -257,18 +314,27 @@ export default function WantedBoard() {
     fetch('/api/trade-proposals')
       .then(r => r.json())
       .then(d => {
-        const received = (d.proposals ?? []).filter(
+        const all = d.proposals ?? []
+        // Pending proposals received from others — needs the user's action
+        const received = all.filter(
           (p: PendingProposal) => p.status === 'pending' && !p.isProposer,
         )
+        // Outgoing proposals the other party already declined
+        const declined = all.filter(
+          (p: PendingProposal) => p.status === 'declined' && p.isProposer,
+        )
         setProposals(received)
+        setDeclinedProposals(declined)
       })
       .catch(() => {})
   }, [user])
 
-  // Received pending proposals banner
-  const pendingBanner = proposals.length > 0 ? (
+  // Received pending + declined outgoing banners
+  const hasBanners = proposals.length > 0 || declinedProposals.length > 0
+  const pendingBanner = hasBanners ? (
     <div className="mb-4 flex flex-col gap-2">
       {proposals.map(p => <PendingProposalBanner key={p.id} proposal={p} />)}
+      {declinedProposals.map(p => <DeclinedProposalBanner key={p.id} proposal={p} />)}
     </div>
   ) : null
 

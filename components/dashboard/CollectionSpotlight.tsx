@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import type { PokemonSet, SetProgress } from '@/types'
+import { formatPrice } from '@/lib/currency'
 
 interface SpotlightCard {
   name: string
@@ -22,6 +23,8 @@ interface CollectionSpotlightProps {
   mostOwnedQty: number
   mostExpensiveCard: SpotlightExpensiveCard | null
   statsLoading?: boolean
+  /** User's preferred currency code (ISO 4217). Defaults to 'USD'. */
+  currency?: string
 }
 
 // ── Mini stat chip ────────────────────────────────────────────────────────────
@@ -66,6 +69,7 @@ export default function CollectionSpotlight({
   mostOwnedQty,
   mostExpensiveCard,
   statsLoading = false,
+  currency = 'USD',
 }: CollectionSpotlightProps) {
   if (sets.length === 0) return null
 
@@ -214,7 +218,7 @@ export default function CollectionSpotlight({
             value={mostExpensiveCard?.name ?? (statsLoading ? '' : '—')}
             sub={
               mostExpensiveCard
-                ? <span className="text-price font-semibold">${mostExpensiveCard.price.toFixed(2)}</span>
+                ? <span className="text-price font-semibold">{formatPrice(mostExpensiveCard.price, currency)}</span>
                 : undefined
             }
           />

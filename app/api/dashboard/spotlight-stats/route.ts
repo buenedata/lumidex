@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import { supabaseAdmin } from '@/lib/supabase'
+import { EUR_TO_USD } from '@/lib/currency'
 
 /**
  * GET /api/dashboard/spotlight-stats?mostOwnedCardId=<uuid>
@@ -73,13 +74,19 @@ export async function GET(request: NextRequest) {
       let bestPrice = 0
 
       for (const row of priceRows) {
-        const price =
-          (row.tcgp_market as number | null) ??
-          (row.tcgp_normal as number | null) ??
-          (row.cm_avg_sell as number | null) ??
-          0
-        if (price > bestPrice) {
-          bestPrice  = price
+        const tcgpPrice = (row.tcgp_market as number | null) ?? (row.tcgp_normal as number | null)
+        const cmPrice   = (row.cm_avg_sell as number | null)
+
+        // Normalise to USD: TCGPlayer prices are already USD; CardMarket (cm_avg_sell) is EUR
+        const priceUsd =
+          tcgpPrice != null
+            ? tcgpPrice
+            : cmPrice != null
+              ? cmPrice * EUR_TO_USD
+              : 0
+
+        if (priceUsd > bestPrice) {
+          bestPrice  = priceUsd
           bestCardId = row.card_id as string
         }
       }
