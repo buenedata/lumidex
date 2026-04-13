@@ -41,20 +41,31 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId, seriesWi
   // Computed from only the sets that belong to the currently selected language
   // so the pills always reflect the correct series for that language.
   // Newest series first; "Other" always last.
+  //
+  // We prefer the best *real* release_date for a series when at least one set
+  // has one.  Only if **no** set in a series has a release_date do we fall back
+  // to the best created_at.  This prevents a series like Scarlet & Violet
+  // (where some Japanese sets lack release dates) from being accidentally sorted
+  // below an older series whose sets all have explicit release dates.
   const seriesOrder = useMemo(() => {
     const langSets = sets.filter(s => (s.language ?? 'en') === selectedLanguage)
-    const latestDate = new Map<string, string>()
+    const bestRelease  = new Map<string, string>()  // max non-null release_date
+    const bestFallback = new Map<string, string>()  // max created_at
     for (const set of langSets) {
       const s = set.series ?? 'Other'
-      // Fall back to created_at when release_date is null so that a series
-      // with missing release dates (e.g. some Japanese sets) is never sorted
-      // to the bottom by an empty string.
-      const dateStr = set.release_date ?? set.created_at
-      if (!latestDate.has(s) || dateStr > (latestDate.get(s) ?? '')) {
-        latestDate.set(s, dateStr)
+      if (set.release_date && set.release_date > (bestRelease.get(s) ?? '')) {
+        bestRelease.set(s, set.release_date)
+      }
+      if (set.created_at > (bestFallback.get(s) ?? '')) {
+        bestFallback.set(s, set.created_at)
       }
     }
-    return Array.from(latestDate.entries())
+    const allSeries = new Set([...bestRelease.keys(), ...bestFallback.keys()])
+    return Array.from(allSeries)
+      .map(s => {
+        const sortKey = bestRelease.get(s) ?? bestFallback.get(s) ?? ''
+        return [s, sortKey] as [string, string]
+      })
       .sort((a, b) => {
         if (a[0] === 'Other') return 1
         if (b[0] === 'Other') return -1
@@ -144,13 +155,16 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId, seriesWi
       ungrouped.get(name)!.push(set)
     }
 
-    // Preserve series order determined above; within each group push promo/energy sets last
-    const isSpecial = (name: string) => /promo|energy/i.test(name)
+    // Preserve series order determined above; within each group order:
+    // regular sets (0) → Promo sets (1) → Energy sets (2)
+    // Products card is appended last via JSX so it is effectively position 3.
+    const setOrder = (name: string) =>
+      /promo/i.test(name) ? 1 : /energy/i.test(name) ? 2 : 0
     const grouped = new Map<string, EnrichedSet[]>()
     for (const s of seriesOrder) {
       if (ungrouped.has(s)) {
         const sorted = [...ungrouped.get(s)!].sort(
-          (a, b) => Number(isSpecial(a.name)) - Number(isSpecial(b.name))
+          (a, b) => setOrder(a.name) - setOrder(b.name)
         )
         grouped.set(s, sorted)
       }

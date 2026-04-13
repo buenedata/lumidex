@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { getCardImageUrl } from '@/lib/imageUpload'
 
 export interface RelatedCard {
   id: string
@@ -117,15 +118,11 @@ export async function GET(request: NextRequest) {
     const relatedCards: RelatedCard[] = cards.map((card) => {
       const setMeta = card.set_id ? setsMap.get(card.set_id) : undefined
 
-      // Use the stored image URL; if absent generate the Supabase Storage URL
-      // from set_id + number (same convention used by lib/imageUpload.ts).
+      // Use the stored image URL; if absent fall back to the R2 public URL
+      // constructed from set_id + number (legacy non-UUID filename format).
       let resolvedImage: string | null = card.image ?? null
       if (!resolvedImage && card.set_id && card.number) {
-        const cardNumber = card.number.split('/')[0]
-        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-        if (supabaseUrl) {
-          resolvedImage = `${supabaseUrl}/storage/v1/object/public/card-images/${card.set_id}-${cardNumber}.jpg`
-        }
+        resolvedImage = getCardImageUrl(card.set_id, card.number)
       }
 
       return {

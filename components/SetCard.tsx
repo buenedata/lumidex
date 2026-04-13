@@ -70,13 +70,13 @@ function SetCard({ set, progress, onRemove, isFavorited, onFavorite }: SetCardPr
           {/* Set symbol badge — bottom-right corner, served via Next.js image optimizer. */}
           {set.symbol_url && (
             <div className="absolute bottom-1.5 right-1.5 z-20">
-              <div className="w-7 h-7 rounded bg-black/50 backdrop-blur-sm p-0.5 flex items-center justify-center">
+              <div className="w-9 h-9 rounded bg-black/50 backdrop-blur-sm p-1 flex items-center justify-center">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={set.symbol_url}
                   alt={`${set.name} symbol`}
-                  width={24}
-                  height={24}
+                  width={28}
+                  height={28}
                   className="object-contain w-full h-full"
                 />
               </div>
