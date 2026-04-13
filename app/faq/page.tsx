@@ -40,9 +40,10 @@ const FAQ_SECTIONS: { section: string; items: FAQItem[] }[] = [
           <>
             Browse to any set under{' '}
             <Link href="/sets" className="text-accent hover:underline">Sets</Link>
-            {' '}or search for a card via the top search bar. Click a card to open its detail modal,
-            then use the + / − buttons to set how many copies you own. You can track individual
-            variants (Normal, Reverse Holo, Cosmos Holo, etc.) separately.
+            {' '}or search for a card via the top search bar. Left click a variant box under the
+            card image to increase it's quantity. Right click to decrease. You can also click a 
+            card to open its detail modal, then use the + / − buttons to set how many copies you own. 
+            You can track individual variants (Normal, Reverse Holo, Cosmos Holo, etc.) separately.
           </>
         ),
       },
