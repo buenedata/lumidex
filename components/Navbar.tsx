@@ -159,7 +159,7 @@ export default function Navbar() {
                   <div className="px-4 py-3 border-b border-subtle flex items-center justify-between">
                     <p className="text-sm font-semibold text-primary">Notifications</p>
                     {proposals.length > 0 && (
-                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-400">
+                      <span className="pill text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-400">
                         {proposals.length} pending
                       </span>
                     )}

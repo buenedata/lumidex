@@ -584,7 +584,7 @@ export default function ProfilePage() {
                   {displayName}
                 </h1>
                 {isOwnProfile && (
-                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-accent-dim text-accent border border-[rgba(109,95,255,0.3)]">
+                  <span className="pill px-2 py-0.5 rounded-full text-xs font-medium bg-accent-dim text-accent border border-[rgba(109,95,255,0.3)]">
                     You
                   </span>
                 )}
@@ -639,7 +639,7 @@ export default function ProfilePage() {
                 if (!hasSocial) return null
                 return (
                   <div className="shrink-0 pb-1 flex flex-col items-center md:items-end gap-2">
-                    <p className="text-[10px] text-muted uppercase tracking-wider hidden md:block">Links</p>
+                    <p className="text-[10px] text-muted uppercase tracking-wider hidden md:block">Socials</p>
                     <div className="flex items-center gap-2">
                       {cm && (
                         <a

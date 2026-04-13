@@ -164,7 +164,7 @@ function SectionHeader({ matchCount }: { matchCount: number | null }) {
           Wanted Board
         </h2>
         {matchCount !== null && matchCount > 0 && (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-price/10 border border-price/30 text-price font-medium">
+          <span className="pill text-xs px-2 py-0.5 rounded-full bg-price/10 border border-price/30 text-price font-medium">
             {matchCount} match{matchCount !== 1 ? 'es' : ''}
           </span>
         )}
@@ -421,7 +421,7 @@ export default function WantedBoard() {
           >
             {/* Mutual badge */}
             {match.isMutual && (
-              <span className="absolute top-3 right-3 text-[10px] font-bold px-2 py-0.5 rounded-full bg-price/15 border border-price/40 text-price leading-tight">
+              <span className="pill absolute top-3 right-3 text-[10px] font-bold px-2 py-0.5 rounded-full bg-price/15 border border-price/40 text-price leading-tight">
                 MUTUAL
               </span>
             )}

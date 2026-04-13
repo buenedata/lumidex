@@ -109,7 +109,7 @@ function StoryCard({ story }: { story: Story }) {
       {/* Category badge — top left */}
       <div className="absolute top-3 left-3 z-10">
         <span
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold
+          className="pill inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold
                      bg-black/40 text-white border border-white/20 backdrop-blur-sm"
         >
           <span role="img" aria-label={story.category}>{story.categoryIcon}</span>

@@ -239,7 +239,7 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId, seriesWi
           <button
             onClick={() => setActiveSeries('All')}
             className={cn(
-              'px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-150',
+              'pill px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-150',
               activeSeries === 'All'
                 ? 'bg-accent text-white shadow-sm'
                 : 'bg-surface border border-subtle text-secondary hover:border-accent/50 hover:text-primary'
@@ -252,7 +252,7 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId, seriesWi
               key={series}
               onClick={() => setActiveSeries(series)}
               className={cn(
-                'px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-150',
+                'pill px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-150',
                 activeSeries === series
                   ? 'bg-accent text-white shadow-sm'
                   : 'bg-surface border border-subtle text-secondary hover:border-accent/50 hover:text-primary'
@@ -285,7 +285,7 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId, seriesWi
             >
               ⭐ Favorites
             </h2>
-            <span className="text-xs text-muted bg-elevated px-2 py-0.5 rounded-full">
+            <span className="pill text-xs text-muted bg-elevated px-2 py-0.5 rounded-full">
               {filteredFavorites.length}
             </span>
           </div>
@@ -320,7 +320,7 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId, seriesWi
                 >
                   {series}
                 </h2>
-                <span className="text-xs text-muted bg-elevated px-2 py-0.5 rounded-full">
+                <span className="pill text-xs text-muted bg-elevated px-2 py-0.5 rounded-full">
                   {seriesSets.length}
                 </span>
               </div>

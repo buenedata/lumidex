@@ -36,7 +36,7 @@ export default function OutgoingRequests({
     <div className={cn('mb-6 max-w-md', className)}>
       <h3 className="text-sm font-semibold text-secondary uppercase tracking-wider mb-3">
         Sent Requests
-        <span className="ml-2 px-1.5 py-0.5 rounded-full text-xs font-bold bg-elevated border border-subtle text-muted">
+        <span className="pill ml-2 px-1.5 py-0.5 rounded-full text-xs font-bold bg-elevated border border-subtle text-muted">
           {requests.length}
         </span>
       </h3>
@@ -87,7 +87,7 @@ export default function OutgoingRequests({
 
               {/* Status + Cancel */}
               <div className="flex items-center gap-3 shrink-0">
-                <span className="text-xs text-muted px-2.5 py-1 rounded-lg bg-elevated border border-subtle">
+                <span className="pill text-xs text-muted px-2.5 py-1 rounded-lg bg-elevated border border-subtle">
                   Pending…
                 </span>
                 <button

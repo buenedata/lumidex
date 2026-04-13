@@ -121,7 +121,7 @@ function SetCard({ set, progress, onRemove, isFavorited, onFavorite }: SetCardPr
           {/* Release date or Coming Soon badge */}
           {set.release_date && (
             isComingSoon ? (
-              <span className="inline-flex w-fit items-center px-2 py-0.5 rounded-full text-xs font-medium bg-accent/20 text-accent border border-accent/30">
+              <span className="pill inline-flex w-fit items-center px-2 py-0.5 rounded-full text-xs font-medium bg-accent/20 text-accent border border-accent/30">
                 Coming soon
               </span>
             ) : (

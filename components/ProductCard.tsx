@@ -122,7 +122,7 @@ export default function ProductCard({
         <div className="flex items-start justify-between gap-2">
           <span
             className={cn(
-              'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
+              'pill inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
               typeStyle.bg, typeStyle.text
             )}
           >

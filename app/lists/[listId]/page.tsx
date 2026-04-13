@@ -204,7 +204,7 @@ export default function ListDetailPage() {
                   {list.name}
                 </h1>
                 <span className={cn(
-                  'text-xs font-medium px-2 py-0.5 rounded-full',
+                  'pill text-xs font-medium px-2 py-0.5 rounded-full',
                   list.is_public
                     ? 'bg-green-500/15 text-green-400'
                     : 'bg-subtle text-muted',

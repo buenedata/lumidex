@@ -101,7 +101,7 @@ export default function DashboardHero({ totalCards, setsTracked, completedSets }
           <div className="flex flex-wrap items-center gap-2 mt-3">
             {/* Trainer rank pill */}
             <span
-              className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${rank.colour} ${rank.bgColour}`}
+              className={`pill inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${rank.colour} ${rank.bgColour}`}
             >
               <span role="img" aria-label="rank">{rank.emoji}</span>
               {rank.label}
@@ -109,15 +109,15 @@ export default function DashboardHero({ totalCards, setsTracked, completedSets }
 
             {totalCards > 0 && (
               <>
-                <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-surface border border-subtle text-secondary">
+                <span className="pill inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-surface border border-subtle text-secondary">
                   <span className="text-accent font-bold">{totalCards.toLocaleString()}</span>
                   &nbsp;cards
                 </span>
-                <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-surface border border-subtle text-secondary">
+                <span className="pill inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-surface border border-subtle text-secondary">
                   <span className="text-accent font-bold">{setsTracked}</span>
                   &nbsp;{setsTracked === 1 ? 'set' : 'sets'}
                 </span>
-                <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-surface border border-subtle text-secondary">
+                <span className="pill inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-surface border border-subtle text-secondary">
                   <span className="text-price font-bold">{completedSets}</span>
                   &nbsp;{completedSets === 1 ? 'set complete' : 'sets complete'}
                 </span>

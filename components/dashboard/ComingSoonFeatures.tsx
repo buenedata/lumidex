@@ -128,7 +128,7 @@ export default function ComingSoonFeatures() {
         >
           What&apos;s Coming to Lumidex
         </h2>
-        <span className="text-xs px-2 py-0.5 rounded-full bg-accent/15 text-accent font-medium border border-accent/30">
+        <span className="pill text-xs px-2 py-0.5 rounded-full bg-accent/15 text-accent font-medium border border-accent/30">
           Roadmap
         </span>
       </div>

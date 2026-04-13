@@ -57,7 +57,7 @@ export default function BrowseFilters({ filters, onChange }: BrowseFiltersProps)
               key={st}
               onClick={() => onChange('supertype', active ? '' : st)}
               className={cn(
-                'px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
+                'pill px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
                 active
                   ? 'bg-accent/15 text-accent border-accent/50'
                   : 'bg-elevated text-secondary border-subtle hover:border-accent/30 hover:text-primary',
@@ -77,7 +77,7 @@ export default function BrowseFilters({ filters, onChange }: BrowseFiltersProps)
             value={filters.type}
             onChange={e => onChange('type', e.target.value)}
             className={cn(
-              'appearance-none h-7 pl-3 pr-7 rounded-full text-xs font-medium border cursor-pointer transition-all focus:outline-none focus:ring-1 focus:ring-accent/30',
+              'pill appearance-none h-7 pl-3 pr-7 rounded-full text-xs font-medium border cursor-pointer transition-all focus:outline-none focus:ring-1 focus:ring-accent/30',
               filters.type
                 ? typeActive
                 : 'bg-elevated text-secondary border-subtle hover:border-accent/30',
@@ -100,7 +100,7 @@ export default function BrowseFilters({ filters, onChange }: BrowseFiltersProps)
             value={filters.rarity}
             onChange={e => onChange('rarity', e.target.value)}
             className={cn(
-              'appearance-none h-7 pl-3 pr-7 rounded-full text-xs font-medium border cursor-pointer transition-all focus:outline-none focus:ring-1 focus:ring-accent/30',
+              'pill appearance-none h-7 pl-3 pr-7 rounded-full text-xs font-medium border cursor-pointer transition-all focus:outline-none focus:ring-1 focus:ring-accent/30',
               filters.rarity
                 ? rarityActive
                 : 'bg-elevated text-secondary border-subtle hover:border-accent/30',

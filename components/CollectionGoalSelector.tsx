@@ -94,7 +94,7 @@ export default function CollectionGoalSelector({
               aria-pressed={isActive}
               className={cn(
                 // Base
-                'relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium',
+                'pill relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium',
                 'border transition-all duration-150 select-none',
                 // Active state
                 isActive

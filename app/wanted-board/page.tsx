@@ -125,7 +125,7 @@ function MatchPanel({ match, pendingProposal, onViewOffers }: {
             )}
           </div>
           {match.isMutual && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-price/15 border border-price/40 text-price">
+            <span className="pill text-[10px] font-bold px-2 py-0.5 rounded-full bg-price/15 border border-price/40 text-price">
               MUTUAL
             </span>
           )}

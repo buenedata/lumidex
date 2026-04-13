@@ -62,7 +62,7 @@ export default function FriendRequests({ initialRequests, onFriendAccepted, clas
     <div className={cn('mb-6', className)}>
       <h3 className="text-sm font-semibold text-secondary uppercase tracking-wider mb-3">
         Friend Requests
-        <span className="ml-2 px-1.5 py-0.5 rounded-full text-xs font-bold bg-accent text-white">
+        <span className="pill ml-2 px-1.5 py-0.5 rounded-full text-xs font-bold bg-accent text-white">
           {requests.length}
         </span>
       </h3>

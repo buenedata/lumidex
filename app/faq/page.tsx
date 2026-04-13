@@ -55,9 +55,9 @@ const FAQ_SECTIONS: { section: string; items: FAQItem[] }[] = [
         question: 'How do I track sealed products?',
         answer: (
           <>
-            Go to your{' '}
-            <Link href="/collection" className="text-accent hover:underline">Collection</Link>
-            {' '}page and switch to the Sealed Products tab. You can add booster boxes, ETBs, tins, and other sealed items.
+            Navigate to the{' '}
+            <Link href="/sets" className="text-accent hover:underline">Sets</Link>
+            {' '}page and open any set. From there, go to the <strong>Products</strong> tab to find booster boxes, ETBs, tins, and other sealed items for that set — then use the + / − buttons to track how many you own.
           </>
         ),
       },
