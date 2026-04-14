@@ -16,8 +16,13 @@ import type { PokemonCard } from '../types'
  * Without cardId → "{setId}-{cardNumber}.jpg"            (legacy fallback only)
  */
 export function generateImageFilename(setId: string, number: string, cardId?: string): string {
-  // Extract card number (before slash): "50/64" → "50", "4" → "4"
-  const cardNumber = number.split('/')[0]
+  // Extract card number (before slash): "50/64" → "50", "?/28" → "?"
+  const raw = number.split('/')[0]
+  // Sanitise: replace any character that is not alphanumeric or a hyphen with
+  // an underscore so the resulting filename is always a valid URL path segment.
+  // This handles special promo numbers like '#?/28' where '?' would otherwise
+  // be interpreted as the start of a URL query string, breaking the CDN URL.
+  const cardNumber = raw.replace(/[^a-zA-Z0-9-]/g, '_')
   if (cardId) {
     return `${setId}-${cardNumber}-${cardId}.webp`
   }

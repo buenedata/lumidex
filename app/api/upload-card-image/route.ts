@@ -15,10 +15,15 @@ import { uploadToR2, deleteFromR2, getR2Url } from '@/lib/r2'
  * replacements — writes to a NEW R2 key with a NEW public URL.  This prevents
  * the Cloudflare CDN from serving the old cached image when a card is re-uploaded
  * to the same logical filename as before.
+ *
+ * The card number is sanitised so that special characters (e.g. '?' in secret-rare
+ * promos like '#?/28') never end up in the URL, where they would break the CDN path.
+ * Any character that is not alphanumeric or a hyphen is replaced with an underscore.
  */
 function generateImageFilename(setId: string, number: string, cardId: string): string {
-  const cardNumber = number.split('/')[0]
-  const version    = Math.floor(Date.now() / 1000)   // Unix seconds — short but unique
+  const rawNumber  = number.split('/')[0]
+  const cardNumber = rawNumber.replace(/[^a-zA-Z0-9-]/g, '_')   // e.g. '?' → '_'
+  const version    = Math.floor(Date.now() / 1000)               // Unix seconds — short but unique
   return `${setId}-${cardNumber}-${cardId}-${version}.webp`
 }
 
