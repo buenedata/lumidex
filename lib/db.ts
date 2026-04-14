@@ -95,21 +95,30 @@ export function hasPromoCards(cards: DbCard[]): boolean {
 }
 
 /**
- * Get all sets ordered by release date (newest first)
+ * Get all sets ordered by release date (newest first) — unstable_cache-wrapped.
+ *
+ * Set metadata changes only when an admin imports a new set.  A 5-minute
+ * cache (matching the /api/sets Cache-Control header) means the full set list
+ * is served from Vercel's Data Cache on warm requests instead of hitting
+ * Supabase on every /sets page load.
  */
-export async function getSets(): Promise<DbSet[]> {
-  const { data, error } = await supabase
-    .from('sets')
-    .select('id:set_id, name, series, total:setTotal, setComplete, release_date, logo_url, symbol_url, created_at, language')
-    .order('release_date', { ascending: false })
-  
-  if (error) {
-    console.error('Error fetching sets:', error)
-    throw new Error(`Failed to fetch sets: ${error.message}`)
-  }
-  
-  return data || []
-}
+export const getSets = unstable_cache(
+  async (): Promise<DbSet[]> => {
+    const { data, error } = await supabase
+      .from('sets')
+      .select('id:set_id, name, series, total:setTotal, setComplete, release_date, logo_url, symbol_url, created_at, language')
+      .order('release_date', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching sets:', error)
+      throw new Error(`Failed to fetch sets: ${error.message}`)
+    }
+
+    return data || []
+  },
+  ['db:getSets'],
+  { revalidate: 300, tags: ['sets'] },
+)
 
 /**
  * Get specific set by ID — unstable_cache-wrapped.

@@ -5,6 +5,7 @@
  * Cards without a price row are omitted — the UI shows a dash for unpriced cards.
  */
 
+import { unstable_cache } from 'next/cache'
 import { supabaseAdmin } from '@/lib/supabase'
 import type { PriceSource, PokemonCard } from '@/types'
 
@@ -147,9 +148,10 @@ export interface SeriesProductGroup {
  *                           SELECT id FROM cards query is skipped entirely,
  *                           saving one DB round-trip (~100–200 ms).
  */
-export async function getCardPricesForSet(
+// ── Private inner — the actual DB logic ──────────────────────────────────────
+async function _fetchCardPricesForSet(
   setId: string,
-  priceSource: PriceSource = 'tcgplayer',
+  priceSource: PriceSource,
   preloadedCardIds?: string[],
 ): Promise<Record<string, CardPriceData>> {
   let cardIds: string[]
@@ -233,6 +235,35 @@ export async function getCardPricesForSet(
 }
 
 /**
+ * Fetches all card prices for a set from the `card_prices` table — unstable_cache-wrapped.
+ *
+ * Returns a Record<cardId, CardPriceData> keyed by the internal UUID.
+ * Cards with no price row are omitted — those cards should show no price.
+ *
+ * Prices are written by a background cron job, not by user actions, so a
+ * 5-minute stale window is safe and dramatically reduces cold-start latency.
+ * Cache key is setId + priceSource; preloadedCardIds is an optimisation hint
+ * passed through on cache-miss to skip the redundant cards lookup.
+ *
+ * @param setId              The set's text ID (e.g. "sv1")
+ * @param priceSource        User preference: 'tcgplayer' | 'cardmarket'
+ * @param preloadedCardIds   Optional card UUIDs already fetched by the caller
+ *                           (e.g. from getCardsBySet). Skips one DB round-trip
+ *                           on cache miss; ignored on cache hit.
+ */
+export function getCardPricesForSet(
+  setId: string,
+  priceSource: PriceSource = 'tcgplayer',
+  preloadedCardIds?: string[],
+): Promise<Record<string, CardPriceData>> {
+  return unstable_cache(
+    () => _fetchCardPricesForSet(setId, priceSource, preloadedCardIds),
+    [`pricing:cardPrices:${setId}:${priceSource}`],
+    { revalidate: 300, tags: ['prices', `set-prices:${setId}`] },
+  )()
+}
+
+/**
  * Fetches sealed product prices for a set from `set_products`.
  * Returns an empty array if no products are synced for this set.
  */
@@ -253,41 +284,44 @@ export async function getSealedProductsForSet(
   return (data ?? []) as SetProductPrice[]
 }
 
+// ── Private cached inner — returns string[] because Set is not JSON-serialisable
+// and unstable_cache serialises return values via JSON.
+const _getSeriesWithProductsCached = unstable_cache(
+  async (): Promise<string[]> => {
+    // Single JOIN query — collapses the former 2-step sequential round-trip
+    // (fetch set_ids THEN fetch series) into one Supabase call.
+    const { data, error } = await supabaseAdmin
+      .from('set_products')
+      .select('sets!inner(series)')
+
+    if (error) {
+      console.error('[pricing] getSeriesWithProducts error:', error)
+      return []
+    }
+
+    const seriesSet = new Set<string>()
+    for (const row of (data ?? []) as any[]) {
+      const series = (row as any).sets?.series
+      if (series) seriesSet.add(series as string)
+    }
+    return [...seriesSet]
+  },
+  ['pricing:getSeriesWithProducts'],
+  { revalidate: 600, tags: ['sets', 'products'] },
+)
+
 /**
  * Returns the set of series names that have at least one sealed product
  * in `set_products`. Used by the Sets page to conditionally show the
  * "Products" entry card per series.
+ *
+ * Cached for 10 minutes — invariant to user actions, only changes when an
+ * admin adds/removes products. Previously made 2 sequential DB round-trips;
+ * now uses a single JOIN query and Vercel Data Cache.
  */
 export async function getSeriesWithProducts(): Promise<Set<string>> {
-  // Fetch all set_ids that have at least one product row
-  const { data: productRows, error: prodErr } = await supabaseAdmin
-    .from('set_products')
-    .select('set_id')
-
-  if (prodErr) {
-    console.error('[pricing] getSeriesWithProducts product lookup error:', prodErr)
-    return new Set()
-  }
-
-  const setIds = [...new Set((productRows ?? []).map(r => r.set_id as string))]
-  if (setIds.length === 0) return new Set()
-
-  // Resolve which series those sets belong to
-  const { data: setRows, error: setErr } = await supabaseAdmin
-    .from('sets')
-    .select('set_id, series')
-    .in('set_id', setIds)
-
-  if (setErr) {
-    console.error('[pricing] getSeriesWithProducts set lookup error:', setErr)
-    return new Set()
-  }
-
-  const seriesSet = new Set<string>()
-  for (const row of (setRows ?? [])) {
-    if (row.series) seriesSet.add(row.series as string)
-  }
-  return seriesSet
+  const series = await _getSeriesWithProductsCached()
+  return new Set(series)
 }
 
 /**

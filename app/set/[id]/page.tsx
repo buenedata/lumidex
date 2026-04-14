@@ -158,7 +158,7 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
       })
       .catch(err => console.warn('[set page] Price lookup failed:', err)),
 
-    batchFetchVariantStructure(cardIds)
+    batchFetchVariantStructure(cardIds, id)
       .then(r => { initialCardVariants = r })
       .catch(() => { /* non-fatal — dots fall back to client-side batch fetch */ }),
   ])

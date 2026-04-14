@@ -8,24 +8,13 @@
  * Do NOT import this file from client components.
  */
 
+import { unstable_cache } from 'next/cache'
 import { supabaseAdmin } from '@/lib/supabase'
 import { getAvailableVariantIds } from '@/lib/variants'
 import type { Variant, QuickAddVariant } from '@/types'
 
-/**
- * Replicates the POST /api/variants batch handler without the HTTP round-trip.
- *
- * Returns `Record<cardId, QuickAddVariant[]>` with quantity = 0 for every card.
- * The structure (which variant dots to show) is determined the same way as the
- * API route:
- *   1. Explicit per-card overrides from card_variant_availability
- *   2. Card-specific variants (variants.card_id = cardId)
- *   3. Rarity-based fallback via getAvailableVariantIds()
- *
- * User quantities remain 0 until the Zustand store hydrates client-side; the
- * dots appear on first paint and the "+/-" button values update silently later.
- */
-export async function batchFetchVariantStructure(
+// ── Private inner — the actual DB logic ──────────────────────────────────────
+async function _batchFetchVariantStructure(
   cardIds: string[],
 ): Promise<Record<string, QuickAddVariant[]>> {
   if (cardIds.length === 0) return {}
@@ -142,4 +131,40 @@ export async function batchFetchVariantStructure(
   }
 
   return result
+}
+
+/**
+ * Replicates the POST /api/variants batch handler without the HTTP round-trip —
+ * unstable_cache-wrapped.
+ *
+ * Returns `Record<cardId, QuickAddVariant[]>` with quantity = 0 for every card.
+ * The structure (which variant dots to show) is determined the same way as the
+ * API route:
+ *   1. Explicit per-card overrides from card_variant_availability
+ *   2. Card-specific variants (variants.card_id = cardId)
+ *   3. Rarity-based fallback via getAvailableVariantIds()
+ *
+ * User quantities remain 0 until the Zustand store hydrates client-side; the
+ * dots appear on first paint and the "+/-" button values update silently later.
+ *
+ * @param cardIds  Card UUIDs to resolve variant structure for.
+ * @param setId    Optional stable cache-key hint. When provided (recommended)
+ *                 the cache key is compact (`variants:batch:{setId}`). When
+ *                 omitted the sorted card IDs are used as the key instead.
+ */
+export function batchFetchVariantStructure(
+  cardIds: string[],
+  setId?: string,
+): Promise<Record<string, QuickAddVariant[]>> {
+  if (cardIds.length === 0) return Promise.resolve({})
+
+  // Prefer setId as the cache key — it is short and stable.
+  // Fall back to sorted card IDs for callers that don't know the setId.
+  const cacheKey = setId ?? [...cardIds].sort().join(',')
+
+  return unstable_cache(
+    () => _batchFetchVariantStructure(cardIds),
+    [`variants:batch:${cacheKey}`],
+    { revalidate: 600, tags: ['variants'] },
+  )()
 }
