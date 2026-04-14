@@ -14,7 +14,8 @@ import { formatPrice } from '@/lib/pricing'
 interface SetPageCardsProps {
   cards: PokemonCard[]
   setTotal: number
-  setName: string
+  /** When omitted (browse page), CardGrid falls back to per-card set_name in the modal. */
+  setName?: string
   setComplete?: number
   initialCardId?: string
   showSearch?: boolean
@@ -60,7 +61,7 @@ const sortOptions: { label: string; value: SortBy }[] = [
 export default function SetPageCards({
   cards,
   setTotal,
-  setName,
+  setName = '',
   setComplete,
   initialCardId,
   showSearch = true,
@@ -90,6 +91,8 @@ export default function SetPageCards({
   // Set to true once the batch variant fetch detects any card-specific variants.
   // Combined with hasPromos to determine Grandmaster Set selector visibility.
   const [hasExtraVariants, setHasExtraVariants] = useState(false)
+  // Tracks whether the batch variant fetch is in flight — drives the variant key shimmer.
+  const [variantsBatchLoading, setVariantsBatchLoading] = useState(false)
   // Goal-aware Have/Need counts emitted by CardGrid after the batch variant load.
   // null until first emission — tab badges fall back to the basic Zustand counts.
   const [goalHave, setGoalHave] = useState<number | null>(null)
@@ -100,7 +103,7 @@ export default function SetPageCards({
   }, [])
 
   const { userCards: storeUserCards } = useCollectionStore()
-  const { user, profile } = useAuthStore()
+  const { user, profile, isLoading: isAuthLoading } = useAuthStore()
   const isAuthenticated = !!user
 
   // Prefer the client-side profile's preferred_currency (always up-to-date after
@@ -235,8 +238,22 @@ export default function SetPageCards({
             onChange={setCollectionGoal}
           />
 
-          {/* Variant legend — mirrors CollectionGoalSelector's flex-col structure so rows align */}
-          {legendVariants.filter(v => v.color !== 'gray').length > 0 && (
+          {/* Variant legend — shimmer while batch fetch is in progress, real legend after */}
+          {isAuthenticated && variantsBatchLoading ? (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs text-muted uppercase tracking-wider select-none">
+                Variant Key
+              </span>
+              <div className="flex items-center gap-3">
+                {[0, 1, 2].map(i => (
+                  <div key={i} className="flex items-center gap-1.5 animate-pulse">
+                    <div className="w-3 h-3 rounded-full bg-surface shrink-0" />
+                    <div className="h-2 bg-surface rounded w-10" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : legendVariants.filter(v => v.color !== 'gray').length > 0 ? (
             <div className="flex flex-col gap-1.5">
               <span className="text-xs text-muted uppercase tracking-wider select-none">
                 Variant Key
@@ -265,7 +282,7 @@ export default function SetPageCards({
                 ))}
               </div>
             </div>
-          )}
+          ) : null}
 
           {/* Binder Guide button — aligned to the right via ml-auto */}
           <div className="flex flex-col gap-1.5 ml-auto">
@@ -289,7 +306,15 @@ export default function SetPageCards({
       </div>
 
       {/* ── Progress bar (only when user has anything collected) ─── */}
-      {isAuthenticated && progressOwned > 0 && (
+      {isAuthLoading ? (
+        // Skeleton while Supabase auth is resolving — prevents layout shift
+        <div className="max-w-screen-2xl mx-auto px-6 py-3 border-b border-subtle">
+          <div className="flex items-center gap-3 animate-pulse">
+            <div className="flex-1 h-2 bg-surface rounded-full" />
+            <div className="w-24 h-2 bg-surface rounded" />
+          </div>
+        </div>
+      ) : isAuthenticated && progressOwned > 0 ? (
         <div className="max-w-screen-2xl mx-auto px-6 py-3 border-b border-subtle">
           <div className="flex items-center gap-3">
             <div className="flex-1 h-2 bg-surface rounded-full overflow-hidden">
@@ -306,7 +331,7 @@ export default function SetPageCards({
             </span>
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* ── Search bar ───────────────────────────────────────────── */}
       {showSearch && (
@@ -451,6 +476,7 @@ export default function SetPageCards({
               onCountsChange={handleCountsChange}
               onVariantsLegendChange={setLegendVariants}
               onHasExtraVariants={setHasExtraVariants}
+              onVariantsBatchLoading={setVariantsBatchLoading}
               disableGreyOut={disableGreyOut}
             />
         )}

@@ -1,7 +1,8 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useCollectionStore, useAuthStore } from '@/lib/store'
 import BrowseHero      from './BrowseHero'
 import ArtistResults   from './ArtistResults'
 import ProductResults  from './ProductResults'
@@ -25,7 +26,7 @@ function asPokemonCards(cards: CardSearchResult[]): PokemonCard[] {
     image:        c.image_url,
     image_url:    c.image_url,   // legacy field expected by CardGrid
     created_at:   '',
-    set_name:     c.set.name,
+    set_name:     c.set.name,    // per-card set name used in the card modal
     set_logo_url: c.set.logo_url,
   }))
 }
@@ -40,8 +41,7 @@ interface BrowseClientProps {
   initialProducts: BrowseProduct[]
   allProducts:     BrowseProduct[]
   discoveryData:   DiscoveryData | null
-  /** Card UUID → best market price in USD (server-fetched) */
-  cardPricesUSD:   Record<string, number>
+  // cardPricesUSD is no longer fetched server-side — loaded lazily on the client
   currency:        string
   priceSource:     PriceSource
 }
@@ -56,12 +56,40 @@ export default function BrowseClient({
   initialProducts,
   allProducts,
   discoveryData,
-  cardPricesUSD,
   currency,
   priceSource,
 }: BrowseClientProps) {
   const router       = useRouter()
   const searchParams = useSearchParams()
+
+  // ── Bug #2c: pre-warm user collection data ─────────────────────────────────
+  // Trigger fetchUserCards here — before CardGrid mounts — so the progress bar
+  // and variant dots appear as soon as possible for logged-in users.
+  const { fetchUserCards, userCards: storeUserCards } = useCollectionStore()
+  const { user } = useAuthStore()
+  useEffect(() => {
+    if (user?.id && storeUserCards.size === 0) {
+      fetchUserCards()
+    }
+    // Only re-run when the user identity changes; fetchUserCards is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id])
+
+  // ── Bug #2a: load card prices client-side after initial render ─────────────
+  // Removing this from SSR halves server render time for card searches.
+  // Prices load asynchronously after the card grid is already visible.
+  const [cardPricesUSD, setCardPricesUSD] = useState<Record<string, number>>({})
+  useEffect(() => {
+    if (initialCards.length === 0) {
+      setCardPricesUSD({})
+      return
+    }
+    const ids = initialCards.map(c => c.id).join(',')
+    fetch(`/api/prices/batch?ids=${encodeURIComponent(ids)}&source=${priceSource}`)
+      .then(r => r.json())
+      .then(data => setCardPricesUSD(data.prices ?? {}))
+      .catch(() => setCardPricesUSD({}))
+  }, [initialCards, priceSource])
 
   const mode: SearchMode = (searchParams.get('mode') as SearchMode) ?? initialMode
 
@@ -78,9 +106,26 @@ export default function BrowseClient({
     router.push(`/browse?artist=${encodeURIComponent(artist.name)}`)
   }, [router])
 
-  // ── Shared SetPageCards props for both cards-mode and artist-view ──────────
+  // ── Shared SetPageCards data ───────────────────────────────────────────────
   const pokemonCards = asPokemonCards(initialCards)
   const hasPromos    = initialCards.some(c => c.rarity?.toLowerCase().includes('promo'))
+
+  // Shared SetPageCards props used by both artist-view and cards-mode.
+  // Bug #1 fix: setName is intentionally NOT passed here so that CardGrid
+  // falls back to selectedCard.set_name (populated per-card in asPokemonCards),
+  // displaying the actual set name (e.g. "Obsidian Flames") rather than the
+  // search query (e.g. "togekiss 85") in the card modal header.
+  const sharedSetPageCardsProps = {
+    cards:          pokemonCards,
+    setTotal:       pokemonCards.length,
+    showSearch:     false as const,
+    setId:          '',
+    hasPromos,
+    cardPricesUSD,
+    currency,
+    priceSource,
+    disableGreyOut: true as const,
+  }
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -117,18 +162,7 @@ export default function BrowseClient({
               {pokemonCards.length} card{pokemonCards.length !== 1 ? 's' : ''}
             </p>
           </div>
-          <SetPageCards
-            cards={pokemonCards}
-            setTotal={pokemonCards.length}
-            setName={artistQuery!}
-            showSearch={false}
-            setId=""
-            hasPromos={hasPromos}
-            cardPricesUSD={cardPricesUSD}
-            currency={currency}
-            priceSource={priceSource}
-            disableGreyOut={true}
-          />
+          <SetPageCards {...sharedSetPageCardsProps} />
         </>
 
       ) : (
@@ -146,24 +180,15 @@ export default function BrowseClient({
                 </h2>
                 <p className="text-sm text-muted mt-1">
                   {pokemonCards.length} card{pokemonCards.length !== 1 ? 's' : ''}
-                  {pokemonCards.length === 0 ? '' : ` across ${new Set(initialCards.map(c => c.set.id)).size} set${new Set(initialCards.map(c => c.set.id)).size !== 1 ? 's' : ''}`}
+                  {pokemonCards.length === 0
+                    ? ''
+                    : ` across ${new Set(initialCards.map(c => c.set.id)).size} set${new Set(initialCards.map(c => c.set.id)).size !== 1 ? 's' : ''}`}
                 </p>
               </div>
 
               {/* Full CardGrid with card modal — identical to set pages */}
               {pokemonCards.length > 0 ? (
-                <SetPageCards
-                    cards={pokemonCards}
-                    setTotal={pokemonCards.length}
-                    setName={committedQuery}
-                    showSearch={false}
-                    setId=""
-                    hasPromos={hasPromos}
-                    cardPricesUSD={cardPricesUSD}
-                    currency={currency}
-                    priceSource={priceSource}
-                    disableGreyOut={true}
-                  />
+                <SetPageCards {...sharedSetPageCardsProps} />
               ) : (
                 <div className="max-w-screen-2xl mx-auto px-6 py-20 text-center">
                   <div className="text-5xl mb-4">🔍</div>

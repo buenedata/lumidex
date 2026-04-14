@@ -1,7 +1,6 @@
 import { Suspense } from 'react'
-import { createClient } from '@supabase/supabase-js'
 import BrowseClient from '@/components/browse/BrowseClient'
-import { getSealedProductsForAllSeries, EUR_TO_USD } from '@/lib/pricing'
+import { getSealedProductsForAllSeries } from '@/lib/pricing'
 import { supabaseAdmin } from '@/lib/supabase'
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import type { SeriesProductGroup } from '@/lib/pricing'
@@ -15,12 +14,6 @@ import type {
   DiscoverySet,
   ActiveFilters,
 } from '@/components/browse/types'
-
-// ── Supabase anon client — cards/sets are publicly readable ──────────────────
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-)
 
 // Always SSR — results depend on search params
 export const dynamic = 'force-dynamic'
@@ -62,7 +55,7 @@ async function fetchCardResults(
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let q: any = supabase
+  let q: any = supabaseAdmin
     .from('cards')
     .select('id, name, number, rarity, type, supertype, image, set_id, sets!inner(name, series, release_date, logo_url)')
 
@@ -77,7 +70,7 @@ async function fetchCardResults(
 }
 
 async function fetchArtistCardResults(artistQuery: string): Promise<CardSearchResult[]> {
-  const { data } = await supabase
+  const { data } = await supabaseAdmin
     .from('cards')
     .select('id, name, number, rarity, type, supertype, image, set_id, sets!inner(name, series, release_date, logo_url)')
     .ilike('artist', `%${artistQuery}%`)
@@ -88,7 +81,7 @@ async function fetchArtistCardResults(artistQuery: string): Promise<CardSearchRe
 }
 
 async function fetchArtistResults(query: string): Promise<ArtistResult[]> {
-  const { data } = await supabase
+  const { data } = await supabaseAdmin
     .from('cards')
     .select('artist, image')
     .ilike('artist', `%${query}%`)
@@ -115,13 +108,13 @@ async function fetchArtistResults(query: string): Promise<ArtistResult[]> {
 
 async function fetchDiscoveryData(): Promise<DiscoveryData> {
   const [setsResult, artistCardsResult] = await Promise.all([
-    supabase
+    supabaseAdmin
       .from('sets')
       .select('set_id, name, series, logo_url, release_date, "setTotal"')
       .not('release_date', 'is', null)
       .order('release_date', { ascending: false })
       .limit(4),
-    supabase
+    supabaseAdmin
       .from('cards')
       .select('artist, image')
       .not('artist', 'is', null)
@@ -203,35 +196,6 @@ function toCardResults(data: any[]): CardSearchResult[] {
   })
 }
 
-/** Batch-fetch best market prices for an array of card UUIDs. */
-async function fetchCardPrices(
-  cardIds: string[],
-  ps: PriceSource,
-): Promise<Record<string, number>> {
-  if (cardIds.length === 0) return {}
-  try {
-    const { data } = await supabaseAdmin
-      .from('card_prices')
-      .select('card_id, tcgp_market, cm_avg_sell, cm_trend')
-      .in('card_id', cardIds)
-
-    const result: Record<string, number> = {}
-    for (const row of (data ?? []) as any[]) {
-      let price: number | null = null
-      if (ps === 'tcgplayer') {
-        price = row.tcgp_market ?? null
-      } else {
-        const eur = row.cm_avg_sell ?? row.cm_trend ?? null
-        price = eur != null ? eur * EUR_TO_USD : null
-      }
-      if (price != null) result[row.card_id] = price
-    }
-    return result
-  } catch {
-    return {}
-  }
-}
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default async function BrowsePage({ searchParams }: BrowsePageProps) {
   const params = await searchParams
@@ -308,12 +272,6 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
       : Promise.resolve(),
   ])
 
-  // ── Batch-fetch card prices (after cards are known) ───────────────────────
-  const cardPricesUSD = await fetchCardPrices(
-    initialCards.map(c => c.id),
-    priceSource,
-  )
-
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--color-bg-base)' }}>
       <Suspense
@@ -332,7 +290,6 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
           initialProducts={initialProducts}
           allProducts={allProducts}
           discoveryData={discoveryData}
-          cardPricesUSD={cardPricesUSD}
           currency={currency}
           priceSource={priceSource}
         />

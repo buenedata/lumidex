@@ -117,6 +117,12 @@ interface CardGridProps {
    * Allows parent pages (e.g. /wanted) to remove the card from their list without a refresh.
    */
   onWantedStatusChange?: (cardId: string, isWanted: boolean) => void
+  /**
+   * Called with `true` when the batch variant fetch starts and `false` when it
+   * completes (success or error).  Used by SetPageCards to show a shimmer while
+   * variant dots are loading.
+   */
+  onVariantsBatchLoading?: (loading: boolean) => void
 }
 
 /** Badge classes per grading company — used in the "My Graded Copies" card-tab section. */
@@ -299,7 +305,7 @@ function getTypeGlowClass(type: string | null | undefined): string {
   return known.includes(key) ? `card-type-${key}` : ''
 }
 
-export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', sortDirection = 'asc', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', priceSource = 'tcgplayer', onVariantsLegendChange, onHasExtraVariants, allCards, onCountsChange, disableGreyOut = false, onWantedStatusChange }: CardGridProps) {
+export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', sortDirection = 'asc', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', priceSource = 'tcgplayer', onVariantsLegendChange, onHasExtraVariants, allCards, onCountsChange, disableGreyOut = false, onWantedStatusChange, onVariantsBatchLoading }: CardGridProps) {
   const { updateCardQuantity, userCards: storeUserCards, fetchUserCards } = useCollectionStore()
   const { user, isLoading, profile } = useAuthStore()
   // Prefer the client-side profile's preferred_currency (always reliable after login)
@@ -361,6 +367,9 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   // computed value, not on the callback identity, preventing render cascades.
   const onCountsChangeRef = useRef(onCountsChange)
   useEffect(() => { onCountsChangeRef.current = onCountsChange }, [onCountsChange])
+  // Stable ref for onVariantsBatchLoading — same pattern as onCountsChange
+  const onVariantsBatchLoadingRef = useRef(onVariantsBatchLoading)
+  useEffect(() => { onVariantsBatchLoadingRef.current = onVariantsBatchLoading }, [onVariantsBatchLoading])
   // Tracks cards whose full variants (incl. variant_image_url) have been loaded via GET.
   const cardVariantsLoadedRef = useRef(new Set<string>())
   // Cache for related-card results — avoids re-fetching on every modal open for the same card.
@@ -703,7 +712,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   // to prevent an infinite update loop.
   useEffect(() => {
     if (!userId || cards.length === 0) return
-    
+
+    onVariantsBatchLoadingRef.current?.(true)
     const loadAllVariants = async () => {
       try {
         // POST instead of GET — card IDs travel in the body so large sets don't
@@ -778,9 +788,11 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
       } catch (error) {
         console.error('Failed to batch load variants:', error)
+      } finally {
+        onVariantsBatchLoadingRef.current?.(false)
       }
     }
-    
+
     loadAllVariants()
   }, [cards, userId])
 
