@@ -269,6 +269,14 @@ export function CardImageUploadModal({ card, isOpen, onClose, onUploadSuccess, o
   const handleCardUpload = async () => {
     if (!card || !selectedFile) return
 
+    // Ensure we always have a local preview URL for the success state.
+    // urlPreviewSrc is already set for URL-paste flows; for direct file drops
+    // it is null, so we create an objectURL from the in-memory file here.
+    // This means the success preview image never depends on CDN propagation timing.
+    if (!urlPreviewSrc) {
+      setUrlPreviewSrc(URL.createObjectURL(selectedFile))
+    }
+
     setUploadState({ uploading: true, success: false, error: null, imageUrl: null })
 
     const pokemonCard = {
@@ -466,10 +474,12 @@ export function CardImageUploadModal({ card, isOpen, onClose, onUploadSuccess, o
                     <div className="space-y-4">
                       <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg text-center">
                         <p className="text-green-400 font-semibold text-lg">✅ Image uploaded!</p>
-                        {uploadState.imageUrl && (
+                        {/* Prefer the local objectURL preview (set before upload starts)
+                            so the image always renders instantly — no CDN propagation wait. */}
+                        {(urlPreviewSrc ?? uploadState.imageUrl) && (
                           <div className="mt-3 flex justify-center">
                             <img
-                              src={uploadState.imageUrl}
+                              src={urlPreviewSrc ?? uploadState.imageUrl!}
                               alt="Uploaded card"
                               className="h-32 w-auto rounded shadow-lg"
                             />
