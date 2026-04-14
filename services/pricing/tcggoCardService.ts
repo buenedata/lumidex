@@ -34,9 +34,13 @@ export interface TcggoTcgpPrices {
 }
 
 export interface TcggoCardPriceEntry {
-  cardNumber:  number
-  cardmarket:  TcggoCmPrices
-  tcgplayer:   TcggoTcgpPrices
+  cardNumber:    number
+  /** tcggo.com internal card ID — used for per-card history-price API calls */
+  tcggoId:       number | null
+  /** CardMarket product ID for the normal variant */
+  cardmarketId:  number | null
+  cardmarket:    TcggoCmPrices
+  tcgplayer:     TcggoTcgpPrices
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -145,8 +149,13 @@ function parseCards(raw: any[]): TcggoCardPriceEntry[] {
     const cm = c.prices?.cardmarket ?? {}
     const tcp = c.prices?.tcg_player ?? c.prices?.tcgplayer ?? {}
 
+    const tcggoId      = typeof c.id === 'number' ? c.id : null
+    const cardmarketId = typeof c.cardmarket_id === 'number' ? c.cardmarket_id : null
+
     entries.push({
       cardNumber,
+      tcggoId,
+      cardmarketId,
       cardmarket: {
         avg30: safeNum(cm['30d_average']),
         avg7:  safeNum(cm['7d_average']),

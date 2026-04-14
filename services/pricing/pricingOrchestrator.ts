@@ -170,7 +170,7 @@ async function processSingleSet(
 ): Promise<ProcessSetResult> {
   let query = supabaseAdmin
     .from('cards')
-    .select('id, name, set_id, number, api_id, rarity')
+    .select('id, name, set_id, number, api_id, language, rarity')
     .eq('set_id', setId)
 
   if (limit !== undefined) {
@@ -234,6 +234,12 @@ async function processSingleSet(
     const cmUrlMap = new Map<string, string>()
 
     const results = await mapConcurrent(cards, concurrency, async (card) => {
+      // Skip pokemontcg.io entirely for Japanese cards — they have no api_id and are
+      // not indexed by that API. Prices come exclusively from the tcggo/CardMarket
+      // fallback via mergeTcggoPrices() below.
+      if (card.language === 'ja') {
+        return { card, apiPoints: [] as ReturnType<typeof normalizePoints>, cmUrl: null }
+      }
       const apiResult = await fetchPokemonApiPrices(card)
       const apiPoints = normalizePoints(apiResult.points)
       return { card, apiPoints, cmUrl: apiResult.cmUrl ?? null }
@@ -259,17 +265,32 @@ async function processSingleSet(
     }
 
     // Aggregate each card concurrently and write to card_prices cache.
-    // Runs even when pokemontcg.io returned no points — tcggo prices still apply.
-    if (allPoints.length > 0 || tcggoPriceMap) {
-      await mapConcurrent(processedCardIds, 10, async (cardId) => {
-        const agg = await aggregatePricesForCard(cardId)
-        const cmUrl = cmUrlMap.get(cardId)
-        if (cmUrl) agg.cm_url = cmUrl
-        // Fill in CardMarket (and TCGPlayer) prices from tcggo when pokemontcg.io has none
-        mergeTcggoPrices(agg, cardId, tcggoPriceMap, cardIdToNormNum)
-        await writeCardPriceCache(agg)
-      })
-    }
+    // Always runs — even when all price points are empty (e.g. Japanese cards with no
+    // api_id) — so that a card_prices row with fetched_at is always written after a sync.
+    // This prevents the UI from showing "No price data synced" when the sync did run
+    // but found no data from pokemontcg.io. The tcggo/CardMarket fallback via
+    // mergeTcggoPrices() can still fill in prices for sets with api_set_id populated.
+    await mapConcurrent(processedCardIds, 10, async (cardId) => {
+      const agg = await aggregatePricesForCard(cardId)
+      const cmUrl = cmUrlMap.get(cardId)
+      if (cmUrl) agg.cm_url = cmUrl
+      // Fill in CardMarket (and TCGPlayer) prices from tcggo when pokemontcg.io has none
+      mergeTcggoPrices(agg, cardId, tcggoPriceMap, cardIdToNormNum)
+      await writeCardPriceCache(agg)
+
+      // Persist tcggo_id on the card row so the history-backfill API can use it
+      // without needing to re-fetch the full episode card list.
+      if (tcggoPriceMap) {
+        const normNum = cardIdToNormNum.get(cardId)
+        const entry   = normNum ? tcggoPriceMap.get(normNum) : null
+        if (entry?.tcggoId) {
+          await supabaseAdmin
+            .from('cards')
+            .update({ tcggo_id: entry.tcggoId })
+            .eq('id', cardId)
+        }
+      }
+    })
 
     const processed = processedCardIds.length
     console.log(

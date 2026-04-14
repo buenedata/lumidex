@@ -31,6 +31,10 @@ export interface CardSearchData {
   set_id: string;
   number: string;
   api_id?: string | null;
+  /** ISO 639-1 language code: 'en' = English, 'ja' = Japanese.
+   *  Japanese cards have no api_id and are not indexed by pokemontcg.io — the
+   *  TCGPlayer / pokemontcg.io fetch is skipped for them entirely. */
+  language?: string | null;
   /** Rarity string from the DB (e.g. 'Common', 'Uncommon', 'Rare Holo'). Used to skip
    *  eBay graded searches for low-value cards that are never graded in practice. */
   rarity?: string | null;

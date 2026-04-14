@@ -87,6 +87,11 @@ export default function AdminPricesPage() {
   const [singleCardState,  setSingleCardState]  = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [singleCardResult, setSingleCardResult] = useState<string>('')
 
+  // ── History backfill state ───────────────────────────────────────────────────
+  const [backfillStatus,  setBackfillStatus]  = useState<'idle' | 'running' | 'done' | 'error'>('idle')
+  const [backfillMsg,     setBackfillMsg]     = useState('')
+  const [backfillDays,    setBackfillDays]    = useState(180)
+
   // ── Bulk seed state ──────────────────────────────────────────────────────────
   const [bulkStatus,   setBulkStatus]   = useState<'idle' | 'running' | 'done' | 'error'>('idle')
   const [bulkProgress, setBulkProgress] = useState({
@@ -362,6 +367,36 @@ export default function AdminPricesPage() {
     } catch {
       setSingleCardState('error')
       setSingleCardResult('Network error')
+    }
+  }
+
+  // ── History Backfill ───────────────────────────────────────────────────────
+  async function runHistoryBackfill() {
+    if (!selectedSetId) return
+    setBackfillStatus('running')
+    setBackfillMsg(`Fetching ${backfillDays}d of price history…`)
+    try {
+      const res = await fetch('/api/admin/prices/history-backfill', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ setId: selectedSetId, days: backfillDays }),
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setBackfillStatus('done')
+        setBackfillMsg(
+          data.cardsProcessed === 0
+            ? data.message ?? 'No cards with tcggo_id found — run a price sync first.'
+            : `✅ ${data.pointsSaved} history points saved across ${data.cardsProcessed} cards (${data.dateFrom} → ${data.dateTo})`
+        )
+        await loadStats(selectedSetId)
+      } else {
+        setBackfillStatus('error')
+        setBackfillMsg(data.error ?? 'Backfill failed')
+      }
+    } catch (e) {
+      setBackfillStatus('error')
+      setBackfillMsg(e instanceof Error ? e.message : 'Network error')
     }
   }
 
@@ -806,6 +841,56 @@ export default function AdminPricesPage() {
                   </details>
                 )}
     
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* History Backfill */}
+        {selectedSetId && (
+          <div className="mt-6 bg-gray-900 border border-gray-700 rounded-xl p-6">
+            <h3 className="text-base font-semibold text-white mb-1">Backfill Price History</h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Fetches real historical prices from the tcggo CardMarket API for each card in this set
+              and writes them to <code className="font-mono text-gray-400">card_price_history</code> with
+              the original dates. Run <strong>after</strong> a price sync (requires{' '}
+              <code className="font-mono text-gray-400">tcggo_id</code> to be populated).
+            </p>
+
+            <div className="flex items-center gap-3 mb-4">
+              <label className="text-xs text-gray-400 whitespace-nowrap">Days of history</label>
+              <select
+                value={backfillDays}
+                onChange={e => setBackfillDays(Number(e.target.value))}
+                className="bg-gray-800 border border-gray-600 text-white text-sm rounded-lg px-2 py-1"
+              >
+                <option value={30}>30 days</option>
+                <option value={90}>90 days</option>
+                <option value={180}>180 days</option>
+                <option value={365}>1 year</option>
+              </select>
+            </div>
+
+            <button
+              onClick={runHistoryBackfill}
+              disabled={backfillStatus === 'running'}
+              className="w-full px-5 py-2.5 text-sm font-semibold bg-teal-700 hover:bg-teal-600 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors mb-3"
+            >
+              {backfillStatus === 'running' ? '⏳ Backfilling…' : '📈 Backfill Price History'}
+            </button>
+
+            {backfillStatus !== 'idle' && (
+              <div className={`rounded-lg p-3 text-sm border ${
+                backfillStatus === 'error' ? 'bg-red-900/30 border-red-700 text-red-300' :
+                backfillStatus === 'done'  ? 'bg-green-900/30 border-green-700 text-green-300' :
+                'bg-teal-900/30 border-teal-700 text-teal-300'
+              }`}>
+                <div className="flex items-center gap-2">
+                  {backfillStatus === 'running' && <span className="w-3 h-3 rounded-full bg-teal-400 animate-pulse shrink-0" />}
+                  {backfillStatus === 'done'    && <span>✅</span>}
+                  {backfillStatus === 'error'   && <span>❌</span>}
+                  <span>{backfillMsg}</span>
+                </div>
               </div>
             )}
           </div>
