@@ -123,6 +123,13 @@ interface CardGridProps {
    * variant dots are loading.
    */
   onVariantsBatchLoading?: (loading: boolean) => void
+  /**
+   * Variant structure pre-fetched server-side (from batchFetchVariantStructure).
+   * When provided, cardQuickVariants is initialised from this data so variant dots
+   * render on first paint without waiting for the POST /api/variants round-trip.
+   * The batch fetch still runs in the background to populate user quantities.
+   */
+  initialCardVariants?: Record<string, QuickAddVariant[]>
 }
 
 /** Badge classes per grading company — used in the "My Graded Copies" card-tab section. */
@@ -305,7 +312,7 @@ function getTypeGlowClass(type: string | null | undefined): string {
   return known.includes(key) ? `card-type-${key}` : ''
 }
 
-export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', sortDirection = 'asc', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', priceSource = 'tcgplayer', onVariantsLegendChange, onHasExtraVariants, allCards, onCountsChange, disableGreyOut = false, onWantedStatusChange, onVariantsBatchLoading }: CardGridProps) {
+export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', sortDirection = 'asc', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', priceSource = 'tcgplayer', onVariantsLegendChange, onHasExtraVariants, allCards, onCountsChange, disableGreyOut = false, onWantedStatusChange, onVariantsBatchLoading, initialCardVariants }: CardGridProps) {
   const { updateCardQuantity, userCards: storeUserCards, fetchUserCards } = useCollectionStore()
   const { user, isLoading, profile } = useAuthStore()
   // Prefer the client-side profile's preferred_currency (always reliable after login)
@@ -340,18 +347,24 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
   // Smart cache management: only clear cache if userId actually changed
   const [lastUserId, setLastUserId] = useState<string | undefined>(undefined)
-  
+
   useEffect(() => {
     if (userId && userId !== lastUserId) {
-      // Only clear cache when userId actually changes (not on every render)
-      setCardQuickVariants(new Map())
+      // Reset quick variants to SSR structure so dots stay visible while quantities reload
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      setCardQuickVariants(
+        initialCardVariants ? new Map(Object.entries(initialCardVariants)) : new Map()
+      )
       setCardVariants(new Map())
       setCardCustomVariantCounts(new Map())
       setLastUserId(userId)
     }
   }, [userId, lastUserId])
   const [cardVariants, setCardVariants] = useState<Map<string, VariantWithQuantity[]>>(new Map())
-  const [cardQuickVariants, setCardQuickVariants] = useState<Map<string, QuickAddVariant[]>>(new Map())
+  // Initialise from SSR data when provided — dots appear on first paint, no client fetch needed
+  const [cardQuickVariants, setCardQuickVariants] = useState<Map<string, QuickAddVariant[]>>(
+    () => initialCardVariants ? new Map(Object.entries(initialCardVariants)) : new Map()
+  )
   const [cardCustomVariantCounts, setCardCustomVariantCounts] = useState<Map<string, number>>(new Map())
   const [isLoadingVariants, setIsLoadingVariants] = useState<Set<string>>(new Set())
 

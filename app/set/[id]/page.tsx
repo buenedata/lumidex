@@ -1,8 +1,9 @@
 import { getSetById, getCardsBySet, hasPromoCards } from '@/lib/db'
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import { supabaseAdmin } from '@/lib/supabase'
-import { PokemonCard, PokemonSet, CollectionGoal, PriceSource } from '@/types'
+import { PokemonCard, PokemonSet, CollectionGoal, PriceSource, QuickAddVariant } from '@/types'
 import { getCardPricesForSet, buildCardPriceMap } from '@/lib/pricing'
+import { batchFetchVariantStructure } from '@/lib/variantServer'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import SetPageCards from '@/components/SetPageCards'
@@ -135,23 +136,32 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
 
   const { userId, priceSource, currency, currentGoal } = authPrefs
 
-  // ── Phase 2: prices ───────────────────────────────────────────────────────
+  // ── Phase 2: prices + variant structure (parallel) ───────────────────────
   //
-  // We already have every card UUID from Phase 1 — pass them directly so
-  // getCardPricesForSet can skip its own "SELECT id FROM cards" round-trip.
-  // This saves one DB query (~100–200 ms) every time.
+  // Both fetches need cardIds from Phase 1 but are independent of each other,
+  // so we run them in parallel.
+  //
+  // batchFetchVariantStructure queries supabaseAdmin directly — no HTTP round-
+  // trip — so variant dots are embedded in the initial HTML and appear on first
+  // paint without waiting for a client-side POST /api/variants call.
   //
   const cardIds = rawCards.map(c => c.id)
   let cardPricesUSD: Record<string, number> = {}
   let pricesAreLive = false
+  let initialCardVariants: Record<string, QuickAddVariant[]> = {}
 
-  try {
-    const realPrices = await getCardPricesForSet(id, priceSource, cardIds)
-    cardPricesUSD = buildCardPriceMap(cards, realPrices)
-    pricesAreLive = Object.keys(cardPricesUSD).length > 0
-  } catch (err) {
-    console.warn('[set page] Price lookup failed:', err)
-  }
+  await Promise.all([
+    getCardPricesForSet(id, priceSource, cardIds)
+      .then(realPrices => {
+        cardPricesUSD = buildCardPriceMap(cards, realPrices)
+        pricesAreLive = Object.keys(cardPricesUSD).length > 0
+      })
+      .catch(err => console.warn('[set page] Price lookup failed:', err)),
+
+    batchFetchVariantStructure(cardIds)
+      .then(r => { initialCardVariants = r })
+      .catch(() => { /* non-fatal — dots fall back to client-side batch fetch */ }),
+  ])
 
   // ── Set-level stats ───────────────────────────────────────────────────────
   const setTotalValue = Object.values(cardPricesUSD).reduce((s, p) => s + p, 0)
@@ -239,6 +249,7 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
         cards={cards}
         setTotal={setTotal}
         setName={set.name}
+        initialCardVariants={initialCardVariants}
         setComplete={set.setComplete ?? undefined}
         initialCardId={initialCardId}
         setId={id}

@@ -8,7 +8,7 @@ import ArtistResults   from './ArtistResults'
 import ProductResults  from './ProductResults'
 import BrowseDiscovery from './BrowseDiscovery'
 import SetPageCards    from '@/components/SetPageCards'
-import type { PokemonCard, PriceSource } from '@/types'
+import type { PokemonCard, PriceSource, QuickAddVariant } from '@/types'
 import type {
   SearchMode, CardSearchResult, ArtistResult,
   BrowseProduct, DiscoveryData,
@@ -40,10 +40,12 @@ interface BrowseClientProps {
   initialArtists:  ArtistResult[]
   initialProducts: BrowseProduct[]
   allProducts:     BrowseProduct[]
-  discoveryData:   DiscoveryData | null
+  discoveryData:       DiscoveryData | null
   // cardPricesUSD is no longer fetched server-side — loaded lazily on the client
-  currency:        string
-  priceSource:     PriceSource
+  /** Variant structure pre-fetched server-side — passed straight to SetPageCards → CardGrid. */
+  initialCardVariants: Record<string, QuickAddVariant[]>
+  currency:            string
+  priceSource:         PriceSource
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -56,6 +58,7 @@ export default function BrowseClient({
   initialProducts,
   allProducts,
   discoveryData,
+  initialCardVariants,
   currency,
   priceSource,
 }: BrowseClientProps) {
@@ -116,15 +119,16 @@ export default function BrowseClient({
   // displaying the actual set name (e.g. "Obsidian Flames") rather than the
   // search query (e.g. "togekiss 85") in the card modal header.
   const sharedSetPageCardsProps = {
-    cards:          pokemonCards,
-    setTotal:       pokemonCards.length,
-    showSearch:     false as const,
-    setId:          '',
+    cards:               pokemonCards,
+    setTotal:            pokemonCards.length,
+    showSearch:          false as const,
+    setId:               '',
     hasPromos,
     cardPricesUSD,
+    initialCardVariants,
     currency,
     priceSource,
-    disableGreyOut: true as const,
+    disableGreyOut:      true as const,
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────

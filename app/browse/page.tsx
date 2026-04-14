@@ -3,8 +3,9 @@ import BrowseClient from '@/components/browse/BrowseClient'
 import { getSealedProductsForAllSeries } from '@/lib/pricing'
 import { supabaseAdmin } from '@/lib/supabase'
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
+import { batchFetchVariantStructure } from '@/lib/variantServer'
 import type { SeriesProductGroup } from '@/lib/pricing'
-import type { PriceSource } from '@/types'
+import type { PriceSource, QuickAddVariant } from '@/types'
 import type {
   SearchMode,
   CardSearchResult,
@@ -233,11 +234,12 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
   } catch { /* non-fatal — guest view still works */ }
 
   // ── Parallel data fetching ────────────────────────────────────────────────
-  let initialCards:    CardSearchResult[] = []
-  let initialArtists:  ArtistResult[]     = []
-  let initialProducts: BrowseProduct[]    = []
-  let allProducts:     BrowseProduct[]    = []
-  let discoveryData:   DiscoveryData | null = null
+  let initialCards:        CardSearchResult[]                    = []
+  let initialArtists:      ArtistResult[]                        = []
+  let initialProducts:     BrowseProduct[]                       = []
+  let allProducts:         BrowseProduct[]                       = []
+  let discoveryData:       DiscoveryData | null                  = null
+  let initialCardVariants: Record<string, QuickAddVariant[]>     = {}
 
   await Promise.all([
     // Cards by a specific artist
@@ -272,6 +274,13 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
       : Promise.resolve(),
   ])
 
+  // ── Variant structure (after cards are known) ─────────────────────────────
+  // Fetch server-side so CardGrid renders dots on first paint — no HTTP round-trip.
+  if (initialCards.length > 0) {
+    initialCardVariants = await batchFetchVariantStructure(initialCards.map(c => c.id))
+      .catch(() => ({}))
+  }
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--color-bg-base)' }}>
       <Suspense
@@ -290,6 +299,7 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
           initialProducts={initialProducts}
           allProducts={allProducts}
           discoveryData={discoveryData}
+          initialCardVariants={initialCardVariants}
           currency={currency}
           priceSource={priceSource}
         />

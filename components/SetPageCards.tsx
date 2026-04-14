@@ -11,11 +11,19 @@ import { useCollectionStore, useAuthStore } from '@/lib/store'
 import { PokemonCard, CollectionGoal, QuickAddVariant, PriceSource } from '@/types'
 import { formatPrice } from '@/lib/pricing'
 
+/** Card-id → variant structure, pre-fetched server-side. Passed from the set page / browse page. */
+export type InitialCardVariants = Record<string, QuickAddVariant[]>
+
 interface SetPageCardsProps {
   cards: PokemonCard[]
   setTotal: number
   /** When omitted (browse page), CardGrid falls back to per-card set_name in the modal. */
   setName?: string
+  /**
+   * Variant structure pre-fetched server-side (from batchFetchVariantStructure).
+   * When provided, CardGrid renders variant dots on first paint with no client fetch.
+   */
+  initialCardVariants?: InitialCardVariants
   setComplete?: number
   initialCardId?: string
   showSearch?: boolean
@@ -62,6 +70,7 @@ export default function SetPageCards({
   cards,
   setTotal,
   setName = '',
+  initialCardVariants,
   setComplete,
   initialCardId,
   showSearch = true,
@@ -487,6 +496,7 @@ export default function SetPageCards({
               onVariantsLegendChange={setLegendVariants}
               onHasExtraVariants={setHasExtraVariants}
               onVariantsBatchLoading={setVariantsBatchLoading}
+              initialCardVariants={initialCardVariants}
               disableGreyOut={disableGreyOut}
             />
         )}
