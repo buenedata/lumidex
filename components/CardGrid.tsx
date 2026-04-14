@@ -125,7 +125,7 @@ interface CardGridProps {
   onVariantsBatchLoading?: (loading: boolean) => void
   /**
    * Variant structure pre-fetched server-side (from batchFetchVariantStructure).
-   * When provided, cardQuickVariants is initialised from this data so variant dots
+   * When provided, cardVariantDots is initialised from this data so variant dots
    * render on first paint without waiting for the POST /api/variants round-trip.
    * The batch fetch still runs in the background to populate user quantities.
    */
@@ -350,9 +350,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
   useEffect(() => {
     if (userId && userId !== lastUserId) {
-      // Reset quick variants to SSR structure so dots stay visible while quantities reload
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      setCardQuickVariants(
+      // Reset variant dots to SSR structure so they stay visible while quantities reload
+      setCardVariantDots(
         initialCardVariants ? new Map(Object.entries(initialCardVariants)) : new Map()
       )
       setCardVariants(new Map())
@@ -361,8 +360,9 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     }
   }, [userId, lastUserId])
   const [cardVariants, setCardVariants] = useState<Map<string, VariantWithQuantity[]>>(new Map())
-  // Initialise from SSR data when provided — dots appear on first paint, no client fetch needed
-  const [cardQuickVariants, setCardQuickVariants] = useState<Map<string, QuickAddVariant[]>>(
+  // cardVariantDots: per-card variant buttons (color dots + quantity) shown below each card tile.
+  // Initialised from SSR data so dots appear on first paint; batch fetch updates quantities.
+  const [cardVariantDots, setCardVariantDots] = useState<Map<string, QuickAddVariant[]>>(
     () => initialCardVariants ? new Map(Object.entries(initialCardVariants)) : new Map()
   )
   const [cardCustomVariantCounts, setCardCustomVariantCounts] = useState<Map<string, number>>(new Map())
@@ -370,10 +370,10 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
   // ── Stable refs — allow useCallback handlers to read fresh state without
   // listing the state in deps (which would defeat React.memo on CardTile).
-  const cardQuickVariantsRef = useRef(cardQuickVariants)
+  const cardVariantDotsRef   = useRef(cardVariantDots)
   const cardVariantsRef      = useRef(cardVariants)
   const isLoadingVariantsRef = useRef(isLoadingVariants)
-  useEffect(() => { cardQuickVariantsRef.current  = cardQuickVariants  }, [cardQuickVariants])
+  useEffect(() => { cardVariantDotsRef.current   = cardVariantDots   }, [cardVariantDots])
   useEffect(() => { cardVariantsRef.current       = cardVariants       }, [cardVariants])
   useEffect(() => { isLoadingVariantsRef.current  = isLoadingVariants  }, [isLoadingVariants])
   // Stable ref for onCountsChange — lets the emit-effect depend only on the
@@ -527,24 +527,24 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const filteredCards = useMemo(() => {
     const filtered = cards.filter(card => {
       const userCard      = userCards.get(card.id)
-      const quickVariants = cardQuickVariants.get(card.id)
+      const dots = cardVariantDots.get(card.id)
 
-      // Basic ownership: prefer quickVariants (updated optimistically on every
-      // variant click) when they are loaded and non-empty.  Fall back to the
-      // Zustand store aggregate for promo/card-specific-variant-only cards
-      // (quickVariants is [] even after loading) and before the batch fetch.
-      const anyOwned = (quickVariants && quickVariants.length > 0)
-        ? quickVariants.some(v => v.quantity > 0)
+      // Basic ownership: prefer dots (updated optimistically on every variant click)
+      // when they are loaded and non-empty. Fall back to the Zustand store aggregate for
+      // promo/card-specific-variant-only cards (dots is [] even after loading) and
+      // before the batch fetch.
+      const anyOwned = (dots && dots.length > 0)
+        ? dots.some(v => v.quantity > 0)
         : !!(userCard && userCard.quantity > 0)
 
       // isOwned for normal goal = anyOwned.
-      // Masterset: only GLOBAL (non-card-specific) quick-add variants must all be qty > 0.
+      // Masterset: only GLOBAL (non-card-specific) variants must all be qty > 0.
       //   Card-specific variants (card_id != null) are grandmasterset territory only.
       // Grandmasterset: ALL variants (including card-specific) must have qty > 0.
       let isOwned: boolean
       if (collectionGoal === 'masterset') {
-        if (quickVariants && quickVariants.length > 0) {
-          const globalVariants = quickVariants.filter(v => v.card_id == null)
+        if (dots && dots.length > 0) {
+          const globalVariants = dots.filter(v => v.card_id == null)
           isOwned = globalVariants.length > 0
             ? globalVariants.every(v => v.quantity > 0)
             : anyOwned
@@ -552,8 +552,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
           isOwned = anyOwned
         }
       } else if (collectionGoal === 'grandmasterset') {
-        if (quickVariants && quickVariants.length > 0) {
-          isOwned = quickVariants.every(v => v.quantity > 0)
+        if (dots && dots.length > 0) {
+          isOwned = dots.every(v => v.quantity > 0)
         } else {
           isOwned = anyOwned
         }
@@ -594,34 +594,34 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       const diff = getNum(a.number) - getNum(b.number)
       return dir * (diff !== 0 ? diff : (a.number ?? '').localeCompare(b.number ?? ''))
     })
-  }, [cards, userCards, filter, sortBy, sortDirection, collectionGoal, cardQuickVariants, cardPricesUSD])
+  }, [cards, userCards, filter, sortBy, sortDirection, collectionGoal, cardVariantDots, cardPricesUSD])
 
   // ── Goal-aware Have / Need counts ────────────────────────────────────────────
   // Uses allCards (the full unsearch-filtered set) when provided, so the numbers
   // always reflect the whole set — matching the SetPageCards haveCount / needCount
   // behaviour even when the user has an active search filter.
-  // Recomputes after every variant click (cardQuickVariants dep) and goal change.
+  // Recomputes after every variant click (cardVariantDots dep) and goal change.
   const goalAwareCounts = useMemo(() => {
     const source = allCards ?? cards
     let have = 0
     for (const card of source) {
-      const userCard      = userCards.get(card.id)
-      const quickVariants = cardQuickVariants.get(card.id)
-      const anyOwned = quickVariants && quickVariants.length > 0
-        ? quickVariants.some(v => v.quantity > 0)
+      const userCard = userCards.get(card.id)
+      const dots     = cardVariantDots.get(card.id)
+      const anyOwned = dots && dots.length > 0
+        ? dots.some(v => v.quantity > 0)
         : !!(userCard && userCard.quantity > 0)
 
       let owned: boolean
       if (collectionGoal === 'masterset') {
-        if (quickVariants && quickVariants.length > 0) {
-          const globalVariants = quickVariants.filter(v => v.card_id == null)
+        if (dots && dots.length > 0) {
+          const globalVariants = dots.filter(v => v.card_id == null)
           owned = globalVariants.length > 0 ? globalVariants.every(v => v.quantity > 0) : anyOwned
         } else {
           owned = anyOwned
         }
       } else if (collectionGoal === 'grandmasterset') {
-        if (quickVariants && quickVariants.length > 0) {
-          owned = quickVariants.every(v => v.quantity > 0)
+        if (dots && dots.length > 0) {
+          owned = dots.every(v => v.quantity > 0)
         } else {
           owned = anyOwned
         }
@@ -631,7 +631,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       if (owned) have++
     }
     return { have, need: source.length - have }
-  }, [allCards, cards, userCards, collectionGoal, cardQuickVariants])
+  }, [allCards, cards, userCards, collectionGoal, cardVariantDots])
 
   // Emit goal-aware counts whenever they change — uses the ref so the effect
   // deps list is just the counts object, preventing callback identity re-renders.
@@ -660,7 +660,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       const variants: VariantWithQuantity[] = await response.json()
 
       if (quickAddOnly) {
-        const quickVariants: QuickAddVariant[] = variants.map(v => ({
+        const dots: QuickAddVariant[] = variants.map(v => ({
           id: v.id,
           name: v.name,
           color: v.color,
@@ -668,7 +668,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
           quantity: v.quantity,
           sort_order: v.sort_order
         }))
-        setCardQuickVariants(prev => new Map(prev).set(cardId, quickVariants))
+        setCardVariantDots(prev => new Map(prev).set(cardId, dots))
       } else {
         setCardVariants(prev => new Map(prev).set(cardId, variants))
         cardVariantsLoadedRef.current.add(cardId)  // mark fully loaded (has variant_image_url)
@@ -720,11 +720,19 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     }
   }, [])
 
-  // BATCH LOADING: Load ALL variants in a single API call - like pkmn.gg
-  // NOTE: depends on `cards` (stable prop), NOT `filteredCards` (derived from cardQuickVariants)
+  // BATCH LOADING: Load ALL variants in a single API call.
+  // NOTE: depends on `cards` (stable prop), NOT `filteredCards` (derived from cardVariantDots)
   // to prevent an infinite update loop.
+  //
+  // Guard logic:
+  //   • No cards → skip.
+  //   • No userId AND SSR already provided initial dots → skip until userId resolves.
+  //   • No userId AND no initial dots → fetch structure immediately (qty=0, CDN-cacheable).
+  //   • userId present → always fetch to populate user quantities.
   useEffect(() => {
-    if (!userId || cards.length === 0) return
+    if (cards.length === 0) return
+    const hasSSRData = !!(initialCardVariants && Object.keys(initialCardVariants).length > 0)
+    if (!userId && hasSSRData) return
 
     onVariantsBatchLoadingRef.current?.(true)
     const loadAllVariants = async () => {
@@ -745,15 +753,16 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
         
         const batchResults: Record<string, VariantWithQuantity[]> = await response.json()
         
-        const newQuickVariants = new Map<string, QuickAddVariant[]>()
-        const newCustomCounts  = new Map<string, number>()
+        const newVariantDots  = new Map<string, QuickAddVariant[]>()
+        const newCustomCounts = new Map<string, number>()
         // Pre-populate full variants so the modal shows them instantly (no per-card GET needed).
         // variant_image_url is absent at this stage; loadCardVariants adds it silently on first open.
-        const newCardVariants  = new Map<string, VariantWithQuantity[]>()
+        const newCardVariants = new Map<string, VariantWithQuantity[]>()
 
         Object.entries(batchResults).forEach(([cardId, variants]) => {
-          // All official variants become dots — is_quick_add only controls the double-click default
-          const quickVariants: QuickAddVariant[] = variants
+          // Build the dot buttons for this card (all official variants — is_quick_add only
+          // controls which variant is added on double-click, all official ones show as dots).
+          const dots: QuickAddVariant[] = variants
             .filter(v => v.is_official)
             .map((v: any) => ({
               id: v.id,
@@ -766,15 +775,15 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
               is_quick_add: v.is_quick_add ?? false,
               variant_image_url: v.variant_image_url ?? null,
             }))
-          newQuickVariants.set(cardId, quickVariants)
+          newVariantDots.set(cardId, dots)
           newCardVariants.set(cardId, variants as VariantWithQuantity[])
 
           // Track count of card-specific variants for the ★ indicator (multiple-variant case)
-          const customCount = quickVariants.filter(v => v.card_id != null).length
+          const customCount = dots.filter(v => v.card_id != null).length
           if (customCount > 0) newCustomCounts.set(cardId, customCount)
         })
-        
-        setCardQuickVariants(newQuickVariants)
+
+        setCardVariantDots(newVariantDots)
         setCardCustomVariantCounts(newCustomCounts)
         setCardVariants(newCardVariants)  // pre-populate so modal variants appear instantly
 
@@ -783,7 +792,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
         if (onVariantsLegendChange) {
           const seen = new Set<string>()
           const legendVariants: QuickAddVariant[] = []
-          for (const [, cvariants] of newQuickVariants) {
+          for (const [, cvariants] of newVariantDots) {
             for (const v of cvariants) {
               if (v.card_id == null && !seen.has(v.color)) {
                 seen.add(v.color)
@@ -817,13 +826,13 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     if (!userId) return
 
     // ── Snapshot current quantity before the click (via ref — no stale closure) ─
-    const preClickVariants = cardQuickVariantsRef.current.get(cardId) || []
+    const preClickVariants = cardVariantDotsRef.current.get(cardId) || []
     const preClickVariant  = preClickVariants.find(v => v.id === variantId)
     const currentQuantity  = preClickVariant?.quantity ?? 0
     const optimisticQty    = Math.max(0, currentQuantity + increment)
 
     // ── Optimistic update: reflect new qty instantly, no await ───────────────
-    setCardQuickVariants(prev => {
+    setCardVariantDots(prev => {
       const m = new Map(prev)
       const vs = m.get(cardId)
       if (vs) m.set(cardId, vs.map(v => v.id === variantId ? { ...v, quantity: optimisticQty } : v))
@@ -840,7 +849,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
       if (!response.ok) {
         // ── Revert optimistic update on API failure ──────────────────────────
-        setCardQuickVariants(prev => {
+        setCardVariantDots(prev => {
           const m = new Map(prev)
           const vs = m.get(cardId)
           if (vs) m.set(cardId, vs.map(v => v.id === variantId ? { ...v, quantity: currentQuantity } : v))
@@ -853,7 +862,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       const result = await response.json()
 
       // ── Reconcile with server-confirmed quantity ─────────────────────────
-      setCardQuickVariants(prev => {
+      setCardVariantDots(prev => {
         const m = new Map(prev)
         const vs = m.get(cardId)
         if (vs) m.set(cardId, vs.map(v => v.id === variantId ? { ...v, quantity: result.quantity } : v))
@@ -888,7 +897,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
     } catch (error) {
       // ── Revert optimistic update on network error ────────────────────────
-      setCardQuickVariants(prev => {
+      setCardVariantDots(prev => {
         const m = new Map(prev)
         const vs = m.get(cardId)
         if (vs) m.set(cardId, vs.map(v => v.id === variantId ? { ...v, quantity: currentQuantity } : v))
@@ -918,8 +927,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       const result = await response.json()
       const resultQty: number = result.quantity ?? clamped
 
-      // Update quick variants in state
-      setCardQuickVariants(prev => {
+      // Update variant dot quantities in state
+      setCardVariantDots(prev => {
         const m = new Map(prev)
         const vs = m.get(cardId)
         if (vs) m.set(cardId, vs.map(v => v.id === variantId ? { ...v, quantity: resultQty } : v))
@@ -935,13 +944,13 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       })
 
       // Legacy user_cards sync — fire-and-forget, must NOT block the UI
-      const quickVariants = cardQuickVariants.get(cardId) || []
-      const totalQuantity = quickVariants.reduce((sum, v) => {
+      const currentDots = cardVariantDotsRef.current.get(cardId) || []
+      const totalQuantity = currentDots.reduce((sum, v) => {
         const qty = v.id === variantId ? resultQty : v.quantity
         return sum + qty
       }, 0)
       const getVariantQty = (name: string) => {
-        const v = quickVariants.find(v => v.name === name)
+        const v = currentDots.find(v => v.name === name)
         if (!v) return 0
         return v.id === variantId ? resultQty : v.quantity
       }
@@ -963,7 +972,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       // Always suppress the browser context menu on variant buttons
       e.preventDefault()
       // Right-click: decrement, but never below 0
-      const variants = cardQuickVariantsRef.current.get(cardId) || []
+      const variants = cardVariantDotsRef.current.get(cardId) || []
       const variant  = variants.find(v => v.id === variantId)
       if (variant && variant.quantity > 0) {
         updateVariantQuantity(cardId, variantId, -1)
@@ -973,7 +982,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
     if (e.altKey || e.button === 2) {
       // Alt-click: decrement, but never below 0
-      const variants = cardQuickVariantsRef.current.get(cardId) || []
+      const variants = cardVariantDotsRef.current.get(cardId) || []
       const variant  = variants.find(v => v.id === variantId)
       if (variant && variant.quantity > 0) {
         updateVariantQuantity(cardId, variantId, -1)
@@ -1210,7 +1219,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     }
     if (!userId) return
     // Read via ref so this callback stays stable between variant-click renders
-    const quick = cardQuickVariantsRef.current.get(card.id) || []
+    const quick = cardVariantDotsRef.current.get(card.id) || []
     // Prefer default_variant_id → is_quick_add variant → first in sort order
     const defaultVariant = card.default_variant_id
       ? (quick.find(v => v.id === card.default_variant_id) ?? quick.find(v => v.is_quick_add) ?? quick[0])
@@ -1295,13 +1304,13 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     <>
       <div className="flex flex-wrap gap-4">
         {filteredCards.map(card => {
-          const userCard      = userCards.get(card.id)
-          // quickVariants: same array reference for unchanged cards → React.memo skips re-render
-          const quickVariants = cardQuickVariants.get(card.id) || []
+          const userCard    = userCards.get(card.id)
+          // variantDots: same array reference for unchanged cards → React.memo skips re-render
+          const variantDots = cardVariantDots.get(card.id) || []
 
           // anyOwned: at least one variant owned (or userCard fallback before batch fetch)
-          const anyOwned = quickVariants.length > 0
-            ? quickVariants.some(v => v.quantity > 0)
+          const anyOwned = variantDots.length > 0
+            ? variantDots.some(v => v.quantity > 0)
             : !!(userCard && userCard.quantity > 0)
 
           // isOwned: mirrors filteredCards logic so the green border / grey-out
@@ -1310,13 +1319,13 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
           // Grandmasterset: ALL variants including card-specific must all be owned.
           let isOwned: boolean
           if (collectionGoal === 'masterset') {
-            const globalVariants = quickVariants.filter(v => v.card_id == null)
+            const globalVariants = variantDots.filter(v => v.card_id == null)
             isOwned = globalVariants.length > 0
               ? globalVariants.every(v => v.quantity > 0)
               : anyOwned
           } else if (collectionGoal === 'grandmasterset') {
-            isOwned = quickVariants.length > 0
-              ? quickVariants.every(v => v.quantity > 0)
+            isOwned = variantDots.length > 0
+              ? variantDots.every(v => v.quantity > 0)
               : anyOwned
           } else {
             isOwned = anyOwned
@@ -1334,7 +1343,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
             <CardTile
               key={card.id}
               card={card}
-              quickVariants={quickVariants}
+              variantDots={variantDots}
               isOwned={isOwned}
               isPartiallyOwned={isPartiallyOwned}
               customVariantCount={customVariantCount}

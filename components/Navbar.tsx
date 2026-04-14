@@ -25,7 +25,7 @@ function relTime(iso: string): string {
 }
 
 export default function Navbar() {
-  const { user, profile } = useAuthStore()
+  const { user, profile, isLoading: isAuthLoading } = useAuthStore()
   const router = useRouter()
 
   const isAdmin = profile?.role === 'admin'
@@ -114,7 +114,14 @@ export default function Navbar() {
         <div className="flex-1" />
 
         {/* Nav links + user section */}
-        {user ? (
+        {isAuthLoading ? (
+          /* Skeleton while Supabase session is resolving — prevents the Sign-In
+             button from flashing then disappearing for logged-in users. */
+          <div className="flex items-center gap-2 animate-pulse">
+            <div className="w-7 h-7 rounded-full bg-elevated" />
+            <div className="w-16 h-3.5 bg-elevated rounded hidden sm:block" />
+          </div>
+        ) : user ? (
           <>
             {/* Nav links */}
             <div className="flex items-center gap-1">

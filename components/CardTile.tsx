@@ -30,9 +30,11 @@ function getTypeGlowClass(type: string | null | undefined): string {
 
 // ── Props ──────────────────────────────────────────────────────────────────
 export interface CardTileProps {
-  card:               PokemonCard
-  /** Per-card quick-add variants — only THIS card's array changes on click */
-  quickVariants:      QuickAddVariant[]
+  card:        PokemonCard
+  /** Variant dot buttons rendered below the card image — one per official variant.
+   *  `is_quick_add` on a variant controls which one is added on double-click;
+   *  all items in this array are shown as colour-coded buttons regardless. */
+  variantDots: QuickAddVariant[]
   isOwned:            boolean
   customVariantCount: number
   greyOutUnowned:     boolean
@@ -54,7 +56,7 @@ export interface CardTileProps {
 // ── Inner component ─────────────────────────────────────────────────────────
 function CardTileInner({
   card,
-  quickVariants,
+  variantDots,
   isOwned,
   customVariantCount,
   greyOutUnowned,
@@ -74,7 +76,7 @@ function CardTileInner({
   // and instead get the diagonal overlay (rendered below the image).
   const shouldGrey      = greyOutUnowned && !isOwned && !isPartiallyOwned
   // Card-specific variants are never shown as dots — the +N badge handles them
-  const buttonsToRender = quickVariants.filter(v => v.card_id == null)
+  const buttonsToRender = variantDots.filter(v => v.card_id == null)
 
   return (
     <div
@@ -209,8 +211,8 @@ function CardTileInner({
 /**
  * React.memo wrapper with shallow-equality check.
  *
- * Because `quickVariants` is the SAME array reference for cards that were not
- * clicked (the cardQuickVariants Map reuses existing arrays via `new Map(prev)`),
+ * Because `variantDots` is the SAME array reference for cards that were not
+ * clicked (the cardVariantDots Map reuses existing arrays via `new Map(prev)`),
  * and because the callback props are stabilised with `useCallback` + refs in
  * CardGrid, most tiles will be skipped on every variant click — only the
  * specific clicked card re-renders.

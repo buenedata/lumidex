@@ -40,12 +40,15 @@ interface BrowseClientProps {
   initialArtists:  ArtistResult[]
   initialProducts: BrowseProduct[]
   allProducts:     BrowseProduct[]
-  discoveryData:       DiscoveryData | null
+  discoveryData:        DiscoveryData | null
   // cardPricesUSD is no longer fetched server-side — loaded lazily on the client
-  /** Variant structure pre-fetched server-side — passed straight to SetPageCards → CardGrid. */
-  initialCardVariants: Record<string, QuickAddVariant[]>
-  currency:            string
-  priceSource:         PriceSource
+  /**
+   * Variant structure pre-fetched server-side (set page only).
+   * On the browse page this is omitted and the client-side batch fetch handles it.
+   */
+  initialCardVariants?: Record<string, QuickAddVariant[]>
+  currency:             string
+  priceSource:          PriceSource
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -125,7 +128,7 @@ export default function BrowseClient({
     setId:               '',
     hasPromos,
     cardPricesUSD,
-    initialCardVariants,
+    initialCardVariants: initialCardVariants ?? {},
     currency,
     priceSource,
     disableGreyOut:      true as const,
