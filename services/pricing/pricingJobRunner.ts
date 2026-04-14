@@ -96,7 +96,7 @@ export async function syncSingleCard(cardId: string): Promise<SyncSingleCardResu
   const supabase = await createSupabaseServerClient()
   const { data: card, error: dbError } = await supabase
     .from('cards')
-    .select('id, name, number, set_id, api_id, language, rarity')
+    .select('id, name, number, set_id, api_id, rarity')
     .eq('id', cardId)
     .single()
 
@@ -110,18 +110,13 @@ export async function syncSingleCard(cardId: string): Promise<SyncSingleCardResu
   console.log(`[PricingJobRunner] syncSingleCard: found card "${card.name}" (${card.id})`)
 
   // Step 2a — Pokemon TCG API prices (TCGPlayer + CardMarket; cmUrl carried separately)
-  // Japanese cards are not indexed by pokemontcg.io — skip the call entirely for them.
-  let apiPoints = normalizePoints([])
-  let cmUrl: string | null = null
-  if (card.language !== 'ja') {
-    console.log(`[PricingJobRunner] syncSingleCard: fetching Pokémon TCG API prices…`)
-    const apiResult = await fetchPokemonApiPrices(card)
-    apiPoints = normalizePoints(apiResult.points)
-    cmUrl     = apiResult.cmUrl ?? null
-    console.log(`[PricingJobRunner] syncSingleCard: Pokémon TCG API → ${apiPoints.length} points`)
-  } else {
-    console.log(`[PricingJobRunner] syncSingleCard: Japanese card — skipping pokemontcg.io (no api_id)`)
-  }
+  // fetchPokemonApiPrices returns empty points when card.api_id is null (e.g. Japanese
+  // cards imported without a pokemontcg.io ID), so no extra language check is needed.
+  console.log(`[PricingJobRunner] syncSingleCard: fetching Pokémon TCG API prices…`)
+  const apiResult = await fetchPokemonApiPrices(card)
+  const apiPoints = normalizePoints(apiResult.points)
+  const cmUrl     = apiResult.cmUrl ?? null
+  console.log(`[PricingJobRunner] syncSingleCard: Pokémon TCG API → ${apiPoints.length} points`)
 
   // Step 2b — eBay raw sold prices
   console.log(`[PricingJobRunner] syncSingleCard: fetching eBay raw prices…`)

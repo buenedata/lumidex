@@ -170,7 +170,7 @@ async function processSingleSet(
 ): Promise<ProcessSetResult> {
   let query = supabaseAdmin
     .from('cards')
-    .select('id, name, set_id, number, api_id, language, rarity')
+    .select('id, name, set_id, number, api_id, rarity')
     .eq('set_id', setId)
 
   if (limit !== undefined) {
@@ -234,12 +234,9 @@ async function processSingleSet(
     const cmUrlMap = new Map<string, string>()
 
     const results = await mapConcurrent(cards, concurrency, async (card) => {
-      // Skip pokemontcg.io entirely for Japanese cards — they have no api_id and are
-      // not indexed by that API. Prices come exclusively from the tcggo/CardMarket
-      // fallback via mergeTcggoPrices() below.
-      if (card.language === 'ja') {
-        return { card, apiPoints: [] as ReturnType<typeof normalizePoints>, cmUrl: null }
-      }
+      // fetchPokemonApiPrices already returns empty points when card.api_id is null,
+      // so Japanese cards (which have no api_id) are handled correctly with no
+      // extra language check needed.
       const apiResult = await fetchPokemonApiPrices(card)
       const apiPoints = normalizePoints(apiResult.points)
       return { card, apiPoints, cmUrl: apiResult.cmUrl ?? null }
