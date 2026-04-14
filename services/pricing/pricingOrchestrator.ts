@@ -371,6 +371,18 @@ async function processSingleSet(
       mergeTcggoPrices(aggregated, card.id, tcggoPriceMap, cardIdToNormNum)
       await writeCardPriceCache(aggregated)
 
+      // Persist tcggo_id so history backfill can use it without re-fetching episode data
+      if (tcggoPriceMap) {
+        const normNum  = cardIdToNormNum.get(card.id as string)
+        const tcggoEntry = normNum ? tcggoPriceMap.get(normNum) : null
+        if (tcggoEntry?.tcggoId) {
+          await supabaseAdmin
+            .from('cards')
+            .update({ tcggo_id: tcggoEntry.tcggoId })
+            .eq('id', card.id)
+        }
+      }
+
       processedCardIds.push(card.id)
       processed++
 
