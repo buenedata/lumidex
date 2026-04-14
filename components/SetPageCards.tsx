@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Listbox, ListboxButton, ListboxOption, ListboxOptions } from '@headlessui/react'
 import { ChevronUpDownIcon, CheckIcon, ArrowUpIcon, ArrowDownIcon } from '@heroicons/react/20/solid'
 import { cn } from '@/lib/utils'
@@ -91,8 +91,18 @@ export default function SetPageCards({
   // Set to true once the batch variant fetch detects any card-specific variants.
   // Combined with hasPromos to determine Grandmaster Set selector visibility.
   const [hasExtraVariants, setHasExtraVariants] = useState(false)
-  // Tracks whether the batch variant fetch is in flight — drives the variant key shimmer.
+  // Tracks whether the batch variant fetch is in flight.
   const [variantsBatchLoading, setVariantsBatchLoading] = useState(false)
+  // Only flip the shimmer visible if loading takes > 250ms — prevents a flash on fast/cached loads.
+  const [showVariantShimmer, setShowVariantShimmer] = useState(false)
+  useEffect(() => {
+    if (!variantsBatchLoading) {
+      setShowVariantShimmer(false)
+      return
+    }
+    const t = setTimeout(() => setShowVariantShimmer(true), 250)
+    return () => clearTimeout(t)
+  }, [variantsBatchLoading])
   // Goal-aware Have/Need counts emitted by CardGrid after the batch variant load.
   // null until first emission — tab badges fall back to the basic Zustand counts.
   const [goalHave, setGoalHave] = useState<number | null>(null)
@@ -238,8 +248,8 @@ export default function SetPageCards({
             onChange={setCollectionGoal}
           />
 
-          {/* Variant legend — shimmer while batch fetch is in progress, real legend after */}
-          {isAuthenticated && variantsBatchLoading ? (
+          {/* Variant legend — shimmer only when the batch load has taken > 250ms */}
+          {showVariantShimmer ? (
             <div className="flex flex-col gap-1.5">
               <span className="text-xs text-muted uppercase tracking-wider select-none">
                 Variant Key
