@@ -3,17 +3,39 @@ import { revalidateTag } from 'next/cache'
 import { requireAdmin } from '@/lib/admin'
 import { supabaseAdmin } from '@/lib/supabase'
 import { compressImageToWebP, COMPRESSED_CONTENT_TYPE } from '@/lib/imageCompress'
-import { uploadToR2, getR2Url } from '@/lib/r2'
+import { uploadToR2, deleteFromR2, getR2Url } from '@/lib/r2'
 
 /**
  * Mirror of the client-side helper so server doesn't import from lib/imageUpload.
  * cardId is included in the filename to prevent storage collisions between two
  * cards in the same set that share the same card number (e.g. Pokémon #3 and
  * Energy #3 both in the same set would otherwise map to the same file).
+ *
+ * A Unix-second timestamp suffix is appended so that every upload — including
+ * replacements — writes to a NEW R2 key with a NEW public URL.  This prevents
+ * the Cloudflare CDN from serving the old cached image when a card is re-uploaded
+ * to the same logical filename as before.
  */
 function generateImageFilename(setId: string, number: string, cardId: string): string {
   const cardNumber = number.split('/')[0]
-  return `${setId}-${cardNumber}-${cardId}.webp`
+  const version    = Math.floor(Date.now() / 1000)   // Unix seconds — short but unique
+  return `${setId}-${cardNumber}-${cardId}-${version}.webp`
+}
+
+/**
+ * Extract the R2 object key from a full public CDN URL.
+ * Returns null when the URL doesn't belong to our R2 bucket (e.g. legacy URLs).
+ */
+function extractR2Key(r2Url: string): string | null {
+  try {
+    const base = (process.env.NEXT_PUBLIC_R2_PUBLIC_URL ?? '').replace(/\/$/, '')
+    if (base && r2Url.startsWith(base + '/')) {
+      return r2Url.slice(base.length + 1)
+    }
+    return null
+  } catch {
+    return null
+  }
 }
 
 // Domains permitted for server-side URL fetching (mirrors proxy-image allow-list)
@@ -116,6 +138,16 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // 3. Fetch the card's current image URL so we can delete the old R2 object
+  //    after a successful replacement.  Failure here is non-fatal — we just
+  //    skip the cleanup step.
+  const { data: cardRow } = await supabaseAdmin
+    .from('cards')
+    .select('image')
+    .eq('id', cardId)
+    .single()
+  const oldImageUrl: string | null = cardRow?.image ?? null
+
   // --- Branch A: file upload ---
   if (file) {
     if (!file.type.startsWith('image/')) {
@@ -128,7 +160,7 @@ export async function POST(request: NextRequest) {
     const filename   = generateImageFilename(setId, cardNumber, cardId)
     const fileBuffer = await file.arrayBuffer()
 
-    return uploadAndRecord(filename, fileBuffer, file.type, cardId)
+    return uploadAndRecord(filename, fileBuffer, file.type, cardId, oldImageUrl)
   }
 
   // --- Branch B: URL import ---
@@ -145,7 +177,7 @@ export async function POST(request: NextRequest) {
     }
 
     const filename = generateImageFilename(setId, cardNumber, cardId)
-    return uploadAndRecord(filename, buffer, contentType, cardId)
+    return uploadAndRecord(filename, buffer, contentType, cardId, oldImageUrl)
   }
 
   return NextResponse.json(
@@ -160,6 +192,7 @@ async function uploadAndRecord(
   buffer: ArrayBuffer,
   contentType: string,
   cardId: string,
+  oldImageUrl: string | null,
 ): Promise<NextResponse> {
   // 4. Compress to WebP before uploading to minimise storage usage
   let uploadBuffer: Buffer | ArrayBuffer
@@ -173,7 +206,8 @@ async function uploadAndRecord(
     uploadContentType = contentType
   }
 
-  // 5. Upload to R2
+  // 5. Upload to R2 — versioned filename guarantees a fresh CDN URL every time,
+  //    so browsers and Cloudflare never serve a stale cached image on replacement.
   const r2Key = `card-images/${filename}`
   try {
     await uploadToR2(r2Key, uploadBuffer, uploadContentType)
@@ -185,11 +219,12 @@ async function uploadAndRecord(
     )
   }
 
-  // 6. Resolve public URL — store the stable URL in the DB so every request
-  //    hits the same CDN cache key; return a cache-busted URL to the browser
-  //    only so the uploading client sees the new image immediately.
-  const stableUrl = getR2Url(r2Key)                    // clean URL — stored in DB
-  const imageUrl  = `${stableUrl}?v=${Date.now()}`     // cache-bust — for browser only
+  // 6. Resolve public URL.  Because the filename is versioned, stableUrl is
+  //    always a new URL — no cache-bust query string needed for end users.
+  //    We still append ?v=... for the browser response so the admin UI can
+  //    distinguish this upload from a prior one in the same session.
+  const stableUrl = getR2Url(r2Key)
+  const imageUrl  = `${stableUrl}?v=${Date.now()}`   // for browser preview only
 
   // 7. Update cards table (service-role — bypasses RLS)
   const { error: dbError } = await supabaseAdmin
@@ -205,8 +240,20 @@ async function uploadAndRecord(
     )
   }
 
-  // 8. Invalidate the Next.js server-side data cache so getCardsBySet
-  //    returns fresh data (including the new image) on the next request.
+  // 8. Delete the previous R2 object (best-effort — never fail the request).
+  //    This keeps the bucket tidy now that every upload creates a new key.
+  if (oldImageUrl) {
+    const oldKey = extractR2Key(oldImageUrl)
+    if (oldKey) {
+      deleteFromR2(oldKey).catch((err) =>
+        console.warn('[upload-card-image] Failed to delete old R2 object:', err),
+      )
+    }
+  }
+
+  // 9. Invalidate the Next.js server-side data cache so getCardsBySet returns
+  //    fresh data (including the new image URL) on the next request.
+  //    expire: 0 → cached entries are considered stale immediately after invalidation.
   revalidateTag('cards', { expire: 0 })
 
   return NextResponse.json({ success: true, imageUrl })

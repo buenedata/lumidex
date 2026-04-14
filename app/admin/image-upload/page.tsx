@@ -77,6 +77,21 @@ function CardImagesTab() {
     setGridRefreshKey((k) => k + 1)
   }
 
+  /**
+   * Called by CardImageGrid whenever its card list is (re-)loaded.
+   * We keep cardList in sync for "Next Card" navigation AND also re-sync
+   * selectedCard so the modal immediately reflects the fresh DB state after
+   * a successful upload (e.g. the "Card already has an image" notice updates).
+   */
+  const handleCardsLoaded = (cards: CardGridItem[]) => {
+    setCardList(cards)
+    setSelectedCard((prev) => {
+      if (!prev) return prev
+      const updated = cards.find((c) => c.id === prev.id)
+      return updated ?? prev
+    })
+  }
+
   const handleModalClose = () => setModalOpen(false)
 
   const handleNextCard = () => {
@@ -122,7 +137,7 @@ function CardImagesTab() {
             <CardImageGrid
               setId={selectedSetId}
               onCardSelect={handleCardSelect}
-              onCardsLoaded={setCardList}
+              onCardsLoaded={handleCardsLoaded}
               selectedCardId={selectedCard?.id}
               refreshKey={gridRefreshKey}
               imageOverrides={imageOverrides}
