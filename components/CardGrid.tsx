@@ -52,7 +52,7 @@ interface CardPriceRow {
 
 type ModalTab = 'card' | 'price' | 'friends'
 
-type SortBy    = 'number' | 'name' | 'price'
+type SortBy    = 'number' | 'name' | 'price' | 'date'
 type FilterTab = 'all' | 'owned' | 'missing' | 'duplicates'
 
 interface RelatedCard {
@@ -585,6 +585,12 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
         const priceB = cardPricesUSD?.[b.id] ?? 0
         // base order: highest price first (desc = 1, asc = -1)
         return dir * (priceB - priceA)
+      }
+      if (sortBy === 'date') {
+        const dateA = (a as any).set_release_date ?? ''
+        const dateB = (b as any).set_release_date ?? ''
+        // asc = oldest first, desc = newest first
+        return dir * dateA.localeCompare(dateB)
       }
       // default: 'number' — numeric sort with string fallback
       const getNum = (n: string | null): number => {

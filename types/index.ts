@@ -142,6 +142,8 @@ export interface PokemonCard {
   set_name?: string | null;
   /** Set logo URL — only populated on the browse/search page */
   set_logo_url?: string | null;
+  /** Set release date (ISO string) — only populated on the browse/search page; used for date sort */
+  set_release_date?: string | null;
 }
 
 /** A single data point in the price history chart. */

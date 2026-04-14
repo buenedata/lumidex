@@ -17,17 +17,18 @@ import type {
 // ── Helper: convert CardSearchResult → PokemonCard (for SetPageCards / CardGrid) ──
 function asPokemonCards(cards: CardSearchResult[]): PokemonCard[] {
   return cards.map(c => ({
-    id:           c.id,
-    set_id:       c.set.id,
-    name:         c.name,
-    number:       c.number,
-    rarity:       c.rarity,
-    type:         c.type,
-    image:        c.image_url,
-    image_url:    c.image_url,   // legacy field expected by CardGrid
-    created_at:   '',
-    set_name:     c.set.name,    // per-card set name used in the card modal
-    set_logo_url: c.set.logo_url,
+    id:               c.id,
+    set_id:           c.set.id,
+    name:             c.name,
+    number:           c.number,
+    rarity:           c.rarity,
+    type:             c.type,
+    image:            c.image_url,
+    image_url:        c.image_url,    // legacy field expected by CardGrid
+    created_at:       '',
+    set_name:         c.set.name,     // per-card set name used in the card modal
+    set_logo_url:     c.set.logo_url,
+    set_release_date: c.set.release_date, // used for date sort
   }))
 }
 

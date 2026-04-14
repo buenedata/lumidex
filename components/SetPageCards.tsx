@@ -57,13 +57,14 @@ interface SetPageCardsProps {
 }
 
 type FilterTab    = 'all' | 'owned' | 'missing' | 'duplicates'
-type SortBy       = 'number' | 'name' | 'price'
+type SortBy       = 'number' | 'name' | 'price' | 'date'
 type SortDirection = 'asc' | 'desc'
 
 const sortOptions: { label: string; value: SortBy }[] = [
   { label: 'Number', value: 'number' },
   { label: 'Name',   value: 'name'   },
   { label: 'Price',  value: 'price'  },
+  { label: 'Date',   value: 'date'   },
 ]
 
 export default function SetPageCards({
@@ -92,8 +93,9 @@ export default function SetPageCards({
 }: SetPageCardsProps) {
   const [activeFilter, setActiveFilter]     = useState<FilterTab>('all')
   const [searchQuery, setSearchQuery]       = useState('')
-  const [sortBy, setSortBy]                 = useState<SortBy>('number')
-  const [sortDirection, setSortDirection]   = useState<SortDirection>('asc')
+  // Browse page (setId === '') defaults to newest-first; set detail page defaults to card number asc.
+  const [sortBy, setSortBy]                 = useState<SortBy>(setId ? 'number' : 'date')
+  const [sortDirection, setSortDirection]   = useState<SortDirection>(setId ? 'asc' : 'desc')
   const [collectionGoal, setCollectionGoal] = useState<CollectionGoal>(initialGoal)
   const [legendVariants, setLegendVariants]     = useState<QuickAddVariant[]>([])
   const [binderModalOpen, setBinderModalOpen]   = useState(false)
@@ -249,13 +251,15 @@ export default function SetPageCards({
       {/* ── Collection Goal Selector + Variant Legend + Binder Guide ── */}
       <div className="max-w-screen-2xl mx-auto px-6 pt-5 pb-4 border-b border-subtle">
         <div className="flex flex-wrap items-start gap-6">
-          <CollectionGoalSelector
-            setId={setId}
-            value={collectionGoal}
-            hasPromos={hasPromos || hasExtraVariants}
-            isAuthenticated={isAuthenticated}
-            onChange={setCollectionGoal}
-          />
+          {setId && (
+            <CollectionGoalSelector
+              setId={setId}
+              value={collectionGoal}
+              hasPromos={hasPromos || hasExtraVariants}
+              isAuthenticated={isAuthenticated}
+              onChange={setCollectionGoal}
+            />
+          )}
 
           {/* Variant legend — shimmer only when the batch load has taken > 250ms */}
           {showVariantShimmer ? (
@@ -388,7 +392,7 @@ export default function SetPageCards({
           <div className="flex items-center gap-2 pr-3 mr-0 border-r border-subtle self-stretch">
             <span className="text-sm text-muted select-none whitespace-nowrap">Sort by</span>
 
-            <Listbox value={sortBy} onChange={(v) => { setSortBy(v); setSortDirection('asc') }}>
+            <Listbox value={sortBy} onChange={(v) => { setSortBy(v); setSortDirection(v === 'date' ? 'desc' : 'asc') }}>
               <div className="relative">
                 <ListboxButton className="flex items-center gap-1 px-3 py-2.5 text-sm font-medium text-secondary hover:text-primary focus:outline-none transition-colors cursor-pointer whitespace-nowrap">
                   <span>{sortOptions.find(o => o.value === sortBy)?.label}</span>
