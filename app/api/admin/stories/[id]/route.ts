@@ -3,6 +3,38 @@ import { requireAdmin } from '@/lib/admin'
 import { supabaseAdmin } from '@/lib/supabase'
 
 /**
+ * GET /api/admin/stories/[id]
+ * Returns a single story by id, including full content, for the edit page.
+ */
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    await requireAdmin()
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Unauthorized' },
+      { status: 401 },
+    )
+  }
+
+  const { id } = await params
+
+  const { data, error } = await supabaseAdmin
+    .from('stories')
+    .select('*')
+    .eq('id', id)
+    .single()
+
+  if (error || !data) {
+    return NextResponse.json({ error: 'Story not found' }, { status: 404 })
+  }
+
+  return NextResponse.json({ story: data })
+}
+
+/**
  * PATCH /api/admin/stories/[id]
  * Partial update of any story field.
  * Updating slug, content, title, description, gradient, cover_image_url, etc.
@@ -42,6 +74,28 @@ export async function PATCH(
   const updates: Record<string, unknown> = {}
   for (const key of allowed) {
     if (key in body) updates[key] = body[key]
+  }
+
+  // ── Safety guard: never overwrite real content with an empty array ──────────
+  // A stale browser bundle (old client JS) may send content:[] when the edit
+  // page hasn't loaded the existing blocks yet. We protect against data loss by
+  // checking the database before applying an empty-array content update.
+  if (
+    'content' in updates &&
+    Array.isArray(updates.content) &&
+    (updates.content as unknown[]).length === 0
+  ) {
+    const { data: existing } = await supabaseAdmin
+      .from('stories')
+      .select('content')
+      .eq('id', id)
+      .single()
+
+    const existingBlocks = existing?.content
+    if (Array.isArray(existingBlocks) && existingBlocks.length > 0) {
+      // The database already has content — keep it, drop the empty update
+      delete updates.content
+    }
   }
 
   const { data, error } = await supabaseAdmin

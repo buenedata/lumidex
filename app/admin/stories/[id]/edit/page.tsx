@@ -24,15 +24,14 @@ export default function EditStoryPage() {
     }
   }, [user, profile, isLoading, router])
 
-  // ── Fetch story data ───────────────────────────────────────────────────────
+  // ── Fetch story data (full record including content) ──────────────────────
   useEffect(() => {
     if (!user || profile?.role !== 'admin' || !id) return
 
-    fetch(`/api/admin/stories`)
+    fetch(`/api/admin/stories/${id}`)
       .then(r => r.json())
       .then(json => {
-        // Find this story in the admin list (which returns all stories including unpublished)
-        const story = (json.stories ?? []).find((s: StoryFormData & { id: string }) => s.id === id)
+        const story = json.story
         if (!story) {
           setFetchErr('Story not found')
         } else {
