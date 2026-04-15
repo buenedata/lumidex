@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
+import { supabaseAdmin } from '@/lib/supabase'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -25,17 +26,18 @@ interface Story {
   published_at:    string
 }
 
-// ── Data fetching (server component) ─────────────────────────────────────────
+// ── Data fetching (server component — direct Supabase query) ─────────────────
 
 async function fetchStory(slug: string): Promise<Story | null> {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
   try {
-    const res = await fetch(`${baseUrl}/api/stories/${slug}`, {
-      next: { revalidate: 60 }, // ISR: refresh at most every 60 s
-    })
-    if (!res.ok) return null
-    const json = await res.json()
-    return json.story ?? null
+    const { data, error } = await supabaseAdmin
+      .from('stories')
+      .select('*')
+      .eq('slug', slug)
+      .eq('is_published', true)
+      .single()
+    if (error || !data) return null
+    return data as Story
   } catch {
     return null
   }
