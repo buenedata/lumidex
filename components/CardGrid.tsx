@@ -6,9 +6,11 @@ import { CardTile } from '@/components/CardTile'
 import Link from 'next/link'
 import { PokemonCard, UserCard, Variant, VariantWithQuantity, QuickAddVariant, VARIANT_COLOR_CLASSES, CollectionGoal, PriceHistoryPoint, FriendCardOwner, PriceSource, UserGradedCard } from '@/types'
 import { useCollectionStore, useAuthStore } from '@/lib/store'
+import { useProGate } from '@/hooks/useProGate'
 import Modal from '@/components/ui/Modal'
 import VariantSuggestionModal from '@/components/VariantSuggestionModal'
 import AddGradedCardModal from '@/components/AddGradedCardModal'
+import { UpgradeModal } from '@/components/upgrade/UpgradeModal'
 import { formatPrice, EUR_TO_USD } from '@/lib/pricing'
 import type { PriceChartRange } from '@/components/PriceChart'
 import { updateVariant, deleteVariant, removeVariantFromCard } from '@/app/admin/variants/actions'
@@ -315,6 +317,7 @@ function getTypeGlowClass(type: string | null | undefined): string {
 export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', sortDirection = 'asc', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', priceSource = 'tcgplayer', onVariantsLegendChange, onHasExtraVariants, allCards, onCountsChange, disableGreyOut = false, onWantedStatusChange, onVariantsBatchLoading, initialCardVariants }: CardGridProps) {
   const { updateCardQuantity, userCards: storeUserCards, fetchUserCards } = useCollectionStore()
   const { user, isLoading, profile } = useAuthStore()
+  const { isPro } = useProGate()
   // Prefer the client-side profile's preferred_currency (always reliable after login)
   // over the server-passed prop, which may have defaulted to 'USD' if the server-side
   // supabaseAdmin profile query failed silently.
@@ -391,6 +394,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const relatedCardsCacheRef  = useRef(new Map<string, { cards: RelatedCard[], total: number }>())
   const [showVariantSuggestionModal, setShowVariantSuggestionModal] = useState(false)
   const [showGradedModal, setShowGradedModal] = useState(false)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   const [relatedCards, setRelatedCards] = useState<RelatedCard[]>([])
   const [relatedCardsTotal, setRelatedCardsTotal] = useState(0)
   const [isFetchingRelated, setIsFetchingRelated] = useState(false)
@@ -398,8 +402,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const [modalTab, setModalTab]             = useState<ModalTab>('card')
   const [cardPriceCache, setCardPriceCache] = useState<Map<string, CardPriceRow | null>>(new Map())
   const [isLoadingPrice, setIsLoadingPrice] = useState(false)
-  // Price history chart state
-  const [priceChartRange, setPriceChartRange]           = useState<PriceChartRange>('30d')
+  // Price history chart state — default to 7d (free tier); Pro users can select longer ranges
+  const [priceChartRange, setPriceChartRange]           = useState<PriceChartRange>('7d')
   const [priceHistoryCache, setPriceHistoryCache]       = useState<Map<string, PriceHistoryPoint[]>>(new Map())
   const [isLoadingHistory, setIsLoadingHistory]         = useState(false)
   // eBay graded price state (PSA / CGC / ACE)
@@ -1692,6 +1696,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                     currency={effectiveCurrency}
                     isLoading={isLoadingHistory && !priceHistoryCache.has(`${selectedCard.id}:${priceChartRange}`)}
                     range={priceChartRange}
+                    isPro={isPro}
                     onRangeChange={(r) => {
                       setPriceChartRange(r)
                       fetchCardPriceHistory(selectedCard.id, r)
@@ -2300,14 +2305,23 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                   </div>
                 </div>
 
-                {/* Add Graded Card Button */}
+                {/* Add Graded Card Button — Pro only; free users see the button but are redirected to upgrade */}
                 {user && (
                   <div className="border-t border-subtle pt-3 mt-4">
                     <button
-                      onClick={() => setShowGradedModal(true)}
+                      onClick={() => {
+                        if (isPro) {
+                          setShowGradedModal(true)
+                        } else {
+                          setShowUpgradeModal(true)
+                        }
+                      }}
                       className="w-full py-2.5 px-4 bg-elevated hover:bg-card-item border border-subtle text-primary rounded-lg transition-colors font-medium text-sm flex items-center justify-center gap-2"
                     >
                       🏅 Add Graded Card
+                      {!isPro && (
+                        <span className="ml-1 text-xs text-[#a78bfa] font-normal">· Pro</span>
+                      )}
                     </button>
                   </div>
                 )}
@@ -2627,6 +2641,11 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
           onSuccess={() => fetchUserGradedCards(selectedCard.id)}
         />
       )}
+      <UpgradeModal
+        isOpen={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        feature="Graded cards (PSA, BGS, CGC, TAG, ACE)"
+      />
     </>
   )
 }

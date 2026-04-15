@@ -2,13 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
 /**
- * GET /api/prices/history/[cardId]?range=30d
+ * GET /api/prices/history/[cardId]?range=7d
  *
  * Returns per-variant price history for a card, used to render
  * the line chart on the Price tab of the card detail modal.
  *
  * Query params:
- *   range  – '30d' | '3m' | '6m' | '1y'  (default: '30d')
+ *   range  – '7d' | '14d' | '30d' | '3m' | '6m' | '1y'  (default: '7d')
+ *
+ * Access rules (enforced client-side via blur; API returns data for all ranges):
+ *   - Free tier : only '7d' is shown unblurred
+ *   - Pro tier  : all ranges available
  *
  * Response:
  *   { history: PriceHistoryPoint[] }
@@ -17,9 +21,11 @@ import { supabaseAdmin } from '@/lib/supabase'
  *   { variantKey: string; priceUsd: number; recordedAt: string }
  */
 
-type RangeKey = '30d' | '3m' | '6m' | '1y'
+type RangeKey = '7d' | '14d' | '30d' | '3m' | '6m' | '1y'
 
 const RANGE_INTERVALS: Record<RangeKey, string> = {
+  '7d':  '7 days',
+  '14d': '14 days',
   '30d': '30 days',
   '3m':  '3 months',
   '6m':  '6 months',
@@ -37,8 +43,8 @@ export async function GET(
   }
 
   const { searchParams } = new URL(request.url)
-  const rangeParam = (searchParams.get('range') ?? '30d') as RangeKey
-  const interval   = RANGE_INTERVALS[rangeParam] ?? RANGE_INTERVALS['30d']
+  const rangeParam = (searchParams.get('range') ?? '7d') as RangeKey
+  const interval   = RANGE_INTERVALS[rangeParam] ?? RANGE_INTERVALS['7d']
 
   const { data, error } = await supabaseAdmin
     .from('card_price_history')
