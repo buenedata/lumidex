@@ -133,15 +133,21 @@ export default function SetPageCards({
   const effectiveCurrency = (profile as any)?.preferred_currency ?? currency
 
   // ── Search filter ────────────────────────────────────────────────────────
-  const filteredCards = searchQuery.trim()
-    ? cards.filter(card => {
-        const q = searchQuery.toLowerCase()
-        return (
-          card.name?.toLowerCase().includes(q) ||
-          card.number?.toLowerCase().includes(q)
-        )
-      })
-    : cards
+  // Wrapped in useMemo so a non-empty searchQuery doesn't produce a new array
+  // reference on every render — which would re-trigger CardGrid's batch-load
+  // useEffect([cards, userId]) unnecessarily.
+  const filteredCards = useMemo(() =>
+    searchQuery.trim()
+      ? cards.filter(card => {
+          const q = searchQuery.toLowerCase()
+          return (
+            card.name?.toLowerCase().includes(q) ||
+            card.number?.toLowerCase().includes(q)
+          )
+        })
+      : cards,
+    [cards, searchQuery]
+  )
 
   // ── Tab counts ───────────────────────────────────────────────────────────
   const haveCount = useMemo(() =>
@@ -261,22 +267,12 @@ export default function SetPageCards({
             />
           )}
 
-          {/* Variant legend — shimmer only when the batch load has taken > 250ms */}
-          {showVariantShimmer ? (
-            <div className="flex flex-col gap-1.5">
-              <span className="text-xs text-muted uppercase tracking-wider select-none">
-                Variant Key
-              </span>
-              <div className="flex items-center gap-3">
-                {[0, 1, 2].map(i => (
-                  <div key={i} className="flex items-center gap-1.5 animate-pulse">
-                    <div className="w-3 h-3 rounded-full bg-surface shrink-0" />
-                    <div className="h-2 bg-surface rounded w-10" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : legendVariants.filter(v => v.color !== 'gray').length > 0 ? (
+          {/* Variant legend — once legend data is known, show it permanently.
+              The shimmer is only shown during the initial load before any
+              legend data exists. This prevents the key from blinking when
+              CardGrid's batch-load re-fires (e.g. after a Supabase token
+              refresh that briefly flips userId undefined → value). */}
+          {legendVariants.filter(v => v.color !== 'gray').length > 0 ? (
             <div className="flex flex-col gap-1.5">
               <span className="text-xs text-muted uppercase tracking-wider select-none">
                 Variant Key
@@ -301,6 +297,20 @@ export default function SetPageCards({
                     <span className="text-xs text-gray-400">
                       {v.color === 'gray' ? 'Custom Variant' : v.name}
                     </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : showVariantShimmer ? (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs text-muted uppercase tracking-wider select-none">
+                Variant Key
+              </span>
+              <div className="flex items-center gap-3">
+                {[0, 1, 2].map(i => (
+                  <div key={i} className="flex items-center gap-1.5 animate-pulse">
+                    <div className="w-3 h-3 rounded-full bg-surface shrink-0" />
+                    <div className="h-2 bg-surface rounded w-10" />
                   </div>
                 ))}
               </div>

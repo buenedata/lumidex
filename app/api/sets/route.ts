@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
     const transformedSets = sets.map((set) => ({
       id: set.id,
       name: set.name,
+      total: set.setComplete ?? set.total ?? 0,       // matched to PokemonSet.total used by dashboard
       total_cards: set.setComplete ?? set.total ?? 0, // full count incl. secret rares
       series: set.series,
       release_date: set.release_date,
