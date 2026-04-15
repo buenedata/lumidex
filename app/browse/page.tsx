@@ -185,6 +185,7 @@ function toCardResults(data: any[]): CardSearchResult[] {
       type:               card.type        || '',
       supertype:          card.supertype   || '',
       default_variant_id: null,
+      variants:           [],
       set: {
         id:           card.set_id              || '',
         name:         set?.name               || '',

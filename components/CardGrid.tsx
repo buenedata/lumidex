@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { CardTile } from '@/components/CardTile'
 import Link from 'next/link'
-import { PokemonCard, UserCard, VariantWithQuantity, QuickAddVariant, VARIANT_COLOR_CLASSES, CollectionGoal, PriceHistoryPoint, FriendCardOwner, PriceSource, UserGradedCard } from '@/types'
+import { PokemonCard, UserCard, Variant, VariantWithQuantity, QuickAddVariant, VARIANT_COLOR_CLASSES, CollectionGoal, PriceHistoryPoint, FriendCardOwner, PriceSource, UserGradedCard } from '@/types'
 import { useCollectionStore, useAuthStore } from '@/lib/store'
 import Modal from '@/components/ui/Modal'
 import VariantSuggestionModal from '@/components/VariantSuggestionModal'
@@ -430,6 +430,20 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const [confirmDeleteId,  setConfirmDeleteId]     = useState<string | null>(null)
   const [isSavingEdit,     setIsSavingEdit]        = useState(false)
   const editPopupRef = useRef<HTMLDivElement>(null)
+  // Admin: per-card quick-add (default_variant_id) for the currently open card.
+  // Initialised from selectedCard.default_variant_id when a card modal opens.
+  const [modalDefaultVariantId, setModalDefaultVariantId] = useState<string | null>(null)
+  const [isSavingDefaultVariant, setIsSavingDefaultVariant] = useState(false)
+  // Admin: variant availability config panel (controls which dots show on set/browse pages)
+  const [showAvailPanel,       setShowAvailPanel]       = useState(false)
+  const [availGlobalVariants,  setAvailGlobalVariants]  = useState<Variant[]>([])
+  const [availSelectedIds,     setAvailSelectedIds]     = useState<Set<string>>(new Set())
+  const [availSavedIds,        setAvailSavedIds]        = useState<Set<string>>(new Set())
+  const [availHasOverrides,    setAvailHasOverrides]    = useState(false)
+  const [isLoadingAvailConfig, setIsLoadingAvailConfig] = useState(false)
+  const [isSavingAvailConfig,  setIsSavingAvailConfig]  = useState(false)
+  // Ref caches global variants after first load so the fetch only happens once per session
+  const globalVariantsLoadedRef = useRef(false)
   // Ensures we only auto-open the initialCardId modal once
   const autoOpenedRef = useRef(false)
   // Used to distinguish single-click (open modal) from double-click (add default variant)
@@ -454,6 +468,51 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   useEffect(() => {
     setShowGradedModal(false)
   }, [selectedCard?.id])
+
+  // Reset per-card admin overrides whenever a different card is opened in the modal.
+  useEffect(() => {
+    setModalDefaultVariantId(selectedCard?.default_variant_id ?? null)
+    setShowAvailPanel(false)
+    setAvailSelectedIds(new Set())
+    setAvailSavedIds(new Set())
+    setAvailHasOverrides(false)
+  }, [selectedCard?.id])
+
+  // Admin: load variant availability config when a card modal opens (lazy, admin-only).
+  // Global variants are fetched once and cached in globalVariantsLoadedRef.
+  useEffect(() => {
+    if (!isAdmin || !selectedCard) return
+    const cardId = selectedCard.id
+    setIsLoadingAvailConfig(true)
+    const doLoad = async () => {
+      try {
+        const [availRes, globalRes] = await Promise.all([
+          fetch(`/api/card-variant-availability?cardId=${cardId}`),
+          globalVariantsLoadedRef.current ? null : fetch('/api/variants'),
+        ])
+        if (globalRes?.ok) {
+          const data = await globalRes.json()
+          if (Array.isArray(data)) {
+            globalVariantsLoadedRef.current = true
+            setAvailGlobalVariants(data)
+          }
+        }
+        if (availRes.ok) {
+          const data = await availRes.json()
+          const ids = new Set<string>([
+            ...((data.variants          ?? []) as { id: string }[]).map(v => v.id),
+            ...((data.cardSpecificVariants ?? []) as { id: string }[]).map(v => v.id),
+          ])
+          setAvailSelectedIds(ids)
+          setAvailSavedIds(new Set(ids))
+          setAvailHasOverrides(data.hasOverrides ?? false)
+        }
+      } catch { /* non-critical */ }
+      finally { setIsLoadingAvailConfig(false) }
+    }
+    doLoad()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCard?.id, isAdmin])
 
   // Admin: save variant field edits and patch local state
   async function handleVariantEditSave(variantId: string) {
@@ -522,6 +581,100 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     }
     setEditingVariantId(null)
     setConfirmDeleteId(null)
+  }
+
+  // Admin: set a variant as the Quick Add (default_variant_id) for this specific card.
+  // Calls POST /api/card-variant-availability with only defaultVariantId — variantIds is
+  // intentionally omitted so existing availability overrides are preserved.
+  async function handleSetAsQuickAdd(variantId: string) {
+    if (!selectedCard || isSavingDefaultVariant) return
+    setIsSavingDefaultVariant(true)
+    try {
+      const res = await fetch('/api/card-variant-availability', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cardId:           selectedCard.id,
+          defaultVariantId: variantId,
+        }),
+      })
+      if (res.ok) {
+        setModalDefaultVariantId(variantId)
+      }
+    } catch { /* non-critical */ }
+    finally { setIsSavingDefaultVariant(false) }
+  }
+
+  // Admin: helper — reload dots + full variant list for a card after availability change.
+  async function reloadCardDots(cardId: string) {
+    try {
+      const res = await fetch('/api/variants', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ cardIds: [cardId], userId }),
+      })
+      if (!res.ok) return
+      const data: Record<string, VariantWithQuantity[]> = await res.json()
+      const newDots = data[cardId] ?? []
+      const dots: QuickAddVariant[] = newDots
+        .filter((v: any) => v.is_official)
+        .map((v: any) => ({
+          id: v.id, name: v.name, color: v.color,
+          short_label: null, quantity: v.quantity ?? 0,
+          sort_order: v.sort_order ?? 0, card_id: v.card_id ?? null,
+          is_quick_add: v.is_quick_add ?? false, variant_image_url: null,
+        }))
+      setCardVariantDots(prev => new Map(prev).set(cardId, dots))
+      setCardVariants(prev => new Map(prev).set(cardId, newDots as VariantWithQuantity[]))
+    } catch { /* non-critical */ }
+  }
+
+  // Admin: save variant dot availability config for this card.
+  async function handleSaveAvailConfig() {
+    if (!selectedCard || isSavingAvailConfig) return
+    setIsSavingAvailConfig(true)
+    try {
+      // Only send global variant IDs — card-specific variants are not managed here
+      const globalIds = Array.from(availSelectedIds).filter(id =>
+        availGlobalVariants.some(v => v.id === id)
+      )
+      const res = await fetch('/api/card-variant-availability', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          cardId:           selectedCard.id,
+          variantIds:       globalIds,
+          defaultVariantId: modalDefaultVariantId,
+        }),
+      })
+      if (res.ok) {
+        setAvailSavedIds(new Set(availSelectedIds))
+        setAvailHasOverrides(globalIds.length > 0)
+        await reloadCardDots(selectedCard.id)
+      }
+    } catch { /* non-critical */ }
+    finally { setIsSavingAvailConfig(false) }
+  }
+
+  // Admin: reset variant dot availability back to rarity-based defaults.
+  async function handleResetAvailConfig() {
+    if (!selectedCard || isSavingAvailConfig) return
+    if (!confirm('Reset to rarity-based defaults? This removes any custom dot overrides for this card.')) return
+    setIsSavingAvailConfig(true)
+    try {
+      const res = await fetch('/api/card-variant-availability', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cardId: selectedCard.id, variantIds: [] }),
+      })
+      if (res.ok) {
+        setAvailSelectedIds(new Set())
+        setAvailSavedIds(new Set())
+        setAvailHasOverrides(false)
+        await reloadCardDots(selectedCard.id)
+      }
+    } catch { /* non-critical */ }
+    finally { setIsSavingAvailConfig(false) }
   }
 
   const filteredCards = useMemo(() => {
@@ -1294,8 +1447,11 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   //   – no variant is hovered, or
   //   – the hovered variant has no stored image, or
   //   – the hovered variant IS the quick-add default (card already shows that image).
+  // Use the session-local override (set when admin clicks ⚡) if available,
+  // falling back to the card's persisted default_variant_id, then global is_quick_add,
+  // then first variant in sort order.
   const defaultVariantId =
-    selectedCard?.default_variant_id ??
+    modalDefaultVariantId ??
     filteredVariants.find(v => v.is_quick_add)?.id ??
     null
   const hoveredVariant = hoveredVariantId
@@ -1810,6 +1966,29 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                               ✏️
                             </button>
                           )}
+                          {/* Admin: ⚡ Quick Add indicator — clickable to set this variant as the
+                              double-click default for this specific card (cards.default_variant_id). */}
+                          {isAdmin && (
+                            <button
+                              onClick={e => {
+                                e.stopPropagation()
+                                handleSetAsQuickAdd(variant.id)
+                              }}
+                              disabled={isSavingDefaultVariant}
+                              title={
+                                defaultVariantId === variant.id
+                                  ? 'Quick Add: double-click on the card image adds this variant'
+                                  : 'Set as Quick Add for this card'
+                              }
+                              className={`shrink-0 w-5 h-5 flex items-center justify-center rounded transition-all text-xs leading-none
+                                ${defaultVariantId === variant.id
+                                  ? 'text-yellow-400 opacity-100'
+                                  : 'text-muted opacity-30 hover:opacity-80 hover:text-yellow-400'}
+                                ${isSavingDefaultVariant ? 'cursor-wait' : 'cursor-pointer'}`}
+                            >
+                              ⚡
+                            </button>
+                          )}
                           {/* Variant colour dot */}
                           <div className={`w-3 h-3 rounded-full shrink-0 ${colorMap[variant.color] || 'bg-zinc-500'}`} />
                           {/* Variant Name */}
@@ -2045,6 +2224,24 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                                 ))}
                               </div>
                             </div>
+                            {/* Quick Add for this card — per-card default_variant_id */}
+                            <div>
+                              <label className="text-xs text-muted mb-1 block">Quick Add (this card)</label>
+                              {defaultVariantId === variant.id ? (
+                                <span className="text-xs text-yellow-400 flex items-center gap-1.5">
+                                  ⚡ Current Quick Add
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => { handleSetAsQuickAdd(variant.id); setEditingVariantId(null) }}
+                                  disabled={isSavingDefaultVariant}
+                                  className="text-xs text-yellow-400/80 hover:text-yellow-400 border border-yellow-400/30 hover:border-yellow-400/60 rounded px-2 py-0.5 transition-all disabled:opacity-50"
+                                >
+                                  ⚡ Set as Quick Add
+                                </button>
+                              )}
+                            </div>
                             {/* Error message */}
                             {variantEditError && (
                               <p className="text-red-400 text-xs">{variantEditError}</p>
@@ -2133,6 +2330,84 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                             </div>
                           )
                         })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Admin: Variant Dot Display Config
+                    Controls which colour dots appear below this card on the set page and browse page.
+                    Uses card_variant_availability to override the rarity-based defaults. */}
+                {isAdmin && (
+                  <div className="border-t border-subtle pt-3 mt-3">
+                    <button
+                      onClick={() => setShowAvailPanel(v => !v)}
+                      className="flex items-center gap-1.5 text-xs text-muted hover:text-primary transition-colors w-full text-left"
+                    >
+                      <span>⚙️ Variant Dot Display</span>
+                      {availHasOverrides && (
+                        <span className="px-1.5 py-0.5 bg-purple-900/40 border border-purple-500/40 text-purple-300 text-[10px] rounded-full">
+                          custom
+                        </span>
+                      )}
+                      <span className="ml-auto text-[10px]">{showAvailPanel ? '▲' : '▼'}</span>
+                    </button>
+
+                    {showAvailPanel && (
+                      <div className="mt-2 space-y-2">
+                        <p className="text-[11px] text-muted/70 leading-relaxed">
+                          Toggle which variant dots appear under this card image on the set page and browse page.
+                          Overrides the rarity-based defaults for this card only.
+                        </p>
+
+                        {isLoadingAvailConfig ? (
+                          <p className="text-xs text-muted animate-pulse">Loading…</p>
+                        ) : (
+                          <>
+                            <div className="space-y-1">
+                              {availGlobalVariants.map(v => (
+                                <label key={v.id} className="flex items-center gap-2 cursor-pointer group">
+                                  <input
+                                    type="checkbox"
+                                    checked={availSelectedIds.has(v.id)}
+                                    onChange={() => setAvailSelectedIds(prev => {
+                                      const next = new Set(prev)
+                                      if (next.has(v.id)) next.delete(v.id); else next.add(v.id)
+                                      return next
+                                    })}
+                                    className="w-3.5 h-3.5 accent-accent"
+                                  />
+                                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${colorMap[v.color as keyof typeof colorMap] ?? 'bg-gray-500'}`} />
+                                  <span className="text-xs text-secondary group-hover:text-primary transition-colors">{v.name}</span>
+                                </label>
+                              ))}
+                            </div>
+
+                            {/* Unsaved‑changes hint */}
+                            {([...availSelectedIds].some(id => !availSavedIds.has(id)) ||
+                              [...availSavedIds].some(id => !availSelectedIds.has(id))) && (
+                              <p className="text-[11px] text-yellow-400/80">⚠ Unsaved changes</p>
+                            )}
+
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={handleSaveAvailConfig}
+                                disabled={isSavingAvailConfig}
+                                className="flex-1 py-1 rounded bg-accent text-white text-xs font-medium hover:opacity-90 disabled:opacity-50"
+                              >
+                                {isSavingAvailConfig ? 'Saving…' : 'Save'}
+                              </button>
+                              <button
+                                onClick={handleResetAvailConfig}
+                                disabled={isSavingAvailConfig}
+                                title="Reset to rarity-based defaults (clears all overrides)"
+                                className="py-1 px-2 rounded bg-elevated border border-subtle text-muted text-xs hover:bg-card-item disabled:opacity-50"
+                              >
+                                Reset
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>

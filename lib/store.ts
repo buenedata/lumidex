@@ -3,6 +3,8 @@ import { type User } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import { checkAndUnlockAchievements } from './achievements'
 import type { PokemonSet, PokemonCard, UserCard, UserSet } from '@/types'
+// Import from the client-safe constants file — NOT from lib/subscription (server-only)
+import type { UserTier } from './tierLimits'
 
 interface AuthState {
   user: User | null
@@ -12,6 +14,52 @@ interface AuthState {
   setProfile: (profile: any) => void
   setLoading: (loading: boolean) => void
 }
+
+// ─── Subscription store ───────────────────────────────────────────────────────
+
+interface SubscriptionState {
+  /** Current user tier. Defaults to 'free' until fetchSubscription() resolves. */
+  tier: UserTier
+  /** True while the initial subscription fetch is in-flight. */
+  isSubscriptionLoading: boolean
+  /** Fetch (or re-fetch) the authenticated user's tier from user_subscriptions. */
+  fetchSubscription: () => Promise<void>
+  /** Reset to free tier — called on sign-out. */
+  resetSubscription: () => void
+}
+
+export const useSubscriptionStore = create<SubscriptionState>((set) => ({
+  tier: 'free',
+  isSubscriptionLoading: true,
+
+  fetchSubscription: async () => {
+    const { user } = useAuthStore.getState()
+    if (!user) {
+      set({ tier: 'free', isSubscriptionLoading: false })
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('user_subscriptions')
+      .select('tier')
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (error) {
+      console.error('[subscription] fetchSubscription error:', error)
+      // Fail-safe: never accidentally block the user — default to free
+      set({ tier: 'free', isSubscriptionLoading: false })
+      return
+    }
+
+    set({
+      tier: ((data?.tier as UserTier) ?? 'free'),
+      isSubscriptionLoading: false,
+    })
+  },
+
+  resetSubscription: () => set({ tier: 'free', isSubscriptionLoading: false }),
+}))
 
 interface CollectionState {
   userSets: UserSet[]
@@ -303,6 +351,9 @@ supabase.auth.onAuthStateChange((event, session) => {
       const { fetchUserSets, fetchUserCards } = useCollectionStore.getState()
       fetchUserSets()
       fetchUserCards()
+
+      // Fetch subscription tier (Pro / free) — runs in parallel with above
+      useSubscriptionStore.getState().fetchSubscription()
     } else {
       // For TOKEN_REFRESHED / USER_UPDATED we only need to park the new
       // user object; isLoading is already false at this point.
@@ -312,5 +363,6 @@ supabase.auth.onAuthStateChange((event, session) => {
     setUser(null)
     setProfile(null)
     setLoading(false)
+    useSubscriptionStore.getState().resetSubscription()
   }
 })

@@ -4,6 +4,19 @@ import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import type { CardSearchResult } from './types'
 
+// Colour dot CSS classes — mirrors the set-page CardTile colour map
+const VARIANT_COLOR_MAP: Record<string, string> = {
+  green:  'bg-green-500',
+  blue:   'bg-blue-500',
+  purple: 'bg-purple-500',
+  red:    'bg-red-500',
+  pink:   'bg-pink-500',
+  yellow: 'bg-yellow-500',
+  gray:   'bg-gray-500',
+  orange: 'bg-orange-500',
+  teal:   'bg-teal-500',
+}
+
 // ── Type → hover-glow CSS class (same as CardGrid) ───────────────────────────
 
 function getTypeGlowClass(type: string | null | undefined): string {
@@ -115,6 +128,27 @@ export default function CardResults({ cards, query, artistName }: CardResultsPro
                 )}
               </div>
             </Link>
+
+            {/* Variant colour dots — same visual language as the set-page CardTile.
+                Shown only when the card has explicit variant overrides configured.
+                Display-only: clicking anywhere on the tile navigates to the card modal. */}
+            {card.variants.length > 0 && (
+              <div className="flex gap-1 mt-1.5 flex-wrap px-0.5">
+                {card.variants
+                  .filter(v => v.card_id == null) // global variants only (card-specific use +N badge)
+                  .map(v => (
+                    <div
+                      key={v.id}
+                      title={v.name}
+                      className={cn(
+                        'w-3 h-3 rounded-full shrink-0',
+                        VARIANT_COLOR_MAP[v.color] ?? 'bg-zinc-500',
+                      )}
+                    />
+                  ))
+                }
+              </div>
+            )}
 
             {/* Card info below the image */}
             <div className="mt-1.5 px-0.5 space-y-0.5 min-w-0">

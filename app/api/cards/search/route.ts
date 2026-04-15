@@ -79,6 +79,11 @@ export async function GET(request: NextRequest) {
         type:               card.type   || '',
         supertype:          card.supertype || '',
         default_variant_id: card.default_variant_id ?? null,
+        variants:           [] as {
+          id: string; name: string; color: string
+          short_label: string | null; is_quick_add: boolean
+          sort_order: number; card_id: string | null
+        }[],
         set: {
           id:           card.set_id,
           name:         set?.name         || '',
@@ -88,6 +93,61 @@ export async function GET(request: NextRequest) {
         },
       }
     })
+
+    // ── Batch-fetch variant dots for all result cards ──────────────────────
+    // Two parallel queries:
+    //   1. card_variant_availability → global overrides per card
+    //   2. variants where card_id IN cardIds → card-specific variants
+    // Cards with no override rows get variants: [] (no dots shown on browse).
+    if (transformedCards.length > 0) {
+      const cardIds = transformedCards.map(c => c.id)
+
+      const [avaResult, specificResult] = await Promise.all([
+        supabase
+          .from('card_variant_availability')
+          .select('card_id, variants(id, name, color, short_label, is_quick_add, sort_order, card_id)')
+          .in('card_id', cardIds),
+        supabase
+          .from('variants')
+          .select('id, name, color, short_label, is_quick_add, sort_order, card_id')
+          .in('card_id', cardIds),
+      ])
+
+      // Build byCard map: cardId → variant[]
+      const variantsByCard: Record<string, typeof transformedCards[0]['variants']> = {}
+
+      // Global overrides
+      for (const row of ((avaResult.data ?? []) as { card_id: string; variants: any }[])) {
+        const v = row.variants
+        if (!v) continue
+        if (!variantsByCard[row.card_id]) variantsByCard[row.card_id] = []
+        if (!variantsByCard[row.card_id].find(x => x.id === v.id)) {
+          variantsByCard[row.card_id].push({
+            id: v.id, name: v.name, color: v.color,
+            short_label: v.short_label ?? null, is_quick_add: v.is_quick_add ?? false,
+            sort_order: v.sort_order ?? 0, card_id: v.card_id ?? null,
+          })
+        }
+      }
+
+      // Card-specific variants (always shown)
+      for (const v of ((specificResult.data ?? []) as any[])) {
+        if (!v.card_id) continue
+        if (!variantsByCard[v.card_id]) variantsByCard[v.card_id] = []
+        variantsByCard[v.card_id].push({
+          id: v.id, name: v.name, color: v.color,
+          short_label: v.short_label ?? null, is_quick_add: v.is_quick_add ?? false,
+          sort_order: v.sort_order ?? 0, card_id: v.card_id,
+        })
+      }
+
+      // Attach to cards (sort by sort_order)
+      for (const card of transformedCards) {
+        if (variantsByCard[card.id]) {
+          card.variants = variantsByCard[card.id].sort((a, b) => a.sort_order - b.sort_order)
+        }
+      }
+    }
 
     const response = NextResponse.json({
       cards:   transformedCards,

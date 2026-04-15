@@ -11,6 +11,17 @@ export interface CardSearchResult {
   type:               string
   supertype:          string
   default_variant_id: string | null
+  /** Variant dots to display below the card image (from card_variant_availability overrides).
+   *  Empty array = no explicit override configured for this card. */
+  variants: {
+    id:           string
+    name:         string
+    color:        string
+    short_label:  string | null
+    is_quick_add: boolean
+    sort_order:   number
+    card_id:      string | null
+  }[]
   set: {
     id:           string
     name:         string

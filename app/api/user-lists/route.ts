@@ -1,25 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import { supabaseAdmin } from '@/lib/supabase'
+import { getUserTier, getCustomListLimit } from '@/lib/subscription'
 
 /**
  * /api/user-lists
  *
- * GET  – Returns all custom lists for the authenticated user,
- *         each with a card_count and up to 4 preview card images.
- *         Response: { lists: UserCardList[] }
+ * GET  – Returns all of the authenticated user's custom lists (excludes Wanted list).
+ *        Response: { lists: UserCardList[] }
  *
- * POST – Creates a new list.
- *         Body:     { name: string, description?: string, is_public?: boolean }
- *         Response: { list: UserCardList }
+ * POST – Creates a new custom list.
+ *        Free tier: max 2 lists. Pro: unlimited.
+ *        Body:     { name: string, description?: string, is_public?: boolean }
+ *        Response: { list: UserCardList }
+ *        Errors:   402 { code: 'PRO_REQUIRED' } when free-tier limit reached
  */
+
+// ─── Shared auth helper ────────────────────────────────────────────────────────
 
 async function getAuthUser() {
   const serverClient = await createSupabaseServerClient()
-  const { data: { user }, error } = await serverClient.auth.getUser()
+  const {
+    data: { user },
+    error,
+  } = await serverClient.auth.getUser()
   if (error || !user) return null
   return user
 }
+
+// ─── GET /api/user-lists ───────────────────────────────────────────────────────
 
 export async function GET(_request: NextRequest) {
   const user = await getAuthUser()
@@ -27,64 +36,21 @@ export async function GET(_request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Fetch all lists for this user
-  const { data: lists, error: listsError } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from('user_card_lists')
-    .select('*')
+    .select('id, name, description, is_public, created_at, updated_at')
     .eq('user_id', user.id)
     .order('created_at', { ascending: true })
 
-  if (listsError) {
-    console.error('[user-lists GET] DB error:', listsError)
+  if (error) {
+    console.error('[user-lists GET] DB error:', error)
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
 
-  if (!lists || lists.length === 0) {
-    return NextResponse.json({ lists: [] })
-  }
-
-  // Fetch card counts and preview images for all lists in one query
-  const listIds = lists.map((l: { id: string }) => l.id)
-
-  const { data: items, error: itemsError } = await supabaseAdmin
-    .from('user_card_list_items')
-    .select('list_id, card_id, cards(image)')
-    .in('list_id', listIds)
-    .order('added_at', { ascending: true })
-
-  if (itemsError) {
-    console.error('[user-lists GET] items error:', itemsError)
-    // Return lists without card counts rather than failing entirely
-    return NextResponse.json({
-      lists: lists.map((l: Record<string, unknown>) => ({ ...l, card_count: 0, preview_images: [] })),
-    })
-  }
-
-  // Group items by list_id
-  const itemsByList = new Map<string, { card_id: string; image: string | null }[]>()
-  for (const item of (items ?? [])) {
-    const existing = itemsByList.get(item.list_id) ?? []
-    // Supabase may return the joined row as an object or a one-element array
-    const cardsRow = item.cards as unknown
-    const image: string | null =
-      Array.isArray(cardsRow)
-        ? (cardsRow[0]?.image ?? null)
-        : ((cardsRow as { image: string | null } | null)?.image ?? null)
-    existing.push({ card_id: item.card_id, image })
-    itemsByList.set(item.list_id, existing)
-  }
-
-  const enriched = lists.map((l: Record<string, unknown>) => {
-    const listItems = itemsByList.get(l.id as string) ?? []
-    return {
-      ...l,
-      card_count: listItems.length,
-      preview_images: listItems.slice(0, 4).map(i => i.image),
-    }
-  })
-
-  return NextResponse.json({ lists: enriched })
+  return NextResponse.json({ lists: data ?? [] })
 }
+
+// ─── POST /api/user-lists ──────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
   const user = await getAuthUser()
@@ -92,6 +58,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // ── Validate body ──────────────────────────────────────────────────────────
   let body: { name?: string; description?: string; is_public?: boolean }
   try {
     body = await request.json()
@@ -99,37 +66,63 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const name = body.name?.trim()
+  const name = typeof body.name === 'string' ? body.name.trim() : ''
   if (!name) {
     return NextResponse.json({ error: 'name is required' }, { status: 400 })
   }
-
-  // If is_public not explicitly supplied, fall back to user preference
-  let isPublic = body.is_public
-  if (typeof isPublic !== 'boolean') {
-    const { data: profile } = await supabaseAdmin
-      .from('users')
-      .select('lists_public_by_default')
-      .eq('id', user.id)
-      .single()
-    isPublic = profile?.lists_public_by_default ?? false
+  if (name.length > 80) {
+    return NextResponse.json(
+      { error: 'name must be 80 characters or fewer' },
+      { status: 400 }
+    )
   }
 
+  // ── Tier enforcement ───────────────────────────────────────────────────────
+  // Count how many custom lists this user already owns.
+  // The limit is 2 for free, Infinity for Pro.
+  const tier = await getUserTier(user.id)
+  const limit = getCustomListLimit(tier)
+
+  // Only hit the DB for the count when the tier actually has a cap
+  if (limit !== Infinity) {
+    const { count, error: countError } = await supabaseAdmin
+      .from('user_card_lists')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+
+    if (countError) {
+      console.error('[user-lists POST] count error:', countError)
+      return NextResponse.json({ error: 'Database error' }, { status: 500 })
+    }
+
+    if ((count ?? 0) >= limit) {
+      return NextResponse.json(
+        {
+          error: `You've reached the ${limit}-list limit on the free plan. Upgrade to Lumidex Pro for unlimited custom lists.`,
+          code: 'PRO_REQUIRED' as const,
+          limit,
+        },
+        { status: 402 }
+      )
+    }
+  }
+
+  // ── Insert ─────────────────────────────────────────────────────────────────
   const { data, error } = await supabaseAdmin
     .from('user_card_lists')
     .insert({
       user_id: user.id,
       name,
-      description: body.description?.trim() || null,
-      is_public: isPublic,
+      description: body.description?.trim() ?? null,
+      is_public: body.is_public ?? false,
     })
-    .select()
+    .select('id, name, description, is_public, created_at, updated_at')
     .single()
 
   if (error) {
-    console.error('[user-lists POST] DB error:', error)
+    console.error('[user-lists POST] insert error:', error)
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
 
-  return NextResponse.json({ list: { ...data, card_count: 0, preview_images: [] } }, { status: 201 })
+  return NextResponse.json({ list: data }, { status: 201 })
 }
