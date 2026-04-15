@@ -203,11 +203,11 @@ export default function SetPageCards({
   }, [collectionGoal, cards.length, nonPromoCards.length, setTotal])
 
   const progressOwned = useMemo(() => {
-    if (collectionGoal === 'grandmasterset') return haveCount
+    if (collectionGoal === 'grandmasterset') return goalHave ?? haveCount
     if (collectionGoal === 'masterset')
       return nonPromoCards.filter(c => (storeUserCards.get(c.id)?.quantity ?? 0) > 0).length
-    return haveCount
-  }, [collectionGoal, haveCount, nonPromoCards, storeUserCards])
+    return goalHave ?? haveCount
+  }, [collectionGoal, goalHave, haveCount, nonPromoCards, storeUserCards])
 
   const progressPct = progressTotal > 0 ? Math.round((progressOwned / progressTotal) * 100) : 0
 
