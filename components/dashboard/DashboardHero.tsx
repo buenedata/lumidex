@@ -3,6 +3,8 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
+import { useProGate } from '@/hooks/useProGate'
+import { ProBadge } from '@/components/upgrade/ProBadge'
 
 interface DashboardHeroProps {
   totalCards: number
@@ -34,6 +36,7 @@ function getTrainerRank(totalCards: number): TrainerRank {
 
 export default function DashboardHero({ totalCards, setsTracked, completedSets }: DashboardHeroProps) {
   const { user, profile } = useAuthStore()
+  const { isPro } = useProGate()
 
   const displayName = profile?.display_name
     || (user as any)?.user_metadata?.username
@@ -90,12 +93,15 @@ export default function DashboardHero({ totalCards, setsTracked, completedSets }
           <p className="text-sm text-secondary mb-0.5 font-medium">
             {greeting} 👋
           </p>
-          <h1
-            className="text-2xl sm:text-3xl font-bold text-primary truncate leading-tight"
-            style={{ fontFamily: 'var(--font-space-grotesk)' }}
-          >
-            {displayName}
-          </h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1
+              className="text-2xl sm:text-3xl font-bold text-primary truncate leading-tight"
+              style={{ fontFamily: 'var(--font-space-grotesk)' }}
+            >
+              {displayName}
+            </h1>
+            {isPro && <ProBadge size="sm" />}
+          </div>
 
           {/* Rank badge + stat chips */}
           <div className="flex flex-wrap items-center gap-2 mt-3">

@@ -21,6 +21,7 @@ import ProfileLists from '@/components/profile/ProfileLists'
 import LastActivitySection from '@/components/profile/LastActivitySection'
 import ProfileWantedCards from '@/components/profile/ProfileWantedCards'
 import { type SettingsValues } from '@/components/profile/SettingsForm'
+import { ProBadge } from '@/components/upgrade/ProBadge'
 import { User, Achievement, PokemonSet, SetProgress } from '@/types'
 import type { FriendEntry } from '@/components/profile/FriendsList'
 import { cn } from '@/lib/utils'
@@ -94,6 +95,7 @@ export default function ProfilePage() {
     achievementCount: 0,
   })
   const [collectionValueUsd, setCollectionValueUsd] = useState<number | null>(null)
+  const [profileUserIsPro, setProfileUserIsPro]     = useState(false)
   const [loading, setLoading] = useState(true)
 
   // Local mutable URLs (may change after an upload without re-fetching the whole profile)
@@ -130,6 +132,14 @@ export default function ProfilePage() {
         setProfileUser(userData)
         setAvatarUrl(userData.avatar_url ?? null)
         setBannerUrl(userData.banner_url ?? null)
+
+        // Fetch subscription tier for this profile user (used to show Pro badge)
+        const { data: subData } = await supabase
+          .from('user_subscriptions')
+          .select('tier')
+          .eq('user_id', userId)
+          .maybeSingle()
+        setProfileUserIsPro(subData?.tier === 'pro')
 
         // Show first-time setup if this is the owner and setup hasn't been done
         if (currentUser?.id === userId && !userData.setup_completed) {
@@ -583,11 +593,14 @@ export default function ProfilePage() {
                 >
                   {displayName}
                 </h1>
-                {isOwnProfile && (
-                  <span className="pill px-2 py-0.5 rounded-full text-xs font-medium bg-accent-dim text-accent border border-[rgba(109,95,255,0.3)]">
-                    You
-                  </span>
-                )}
+                {profileUserIsPro
+                  ? <ProBadge size="sm" />
+                  : isOwnProfile && (
+                      <span className="pill px-2 py-0.5 rounded-full text-xs font-medium bg-accent-dim text-accent border border-[rgba(109,95,255,0.3)]">
+                        You
+                      </span>
+                    )
+                }
               </div>
 
               {/* @username handle */}
