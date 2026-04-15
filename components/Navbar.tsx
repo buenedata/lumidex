@@ -6,6 +6,8 @@ import { useAuthStore } from '@/lib/store'
 import { signOut } from '@/lib/auth'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
+import { useIsPro } from '@/hooks/useProGate'
+import { ProBadge } from '@/components/upgrade/ProBadge'
 
 interface NotifProposal {
   id: string
@@ -27,6 +29,7 @@ function relTime(iso: string): string {
 export default function Navbar() {
   const { user, profile, isLoading: isAuthLoading } = useAuthStore()
   const router = useRouter()
+  const isPro  = useIsPro()
 
   const isAdmin = profile?.role === 'admin'
 
@@ -134,6 +137,19 @@ export default function Navbar() {
               {isAdmin && (
                 <Link href="/admin" className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all" title="Admin Panel">
                   🛠️ Admin
+                </Link>
+              )}
+              {/* Upgrade CTA — only shown to free users */}
+              {!isPro && (
+                <Link
+                  href="/upgrade"
+                  className="ml-1 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-white
+                    bg-[#6d5fff] hover:bg-[#8577ff]
+                    shadow-[0_0_10px_rgba(109,95,255,0.35)]
+                    hover:shadow-[0_0_14px_rgba(109,95,255,0.5)]
+                    transition-all duration-200"
+                >
+                  💎 Upgrade
                 </Link>
               )}
             </div>
@@ -247,6 +263,7 @@ export default function Navbar() {
                 <span className="text-sm font-medium text-primary hidden sm:block">
                   {profile?.username || 'User'}
                 </span>
+                {isPro && <ProBadge size="sm" className="hidden sm:inline-flex" />}
               </Link>
               <button
                 onClick={handleSignOut}

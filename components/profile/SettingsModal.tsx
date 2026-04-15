@@ -1,11 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import Modal from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import SettingsForm, { SettingsValues } from './SettingsForm'
+import { useIsPro } from '@/hooks/useProGate'
+import { ProBadge } from '@/components/upgrade/ProBadge'
 
 // ── Danger-zone confirmation sub-modal ───────────────────────────────────────
 
@@ -128,11 +131,15 @@ export default function SettingsModal({
   onAccountDeleted,
 }: SettingsModalProps) {
   const router = useRouter()
+  const isPro  = useIsPro()
 
   const [values,  setValues]  = useState<SettingsValues>(initialValues)
   const [saving,  setSaving]  = useState(false)
   const [error,   setError]   = useState<string | null>(null)
   const [saved,   setSaved]   = useState(false)
+
+  // Billing portal loading
+  const [billingLoading, setBillingLoading] = useState(false)
 
   // Danger zone
   const [dangerAction,    setDangerAction]    = useState<DangerAction | null>(null)
@@ -221,6 +228,19 @@ export default function SettingsModal({
     }
   }
 
+  async function handleManageBilling() {
+    setBillingLoading(true)
+    try {
+      const res = await fetch('/api/stripe/portal', { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Failed to open billing portal')
+      window.location.href = data.url
+    } catch {
+      // Portal failure is non-critical — just stop loading
+      setBillingLoading(false)
+    }
+  }
+
   return (
     <>
       <Modal
@@ -235,6 +255,51 @@ export default function SettingsModal({
             onChange={handleChange}
             sections={['identity', 'social', 'locale', 'display', 'privacy']}
           />
+
+          {/* ── Subscription ─────────────────────────────────── */}
+          <div className="mt-6 pt-6 border-t border-[#2a2a3d]">
+            <h3 className="text-xs font-semibold text-[#9191b0] uppercase tracking-wider mb-3">
+              Subscription
+            </h3>
+            {isPro ? (
+              <div className="flex items-center justify-between gap-4 bg-[rgba(109,95,255,0.08)] border border-[rgba(109,95,255,0.25)] rounded-xl px-4 py-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-white">Lumidex Pro</p>
+                    <ProBadge size="sm" />
+                  </div>
+                  <p className="text-xs text-[#9191b0] mt-0.5">All Pro features are active</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleManageBilling}
+                  disabled={billingLoading}
+                  className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#9191b0] border border-[#2a2a3d] hover:border-[#6d5fff] hover:text-white transition-all duration-150 disabled:opacity-60"
+                >
+                  {billingLoading ? 'Opening…' : 'Manage Billing'}
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-4 bg-[#111118] border border-[#2a2a3d] rounded-xl px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium text-white">Free Plan</p>
+                  <p className="text-xs text-[#9191b0] mt-0.5">
+                    Upgrade to unlock price history, graded cards &amp; more
+                  </p>
+                </div>
+                <Link
+                  href="/upgrade"
+                  onClick={onClose}
+                  className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold text-white
+                    bg-[#6d5fff] hover:bg-[#8577ff]
+                    shadow-[0_0_10px_rgba(109,95,255,0.3)]
+                    transition-all duration-150"
+                >
+                  Upgrade →
+                </Link>
+              </div>
+            )}
+          </div>
 
           {/* ── Danger Zone ──────────────────────────────────── */}
           <div className="mt-8 pt-6 border-t border-red-500/20">
