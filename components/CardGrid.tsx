@@ -375,6 +375,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const isLoadingVariantsRef = useRef(isLoadingVariants)
   useEffect(() => { cardVariantDotsRef.current   = cardVariantDots   }, [cardVariantDots])
   useEffect(() => { cardVariantsRef.current       = cardVariants       }, [cardVariants])
+  // Per-variant debounce timers — used by updateVariantQuantity to collapse rapid clicks
+  const pendingVariantTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
   useEffect(() => { isLoadingVariantsRef.current  = isLoadingVariants  }, [isLoadingVariants])
   // Stable ref for onCountsChange — lets the emit-effect depend only on the
   // computed value, not on the callback identity, preventing render cascades.
@@ -984,13 +986,20 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const updateVariantQuantity = useCallback(async (cardId: string, variantId: string, increment: number) => {
     if (!userId) return
 
-    // ── Snapshot current quantity before the click (via ref — no stale closure) ─
+    // ── Read current quantity from the ref — always up-to-date (see sync update below) ─
     const preClickVariants = cardVariantDotsRef.current.get(cardId) || []
     const preClickVariant  = preClickVariants.find(v => v.id === variantId)
     const currentQuantity  = preClickVariant?.quantity ?? 0
     const optimisticQty    = Math.max(0, currentQuantity + increment)
 
-    // ── Optimistic update: reflect new qty instantly, no await ───────────────
+    // ── Sync ref immediately so rapid clicks accumulate correctly ────────────
+    // (useEffect syncs the ref after render, which is too late for fast clicks)
+    const updatedDots = preClickVariants.map(v =>
+      v.id === variantId ? { ...v, quantity: optimisticQty } : v
+    )
+    cardVariantDotsRef.current = new Map(cardVariantDotsRef.current).set(cardId, updatedDots)
+
+    // ── Optimistic state update: reflect new qty instantly ───────────────────
     setCardVariantDots(prev => {
       const m = new Map(prev)
       const vs = m.get(cardId)
@@ -998,72 +1007,75 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       return m
     })
 
-    try {
-      // Pass currentQuantity so the server skips its own SELECT round-trip
-      const response = await fetch('/api/user-card-variants', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, cardId, variantId, increment, currentQuantity }),
-      })
+    // ── Debounce the API call — collapse rapid clicks into one request ────────
+    // Cancel any pending timer for this variant
+    const pending = pendingVariantTimersRef.current
+    const existing = pending.get(variantId)
+    if (existing) clearTimeout(existing)
 
-      if (!response.ok) {
-        // ── Revert optimistic update on API failure ──────────────────────────
+    // Schedule a single POST with the final accumulated quantity
+    const timer = setTimeout(async () => {
+      pending.delete(variantId)
+
+      // Read the final qty from the ref (reflects all rapid clicks so far)
+      const finalDots = cardVariantDotsRef.current.get(cardId) || []
+      const finalQty  = finalDots.find(v => v.id === variantId)?.quantity ?? optimisticQty
+
+      try {
+        // POST with absolute quantity — avoids ordering bugs from multiple increments
+        const response = await fetch('/api/user-card-variants', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, cardId, variantId, quantity: finalQty }),
+        })
+
+        if (!response.ok) {
+          console.error('Failed to update variant quantity:', response.status)
+          return
+        }
+
+        const result = await response.json()
+        const resultQty: number = result.quantity ?? finalQty
+
+        // ── Reconcile with server-confirmed quantity ───────────────────────
         setCardVariantDots(prev => {
           const m = new Map(prev)
           const vs = m.get(cardId)
-          if (vs) m.set(cardId, vs.map(v => v.id === variantId ? { ...v, quantity: currentQuantity } : v))
+          if (vs) m.set(cardId, vs.map(v => v.id === variantId ? { ...v, quantity: resultQty } : v))
           return m
         })
-        console.error('Failed to update variant quantity:', response.status)
-        return
+
+        // Update full variants if loaded in the modal
+        setCardVariants(prev => {
+          const m = new Map(prev)
+          const vs = m.get(cardId)
+          if (vs) m.set(cardId, vs.map(v => v.id === variantId ? { ...v, quantity: resultQty } : v))
+          return m
+        })
+
+        // Legacy user_cards sync — fire-and-forget, must NOT block the UI
+        const currentDots = cardVariantDotsRef.current.get(cardId) || []
+        const totalQuantity = currentDots.reduce((sum, v) => {
+          const qty = v.id === variantId ? resultQty : v.quantity
+          return sum + qty
+        }, 0)
+        const getVariantQty = (name: string) => {
+          const v = currentDots.find(v => v.name === name)
+          if (!v) return 0
+          return v.id === variantId ? resultQty : v.quantity
+        }
+        updateCardQuantity(cardId, totalQuantity, {
+          normal:  getVariantQty('Normal'),
+          reverse: getVariantQty('Reverse Holo'),
+          holo:    getVariantQty('Holo Rare'),
+        }).catch(console.error)
+
+      } catch (error) {
+        console.error('Failed to update variant quantity:', error)
       }
+    }, 300)
 
-      const result = await response.json()
-
-      // ── Reconcile with server-confirmed quantity ─────────────────────────
-      setCardVariantDots(prev => {
-        const m = new Map(prev)
-        const vs = m.get(cardId)
-        if (vs) m.set(cardId, vs.map(v => v.id === variantId ? { ...v, quantity: result.quantity } : v))
-        return m
-      })
-
-      // Update full variants if loaded in the modal
-      setCardVariants(prev => {
-        const m = new Map(prev)
-        const vs = m.get(cardId)
-        if (vs) m.set(cardId, vs.map(v => v.id === variantId ? { ...v, quantity: result.quantity } : v))
-        return m
-      })
-
-      // Legacy user_cards sync — fire-and-forget, must NOT block the UI.
-      // Use preClickVariants as the base (state updates are async and may not
-      // have flushed yet), substituting result.quantity for the updated variant.
-      const totalQuantity = preClickVariants.reduce((sum, v) => {
-        const qty = v.id === variantId ? result.quantity : v.quantity
-        return sum + qty
-      }, 0)
-      const getVariantQty = (name: string) => {
-        const v = preClickVariants.find(v => v.name === name)
-        if (!v) return 0
-        return v.id === variantId ? result.quantity : v.quantity
-      }
-      updateCardQuantity(cardId, totalQuantity, {
-        normal:  getVariantQty('Normal'),
-        reverse: getVariantQty('Reverse Holo'),
-        holo:    getVariantQty('Holo Rare'),
-      }).catch(console.error)   // explicitly fire-and-forget
-
-    } catch (error) {
-      // ── Revert optimistic update on network error ────────────────────────
-      setCardVariantDots(prev => {
-        const m = new Map(prev)
-        const vs = m.get(cardId)
-        if (vs) m.set(cardId, vs.map(v => v.id === variantId ? { ...v, quantity: currentQuantity } : v))
-        return m
-      })
-      console.error('Failed to update variant quantity:', error)
-    }
+    pending.set(variantId, timer)
   }, [userId, updateCardQuantity])
 
   // Set variant quantity directly (used when user types a value into the modal input)

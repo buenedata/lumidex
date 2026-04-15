@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useMemo, useCallback, useEffect } from 'react'
-import { Listbox, ListboxButton, ListboxOption, ListboxOptions } from '@headlessui/react'
-import { ChevronUpDownIcon, CheckIcon, ArrowUpIcon, ArrowDownIcon } from '@heroicons/react/20/solid'
+import { ChevronUpDownIcon, ArrowUpIcon, ArrowDownIcon } from '@heroicons/react/20/solid'
 import { cn } from '@/lib/utils'
 import CardGrid from '@/components/CardGrid'
 import CollectionGoalSelector from '@/components/CollectionGoalSelector'
@@ -394,63 +393,51 @@ export default function SetPageCards({
         </div>
       )}
 
-      {/* ── Sort dropdown + filter tabs ──────────────────────────── */}
+      {/* ── Sort pills ───────────────────────────────────────────── */}
+      <div className="max-w-screen-2xl mx-auto px-6 py-2.5 border-b border-subtle">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs text-muted uppercase tracking-wider select-none mr-1.5">Sort</span>
+          {sortOptions.map(opt => {
+            const isActive = sortBy === opt.value
+            const handleClick = () => {
+              if (isActive) {
+                setSortDirection(d => d === 'asc' ? 'desc' : 'asc')
+              } else {
+                setSortBy(opt.value)
+                setSortDirection(opt.value === 'date' ? 'desc' : 'asc')
+              }
+            }
+            return (
+              <button
+                key={opt.value}
+                onClick={handleClick}
+                title={isActive
+                  ? (sortDirection === 'asc' ? 'Ascending — click to sort descending' : 'Descending — click to sort ascending')
+                  : `Sort by ${opt.label}`}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 select-none cursor-pointer',
+                  isActive
+                    ? 'bg-accent text-white shadow-sm'
+                    : 'text-secondary hover:text-primary hover:bg-surface border border-transparent hover:border-subtle'
+                )}
+              >
+                <span>{opt.label}</span>
+                {isActive ? (
+                  sortDirection === 'asc'
+                    ? <ArrowUpIcon className="w-3.5 h-3.5 shrink-0" />
+                    : <ArrowDownIcon className="w-3.5 h-3.5 shrink-0" />
+                ) : (
+                  <ChevronUpDownIcon className="w-3.5 h-3.5 shrink-0 opacity-40" />
+                )}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── Filter tabs ──────────────────────────────────────────── */}
       <div className="max-w-screen-2xl mx-auto px-6">
         <div className="flex items-center gap-0 border-b border-subtle">
-
-          {/* Sort dropdown + direction toggle */}
-          <div className="flex items-center gap-2 pr-3 mr-0 border-r border-subtle self-stretch">
-            <span className="text-sm text-muted select-none whitespace-nowrap">Sort by</span>
-
-            <Listbox value={sortBy} onChange={(v) => { setSortBy(v); setSortDirection(v === 'date' ? 'desc' : 'asc') }}>
-              <div className="relative">
-                <ListboxButton className="flex items-center gap-1 px-3 py-2.5 text-sm font-medium text-secondary hover:text-primary focus:outline-none transition-colors cursor-pointer whitespace-nowrap">
-                  <span>{sortOptions.find(o => o.value === sortBy)?.label}</span>
-                  <ChevronUpDownIcon className="w-3.5 h-3.5 text-muted shrink-0" />
-                </ListboxButton>
-
-                <ListboxOptions
-                  anchor="bottom start"
-                  className="z-50 mt-1 min-w-[90px] rounded border border-subtle bg-elevated shadow-xl focus:outline-none [--anchor-gap:4px]"
-                >
-                  {sortOptions.map(opt => (
-                    <ListboxOption
-                      key={opt.value}
-                      value={opt.value}
-                      className={({ focus, selected }) =>
-                        cn(
-                          'flex items-center gap-1.5 px-3 py-2 text-sm cursor-pointer select-none',
-                          focus    ? 'bg-accent/20 text-primary' : 'text-secondary',
-                          selected ? 'font-medium text-primary'  : ''
-                        )
-                      }
-                    >
-                      {({ selected }) => (
-                        <>
-                          <CheckIcon className={cn('w-3.5 h-3.5 shrink-0', selected ? 'text-accent' : 'invisible')} />
-                          {opt.label}
-                        </>
-                      )}
-                    </ListboxOption>
-                  ))}
-                </ListboxOptions>
-              </div>
-            </Listbox>
-
-            {/* Asc / Desc toggle */}
-            <button
-              onClick={() => setSortDirection(d => d === 'asc' ? 'desc' : 'asc')}
-              title={sortDirection === 'asc' ? 'Ascending — click to switch to descending' : 'Descending — click to switch to ascending'}
-              className="flex items-center justify-center w-6 h-6 rounded text-muted hover:text-primary hover:bg-surface transition-colors"
-            >
-              {sortDirection === 'asc'
-                ? <ArrowUpIcon className="w-3.5 h-3.5" />
-                : <ArrowDownIcon className="w-3.5 h-3.5" />
-              }
-            </button>
-          </div>
-
-          {/* Filter tabs — with counts */}
           {tabs.map(tab => (
             <button
               key={tab.value}
