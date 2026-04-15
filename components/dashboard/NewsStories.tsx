@@ -1,79 +1,14 @@
 'use client'
 
 import Link from 'next/link'
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface Story {
-  id: string
-  category: string
-  categoryIcon: string
-  title: string
-  description: string
-  href: string
-  gradient: string                // CSS gradient string used as card background
-  accentColour: string            // Tailwind text colour for the category badge icon
-}
-
-// ── Static mock data (replace with API/Supabase data when ready) ──────────────
-
-const STORIES: Story[] = [
-  {
-    id: 'top-10-value',
-    category: 'Value',
-    categoryIcon: '💎',
-    title: 'Top 10 most valuable cards right now',
-    description:
-      'From ex to alt arts — these are the cards driving the market in 2026.',
-    href: '/news',
-    gradient:
-      'linear-gradient(145deg, #2e1065 0%, #4c1d95 35%, #6d28d9 70%, #7c3aed 100%)',
-    accentColour: 'text-purple-300',
-  },
-  {
-    id: 'did-you-know',
-    category: 'Trivia',
-    categoryIcon: '✦',
-    title: 'Did you know…',
-    description:
-      'There are Pokémon cards that have never been officially graded — find out which ones.',
-    href: '/news',
-    gradient:
-      'linear-gradient(145deg, #78350f 0%, #b45309 40%, #d97706 75%, #f59e0b 100%)',
-    accentColour: 'text-amber-300',
-  },
-  {
-    id: 'new-set-reveal',
-    category: 'Sets',
-    categoryIcon: '🔥',
-    title: 'Scarlet & Violet — what\'s coming next?',
-    description:
-      'The upcoming set is set to shake up both the competitive and collector meta.',
-    href: '/news',
-    gradient:
-      'linear-gradient(145deg, #164e63 0%, #0e7490 40%, #0891b2 75%, #22d3ee 100%)',
-    accentColour: 'text-cyan-300',
-  },
-  {
-    id: 'illustrator-spotlight',
-    category: 'Art',
-    categoryIcon: '🎨',
-    title: 'Illustrator Spotlight',
-    description:
-      'Ken Sugimori — the legend behind the original 151. His rarest works are holy grails.',
-    href: '/news',
-    gradient:
-      'linear-gradient(145deg, #500724 0%, #9d174d 40%, #be185d 75%, #f472b6 100%)',
-    accentColour: 'text-pink-300',
-  },
-]
+import { STORIES, type Story } from '@/data/stories'
 
 // ── Sub-component: single story card ─────────────────────────────────────────
 
 function NewsStoryCard({ story }: { story: Story }) {
   return (
     <Link
-      href={story.href}
+      href={`/news/${story.slug}`}
       className="group relative flex flex-col overflow-hidden rounded-2xl cursor-pointer
                  min-w-[220px] sm:min-w-0 h-64
                  transition-transform duration-200 hover:scale-[1.025]"
@@ -167,7 +102,7 @@ export default function NewsStories() {
         "
         style={{ scrollbarWidth: 'none' }}
       >
-        {STORIES.map(story => (
+        {STORIES.slice(0, 4).map(story => (
           <div key={story.id} className="snap-start shrink-0 w-[220px] sm:w-auto">
             <NewsStoryCard story={story} />
           </div>

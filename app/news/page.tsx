@@ -1,97 +1,14 @@
 'use client'
 
 import Link from 'next/link'
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface Story {
-  id: string
-  category: string
-  categoryIcon: string
-  title: string
-  description: string
-  href: string
-  gradient: string
-}
-
-// ── Static mock stories ───────────────────────────────────────────────────────
-// Mirrors the dashboard strip + extras. Replace with a fetch when the API is ready.
-
-const ALL_STORIES: Story[] = [
-  {
-    id: 'top-10-value',
-    category: 'Value',
-    categoryIcon: '💎',
-    title: 'Top 10 most valuable cards right now',
-    description:
-      'From ex to alt arts — these are the cards driving the market in 2026. Whether you are buying, selling or holding, here is where the value sits.',
-    href: '#',
-    gradient:
-      'linear-gradient(145deg, #2e1065 0%, #4c1d95 35%, #6d28d9 70%, #7c3aed 100%)',
-  },
-  {
-    id: 'did-you-know',
-    category: 'Trivia',
-    categoryIcon: '✦',
-    title: 'Did you know…',
-    description:
-      'There are Pokémon cards that have never been officially graded — find out which ones and why they remain shrouded in mystery.',
-    href: '#',
-    gradient:
-      'linear-gradient(145deg, #78350f 0%, #b45309 40%, #d97706 75%, #f59e0b 100%)',
-  },
-  {
-    id: 'new-set-reveal',
-    category: 'Sets',
-    categoryIcon: '🔥',
-    title: "Mega Evolution — what's coming next?",
-    description:
-      'The upcoming expansion is set to shake up both the competitive and collector meta. Here is everything we know so far.',
-    href: '#',
-    gradient:
-      'linear-gradient(145deg, #164e63 0%, #0e7490 40%, #0891b2 75%, #22d3ee 100%)',
-  },
-  {
-    id: 'illustrator-spotlight',
-    category: 'Art',
-    categoryIcon: '🎨',
-    title: 'Illustrator Spotlight: Ken Sugimori',
-    description:
-      'The legend behind the original 151 — Ken Sugimori\'s rarest works are absolute collector holy grails.',
-    href: '#',
-    gradient:
-      'linear-gradient(145deg, #500724 0%, #9d174d 40%, #be185d 75%, #f472b6 100%)',
-  },
-  {
-    id: 'price-movers',
-    category: 'Market',
-    categoryIcon: '📈',
-    title: 'Biggest price movers this week',
-    description:
-      'Seven cards that moved significantly in value over the last seven days — and the stories behind each spike.',
-    href: '#',
-    gradient:
-      'linear-gradient(145deg, #064e3b 0%, #065f46 40%, #047857 75%, #10b981 100%)',
-  },
-  {
-    id: 'tournament-results',
-    category: 'Competitive',
-    categoryIcon: '🏆',
-    title: 'Regional Championship results',
-    description:
-      'Breakdown of the winning decks, standout cards and meta shifts from the latest Regional Championship.',
-    href: '#',
-    gradient:
-      'linear-gradient(145deg, #1c1917 0%, #44403c 40%, #78716c 75%, #a8a29e 100%)',
-  },
-]
+import { STORIES, type Story } from '@/data/stories'
 
 // ── Sub-component: story card ─────────────────────────────────────────────────
 
 function StoryCard({ story }: { story: Story }) {
   return (
     <Link
-      href={story.href}
+      href={`/news/${story.slug}`}
       className="group relative flex flex-col overflow-hidden rounded-2xl cursor-pointer h-72
                  transition-transform duration-200 hover:scale-[1.025]"
       style={{ background: story.gradient }}
@@ -184,25 +101,14 @@ export default function NewsPage() {
               News, trivia and fun from the Pokémon TCG world — curated for collectors and trainers.
             </p>
           </div>
-
-          {/* Coming Soon badge */}
-          <span className="shrink-0 mt-1 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full border border-accent/30 text-accent bg-accent/10">
-            <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
-            Live soon
-          </span>
         </div>
 
         {/* ── Stories grid ─────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {ALL_STORIES.map(story => (
+          {STORIES.map(story => (
             <StoryCard key={story.id} story={story} />
           ))}
         </div>
-
-        {/* ── Footer note ──────────────────────────────────────────────── */}
-        <p className="mt-10 text-center text-xs text-muted">
-          Stories are placeholders — live content is on its way 🚀
-        </p>
 
       </main>
     </div>
