@@ -8,6 +8,7 @@ interface PokemonSetOption {
   series: string | null
   total_cards: number
   release_date: string | null
+  language: string | null
 }
 
 interface SetImageStat {
@@ -23,6 +24,25 @@ interface Props {
   showImageStatus?: boolean
   /** When true, fetches card-count stats and renders ✅ / ❌ beside each set to indicate whether cards have been imported */
   showCardStatus?: boolean
+}
+
+// ── Language badge ───────────────────────────────────────────────────────────
+
+function LanguageBadge({ language }: { language: string | null }) {
+  if (!language) return null
+  const isJa = language.toLowerCase() === 'ja'
+  return (
+    <span
+      title={isJa ? 'Japanese' : 'English'}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide shrink-0 ${
+        isJa
+          ? 'bg-red-900/60 text-red-300 border border-red-700/50'
+          : 'bg-blue-900/60 text-blue-300 border border-blue-700/50'
+      }`}
+    >
+      {language.toUpperCase()}
+    </span>
+  )
 }
 
 // ── Image-status icon helpers ────────────────────────────────────────────────
@@ -307,6 +327,7 @@ export function SetSelector({ onSetSelect, selectedSetId, showImageStatus = fals
                 <span className={`font-medium truncate ${selectedSetId === set.id ? 'text-yellow-400' : 'text-white group-hover:text-yellow-300'}`}>
                   {set.name}
                 </span>
+                <LanguageBadge language={set.language} />
                 {set.series && (
                   <span className="ml-1 text-gray-500 text-xs shrink-0">{set.series}</span>
                 )}

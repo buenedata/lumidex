@@ -10,11 +10,12 @@ export async function GET(request: NextRequest) {
     const transformedSets = sets.map((set) => ({
       id: set.id,
       name: set.name,
-      total: set.setComplete ?? set.total ?? 0, // full count incl. secret rares
+      total_cards: set.setComplete ?? set.total ?? 0, // full count incl. secret rares
       series: set.series,
       release_date: set.release_date,
       logo_url: set.logo_url ?? null,
       symbol_url: set.symbol_url ?? null,
+      language: set.language ?? null,
     }))
 
     const response = NextResponse.json({ sets: transformedSets })
