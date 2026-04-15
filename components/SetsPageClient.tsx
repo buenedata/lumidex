@@ -18,6 +18,40 @@ interface SetsPageClientProps {
   seriesWithProducts?: string[]
 }
 
+// Canonical series chronological order (oldest = smallest number, newest = largest).
+// Used as the primary sort key so data inconsistencies (e.g. a late-added Japanese
+// Sword & Shield set whose release_date is 2023-01-27 — newer than the first S&V
+// sets released 2023-01-20) can never flip the era order.
+const KNOWN_SERIES_ORDER: Record<string, number> = {
+  'Base Set':                  100,
+  'Jungle':                    100,
+  'Fossil':                    100,
+  'Team Rocket':               110,
+  'Gym Heroes':                110,
+  'Gym Challenge':             110,
+  'Neo Genesis':               120,
+  'Neo Discovery':             120,
+  'Neo Revelation':            120,
+  'Neo Destiny':               120,
+  'Legendary Collection':      130,
+  'Expedition Base Set':       140,
+  'Aquapolis':                 140,
+  'Skyridge':                  140,
+  'Ruby & Sapphire':           150,
+  'EX':                        150,
+  'Diamond & Pearl':           160,
+  'Platinum':                  160,
+  'HeartGold & SoulSilver':    170,
+  'HS':                        170,
+  'Call of Legends':           170,
+  'Black & White':             180,
+  'BW':                        180,
+  'XY':                        190,
+  'Sun & Moon':                200,
+  'Sword & Shield':            210,
+  'Scarlet & Violet':          220,
+}
+
 export default function SetsPageClient({ sets, favoritedSetIds, userId, seriesWithProducts = [] }: SetsPageClientProps) {
   const seriesWithProductsSet = useMemo(() => new Set(seriesWithProducts), [seriesWithProducts])
   const [favoritedIds, setFavoritedIds] = useState<Set<string>>(
@@ -69,6 +103,11 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId, seriesWi
       .sort((a, b) => {
         if (a[0] === 'Other') return 1
         if (b[0] === 'Other') return -1
+        // Prefer the canonical era order when both series are known.
+        const pa = KNOWN_SERIES_ORDER[a[0]]
+        const pb = KNOWN_SERIES_ORDER[b[0]]
+        if (pa !== undefined && pb !== undefined) return pb - pa
+        // One or both unknown — fall back to date string comparison.
         return b[1].localeCompare(a[1])
       })
       .map(([s]) => s)
