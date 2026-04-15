@@ -133,9 +133,11 @@ export default function ProfilePage() {
         setAvatarUrl(userData.avatar_url ?? null)
         setBannerUrl(userData.banner_url ?? null)
 
-        // Fetch subscription tier for this profile user (used to show Pro badge)
+        // Fetch subscription tier for this profile user (used to show Pro badge).
+        // Queries the `user_tiers` view (user_id + tier only) which is readable by
+        // any authenticated user — unlike user_subscriptions which is own-row-only.
         const { data: subData } = await supabase
-          .from('user_subscriptions')
+          .from('user_tiers')
           .select('tier')
           .eq('user_id', userId)
           .maybeSingle()
