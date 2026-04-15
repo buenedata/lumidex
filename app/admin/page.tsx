@@ -15,6 +15,14 @@ interface AdminTool {
 
 const ADMIN_TOOLS: AdminTool[] = [
   {
+    href: '/admin/subscriptions',
+    icon: '💎',
+    title: 'Subscription Management',
+    description:
+      'Grant or revoke Lumidex Pro for any user at no cost. Search by username or email, see current tier, and toggle Pro access instantly. Manual grants are not tied to Stripe.',
+    badge: 'Users',
+  },
+  {
     href: '/admin/image-upload',
     icon: '🖼️',
     title: 'Image Upload',
