@@ -1,11 +1,24 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { STORIES, type Story } from '@/data/stories'
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface StorySummary {
+  id:              string
+  slug:            string
+  category:        string
+  category_icon:   string
+  title:           string
+  description:     string
+  gradient:        string
+  cover_image_url: string | null
+}
 
 // ── Sub-component: story card ─────────────────────────────────────────────────
 
-function StoryCard({ story }: { story: Story }) {
+function StoryCard({ story }: { story: StorySummary }) {
   return (
     <Link
       href={`/news/${story.slug}`}
@@ -13,6 +26,17 @@ function StoryCard({ story }: { story: Story }) {
                  transition-transform duration-200 hover:scale-[1.025]"
       style={{ background: story.gradient }}
     >
+      {/* Optional cover image overlay */}
+      {story.cover_image_url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={story.cover_image_url}
+          alt=""
+          aria-hidden
+          className="absolute inset-0 w-full h-full object-cover opacity-30"
+        />
+      )}
+
       {/* Noise texture */}
       <div
         className="absolute inset-0 pointer-events-none opacity-[0.06]"
@@ -29,7 +53,7 @@ function StoryCard({ story }: { story: Story }) {
           className="pill inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold
                      bg-black/40 text-white border border-white/20 backdrop-blur-sm"
         >
-          <span role="img" aria-label={story.category}>{story.categoryIcon}</span>
+          <span role="img" aria-label={story.category}>{story.category_icon}</span>
           {story.category}
         </span>
       </div>
@@ -59,9 +83,29 @@ function StoryCard({ story }: { story: Story }) {
   )
 }
 
+// ── Skeleton placeholder ──────────────────────────────────────────────────────
+
+function StorySkeleton() {
+  return (
+    <div className="h-72 rounded-2xl bg-white/5 animate-pulse" />
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function NewsPage() {
+  const [stories,  setStories]  = useState<StorySummary[]>([])
+  const [loading,  setLoading]  = useState(true)
+  const [error,    setError]    = useState(false)
+
+  useEffect(() => {
+    fetch('/api/stories')
+      .then(r => r.json())
+      .then(j => { setStories(j.stories ?? []); setError(false) })
+      .catch(() => setError(true))
+      .finally(() => setLoading(false))
+  }, [])
+
   return (
     <div className="min-h-screen bg-base">
       {/* Decorative glow */}
@@ -77,38 +121,41 @@ export default function NewsPage() {
       <main className="max-w-screen-xl mx-auto px-6 py-10">
 
         {/* ── Page header ──────────────────────────────────────────────── */}
-        <div className="flex items-start justify-between gap-4 mb-8">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Link
-                href="/dashboard"
-                className="text-sm text-muted hover:text-secondary transition-colors duration-150 flex items-center gap-1"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
-                </svg>
-                Dashboard
-              </Link>
-            </div>
-            <h1
-              className="text-3xl sm:text-4xl font-bold text-primary flex items-center gap-3"
-              style={{ fontFamily: 'var(--font-space-grotesk)' }}
+        <div className="mb-8">
+          <div className="flex items-center gap-2 mb-1">
+            <Link
+              href="/dashboard"
+              className="text-sm text-muted hover:text-secondary transition-colors duration-150 flex items-center gap-1"
             >
-              <span>📰</span>
-              Stories
-            </h1>
-            <p className="text-secondary mt-1.5 text-sm max-w-lg leading-relaxed">
-              News, trivia and fun from the Pokémon TCG world — curated for collectors and trainers.
-            </p>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+              </svg>
+              Dashboard
+            </Link>
           </div>
+          <h1
+            className="text-3xl sm:text-4xl font-bold text-primary flex items-center gap-3"
+            style={{ fontFamily: 'var(--font-space-grotesk)' }}
+          >
+            <span>📰</span>
+            Stories
+          </h1>
+          <p className="text-secondary mt-1.5 text-sm max-w-lg leading-relaxed">
+            News, trivia and fun from the Pokémon TCG world — curated for collectors and trainers.
+          </p>
         </div>
 
         {/* ── Stories grid ─────────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {STORIES.map(story => (
-            <StoryCard key={story.id} story={story} />
-          ))}
-        </div>
+        {error ? (
+          <p className="text-red-400 text-sm text-center py-12">Failed to load stories. Try refreshing.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {loading
+              ? Array.from({ length: 6 }).map((_, i) => <StorySkeleton key={i} />)
+              : stories.map(story => <StoryCard key={story.id} story={story} />)
+            }
+          </div>
+        )}
 
       </main>
     </div>

@@ -73,6 +73,14 @@ const ADMIN_TOOLS: AdminTool[] = [
       'Reduces Supabase storage usage by ~85–90 % vs raw PNG. Run on card-images first.',
     badge: 'Storage',
   },
+  {
+    href: '/admin/stories',
+    icon: '📰',
+    title: 'Stories CMS',
+    description:
+      'Create, edit and delete news articles for the Stories section. Write article content using the block editor, upload cover images, and publish instantly. 6 categories: Value, Trivia, Sets, Art, Market, Competitive.',
+    badge: 'Content',
+  },
 ]
 
 export default function AdminHubPage() {

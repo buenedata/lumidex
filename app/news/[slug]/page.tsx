@@ -1,11 +1,44 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
-import { STORIES, getStoryBySlug, type Block } from '@/data/stories'
 
-// ── Static params (pre-render all 6 article pages) ────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-export function generateStaticParams() {
-  return STORIES.map(s => ({ slug: s.slug }))
+type Block =
+  | { type: 'p';       text: string }
+  | { type: 'h2';      text: string }
+  | { type: 'h3';      text: string }
+  | { type: 'ol';      items: string[] }
+  | { type: 'ul';      items: string[] }
+  | { type: 'callout'; text: string }
+  | { type: 'image';   url: string; alt: string; caption?: string }
+
+interface Story {
+  id:              string
+  slug:            string
+  category:        string
+  category_icon:   string
+  title:           string
+  description:     string
+  gradient:        string
+  cover_image_url: string | null
+  content:         Block[]
+  published_at:    string
+}
+
+// ── Data fetching (server component) ─────────────────────────────────────────
+
+async function fetchStory(slug: string): Promise<Story | null> {
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'
+  try {
+    const res = await fetch(`${baseUrl}/api/stories/${slug}`, {
+      next: { revalidate: 60 }, // ISR: refresh at most every 60 s
+    })
+    if (!res.ok) return null
+    const json = await res.json()
+    return json.story ?? null
+  } catch {
+    return null
+  }
 }
 
 // ── Block renderer ────────────────────────────────────────────────────────────
@@ -70,6 +103,23 @@ function RenderBlock({ block }: { block: Block }) {
         </div>
       )
 
+    case 'image':
+      return (
+        <figure className="my-8">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={block.url}
+            alt={block.alt}
+            className="w-full rounded-2xl border border-white/10 object-cover"
+          />
+          {block.caption && (
+            <figcaption className="text-center text-xs text-muted mt-2">
+              {block.caption}
+            </figcaption>
+          )}
+        </figure>
+      )
+
     default:
       return null
   }
@@ -83,12 +133,11 @@ interface Props {
 
 export default async function StoryArticlePage({ params }: Props) {
   const { slug } = await params
-  const story = getStoryBySlug(slug)
+  const story = await fetchStory(slug)
 
   if (!story) notFound()
 
-  // Format a human-readable date  e.g. "April 15, 2026"
-  const formattedDate = new Date(story.publishedAt).toLocaleDateString('en-US', {
+  const formattedDate = new Date(story.published_at).toLocaleDateString('en-US', {
     year:  'numeric',
     month: 'long',
     day:   'numeric',
@@ -102,6 +151,17 @@ export default async function StoryArticlePage({ params }: Props) {
         className="relative w-full overflow-hidden"
         style={{ background: story.gradient }}
       >
+        {/* Optional cover image */}
+        {story.cover_image_url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={story.cover_image_url}
+            alt=""
+            aria-hidden
+            className="absolute inset-0 w-full h-full object-cover opacity-25"
+          />
+        )}
+
         {/* Noise texture */}
         <div
           className="absolute inset-0 pointer-events-none opacity-[0.06]"
@@ -140,7 +200,7 @@ export default async function StoryArticlePage({ params }: Props) {
               className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold
                          bg-black/40 text-white border border-white/20 backdrop-blur-sm"
             >
-              <span role="img" aria-label={story.category}>{story.categoryIcon}</span>
+              <span role="img" aria-label={story.category}>{story.category_icon}</span>
               {story.category}
             </span>
           </div>

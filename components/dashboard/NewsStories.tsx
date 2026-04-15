@@ -1,11 +1,24 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { STORIES, type Story } from '@/data/stories'
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface StorySummary {
+  id:              string
+  slug:            string
+  category:        string
+  category_icon:   string
+  title:           string
+  description:     string
+  gradient:        string
+  cover_image_url: string | null
+}
 
 // ── Sub-component: single story card ─────────────────────────────────────────
 
-function NewsStoryCard({ story }: { story: Story }) {
+function NewsStoryCard({ story }: { story: StorySummary }) {
   return (
     <Link
       href={`/news/${story.slug}`}
@@ -14,6 +27,17 @@ function NewsStoryCard({ story }: { story: Story }) {
                  transition-transform duration-200 hover:scale-[1.025]"
       style={{ background: story.gradient }}
     >
+      {/* Optional cover image */}
+      {story.cover_image_url && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={story.cover_image_url}
+          alt=""
+          aria-hidden
+          className="absolute inset-0 w-full h-full object-cover opacity-25"
+        />
+      )}
+
       {/* Noise texture overlay — very subtle depth */}
       <div
         className="absolute inset-0 pointer-events-none opacity-[0.06]"
@@ -30,7 +54,7 @@ function NewsStoryCard({ story }: { story: Story }) {
           className="w-7 h-7 rounded-full flex items-center justify-center text-sm
                      bg-black/40 border border-white/20 backdrop-blur-sm"
         >
-          <span role="img" aria-label={story.category}>{story.categoryIcon}</span>
+          <span role="img" aria-label={story.category}>{story.category_icon}</span>
         </div>
       </div>
 
@@ -59,9 +83,29 @@ function NewsStoryCard({ story }: { story: Story }) {
   )
 }
 
+// ── Skeleton ──────────────────────────────────────────────────────────────────
+
+function StoryCardSkeleton() {
+  return <div className="min-w-[220px] sm:min-w-0 h-64 rounded-2xl bg-white/5 animate-pulse" />
+}
+
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export default function NewsStories() {
+  const [stories, setStories] = useState<StorySummary[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/stories?limit=4')
+      .then(r => r.json())
+      .then(j => setStories(j.stories ?? []))
+      .catch(() => {/* silently fail — dashboard shouldn't break */})
+      .finally(() => setLoading(false))
+  }, [])
+
+  // Don't render the section at all if there are no stories and we're not loading
+  if (!loading && stories.length === 0) return null
+
   return (
     <section className="mb-10">
       {/* ── Section header ───────────────────────────────────────────────── */}
@@ -102,11 +146,18 @@ export default function NewsStories() {
         "
         style={{ scrollbarWidth: 'none' }}
       >
-        {STORIES.slice(0, 4).map(story => (
-          <div key={story.id} className="snap-start shrink-0 w-[220px] sm:w-auto">
-            <NewsStoryCard story={story} />
-          </div>
-        ))}
+        {loading
+          ? Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="snap-start shrink-0 w-[220px] sm:w-auto">
+                <StoryCardSkeleton />
+              </div>
+            ))
+          : stories.map(story => (
+              <div key={story.id} className="snap-start shrink-0 w-[220px] sm:w-auto">
+                <NewsStoryCard story={story} />
+              </div>
+            ))
+        }
       </div>
     </section>
   )
