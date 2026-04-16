@@ -85,7 +85,6 @@ interface CardPriceRow {
   cm_cosmos_holo:    number | null
   /** Direct URL to this card on CardMarket */
   cm_url:            string | null
-  api_card_id:       string | null
   fetched_at:        string
 }
 
@@ -180,7 +179,7 @@ async function _fetchCardPricesForSet(
   // Fetch price rows for those card UUIDs
   const { data, error } = await supabaseAdmin
     .from('card_prices')
-    .select('card_id, tcgp_normal, tcgp_reverse_holo, tcgp_holo, tcgp_1st_edition, tcgp_market, tcgp_psa10, tcgp_psa9, tcgp_bgs95, tcgp_bgs9, tcgp_cgc10, cm_avg_sell, cm_low, cm_trend, cm_avg_30d, api_card_id, fetched_at')
+    .select('card_id, tcgp_normal, tcgp_reverse_holo, tcgp_holo, tcgp_1st_edition, tcgp_market, tcgp_psa10, tcgp_psa9, tcgp_bgs95, tcgp_bgs9, tcgp_cgc10, cm_avg_sell, cm_low, cm_trend, cm_avg_30d, fetched_at')
     .in('card_id', cardIds)
 
   if (error) {

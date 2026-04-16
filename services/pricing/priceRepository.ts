@@ -7,6 +7,15 @@ import { toUsd } from './priceNormalizer'
  * Each point maps to one row. Uses INSERT (not upsert) since price_points is append-only.
  * Inserts in batches of 100 to avoid payload limits.
  * Logs errors but does not throw — partial saves are acceptable.
+ *
+ * Deduplication: after migration_pricing_schema_cleanup.sql is applied, the DB
+ * enforces a unique index idx_price_points_dedup on
+ *   (card_id, source, COALESCE(variant_key,''), is_graded, (recorded_at::date)).
+ * Inserting a duplicate row for the same card+source+variant+day will produce a
+ * unique-key violation caught by the error handler below and logged; no duplicate
+ * rows are stored.  Because the index uses functional expressions (COALESCE, date
+ * cast) it cannot be referenced by name in Supabase JS upsert — plain INSERT is
+ * intentionally kept here and the DB silently rejects duplicates at its own level.
  */
 export async function savePricePoints(points: NormalizedPricePoint[]): Promise<void> {
   if (points.length === 0) return
@@ -45,6 +54,15 @@ export async function savePricePoints(points: NormalizedPricePoint[]): Promise<v
  * Only saves TCGPlayer and CardMarket points (not eBay — too noisy for history).
  * Only saves non-graded points (graded history not needed currently).
  * Inserts in batches of 100 to avoid payload limits.
+ *
+ * Deduplication: after migration_pricing_schema_cleanup.sql is applied, the DB
+ * enforces a unique index idx_cph_dedup on
+ *   (card_id, source, variant_key, is_graded, (recorded_at::date)).
+ * Inserting a duplicate row for the same card+source+variant+day will produce a
+ * unique-key violation caught by the error handler below and logged; no duplicate
+ * rows are stored.  The index uses a functional date expression and cannot be
+ * referenced by name in Supabase JS upsert — plain INSERT is intentionally kept
+ * here and the DB silently rejects duplicates at its own level.
  */
 export async function savePriceHistory(points: NormalizedPricePoint[]): Promise<void> {
   const historyPoints = points.filter(

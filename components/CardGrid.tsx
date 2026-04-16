@@ -41,8 +41,6 @@ interface CardPriceRow {
   cm_cosmos_holo:    number | null
   /** Direct URL to this card's CardMarket product page */
   cm_url:            string | null
-  tcgp_updated_at:   string | null
-  cm_updated_at:     string | null
   fetched_at:        string
   /**
    * Per-variant CardMarket URL overrides from card_cm_url_overrides table.

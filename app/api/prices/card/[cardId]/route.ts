@@ -51,8 +51,6 @@ export async function GET(
         cm_reverse_holo,
         cm_cosmos_holo,
         cm_url,
-        tcgp_updated_at,
-        cm_updated_at,
         fetched_at
       `)
       .eq('card_id', cardId)
