@@ -117,14 +117,12 @@ export default function SetPageCards({
   // null until first emission — tab badges fall back to the basic Zustand counts.
   const [goalHave, setGoalHave] = useState<number | null>(null)
   const [goalNeed, setGoalNeed] = useState<number | null>(null)
-  // Grandmaster Set variant-slot counts (individual variant ownership progress).
+  // Variant-slot owned count for masterset + grandmasterset progress bars.
   const [goalVariantOwned, setGoalVariantOwned] = useState<number | null>(null)
-  const [goalVariantTotal, setGoalVariantTotal] = useState<number | null>(null)
-  const handleCountsChange = useCallback((have: number, need: number, variantOwned?: number, variantTotal?: number) => {
+  const handleCountsChange = useCallback((have: number, need: number, variantOwned?: number) => {
     setGoalHave(have)
     setGoalNeed(need)
     setGoalVariantOwned(variantOwned ?? null)
-    setGoalVariantTotal(variantTotal ?? null)
   }, [])
 
   const { userCards: storeUserCards } = useCollectionStore()
@@ -198,33 +196,47 @@ export default function SetPageCards({
     activeFilter === 'duplicates' && !hasDuplicates ? 'all' : activeFilter
 
   // ── Progress calculation ─────────────────────────────────────────────────
-  const promoCards    = useMemo(() => cards.filter(c => c.rarity?.toLowerCase().includes('promo')), [cards])
-  const nonPromoCards = useMemo(() => cards.filter(c => !c.rarity?.toLowerCase().includes('promo')), [cards])
+  // Denominators computed from SSR variant structure (initialCardVariants) so
+  // they are accurate on first paint with no dependency on loading state.
+  //
+  //  mastersetTotal    = sum of global (non-card-specific) variant slots across all cards
+  //  grandmastersetTotal = sum of ALL variant slots (global + card-specific) across all cards
+  const mastersetTotal = useMemo(() => {
+    if (!initialCardVariants) return setComplete ?? setTotal
+    const slots = Object.values(initialCardVariants).reduce(
+      (sum, vs) => sum + vs.filter(v => v.card_id == null).length, 0
+    )
+    return slots > 0 ? slots : (setComplete ?? setTotal)
+  }, [initialCardVariants, setComplete, setTotal])
+
+  const grandmastersetTotal = useMemo(() => {
+    if (!initialCardVariants) return setComplete ?? setTotal
+    const slots = Object.values(initialCardVariants).reduce(
+      (sum, vs) => sum + vs.length, 0
+    )
+    return slots > 0 ? slots : (setComplete ?? setTotal)
+  }, [initialCardVariants, setComplete, setTotal])
 
   const progressTotal = useMemo(() => {
-    // For grandmasterset use the variant-slot total once CardGrid has emitted it
-    // (e.g. 30 = 25 cards + 5 card-specific variant slots).
-    if (collectionGoal === 'grandmasterset') return goalVariantTotal ?? cards.length
-    if (collectionGoal === 'masterset')      return nonPromoCards.length
-    return setTotal
-  }, [collectionGoal, goalVariantTotal, cards.length, nonPromoCards.length, setTotal])
+    if (collectionGoal === 'grandmasterset') return grandmastersetTotal
+    if (collectionGoal === 'masterset')      return mastersetTotal
+    // Normal Set: every card counts once regardless of variant — use setComplete (full set incl. secrets).
+    return setComplete ?? setTotal
+  }, [collectionGoal, grandmastersetTotal, mastersetTotal, setComplete, setTotal])
 
   const progressOwned = useMemo(() => {
-    // Grandmaster Set: count individual owned variant slots (e.g. 24 of 30).
-    if (collectionGoal === 'grandmasterset') return goalVariantOwned ?? haveCount
-    if (collectionGoal === 'masterset')
-      // goalHave is the variant-aware masterset count emitted by CardGrid;
-      // fall back to the raw non-promo owned count before the batch load completes.
-      return goalHave ?? nonPromoCards.filter(c => (storeUserCards.get(c.id)?.quantity ?? 0) > 0).length
-    // normal: goalHave is the correct variant-aware unique-card count.
+    // Masterset + Grandmaster: count owned variant slots emitted by CardGrid.
+    if (collectionGoal === 'masterset' || collectionGoal === 'grandmasterset')
+      return goalVariantOwned ?? haveCount
+    // Normal: one unique card per slot — goal-aware unique-card count.
     return goalHave ?? haveCount
-  }, [collectionGoal, goalHave, goalVariantOwned, haveCount, nonPromoCards, storeUserCards])
+  }, [collectionGoal, goalHave, goalVariantOwned, haveCount])
 
   const progressPct = progressTotal > 0 ? Math.round((progressOwned / progressTotal) * 100) : 0
 
   const progressLabel = useMemo(() => {
-    if (collectionGoal === 'masterset')      return `${progressOwned} / ${progressTotal} cards (all variants)`
-    if (collectionGoal === 'grandmasterset') return `${progressOwned} / ${progressTotal} cards incl. promos`
+    if (collectionGoal === 'masterset')      return `${progressOwned} / ${progressTotal} variants`
+    if (collectionGoal === 'grandmasterset') return `${progressOwned} / ${progressTotal} variants`
     return `${progressOwned} / ${progressTotal} cards`
   }, [collectionGoal, progressOwned, progressTotal])
 

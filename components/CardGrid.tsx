@@ -784,14 +784,25 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       if (collectionGoal === 'masterset') {
         if (dots && dots.length > 0) {
           const globalVariants = dots.filter(v => v.card_id == null)
-          owned = globalVariants.length > 0 ? globalVariants.every(v => v.quantity > 0) : anyOwned
+          if (globalVariants.length > 0) {
+            owned = globalVariants.every(v => v.quantity > 0)
+            // Track owned global (non-card-specific) variant slots for masterset progress bar.
+            variantTotal += globalVariants.length
+            variantOwned += globalVariants.filter(v => v.quantity > 0).length
+          } else {
+            owned = anyOwned
+            variantTotal += 1
+            variantOwned += anyOwned ? 1 : 0
+          }
         } else {
           owned = anyOwned
+          variantTotal += 1
+          variantOwned += anyOwned ? 1 : 0
         }
       } else if (collectionGoal === 'grandmasterset') {
         if (dots && dots.length > 0) {
           owned = dots.every(v => v.quantity > 0)
-          // Track individual variant slot ownership.
+          // Track all variant slot ownership for grandmasterset progress bar.
           variantTotal += dots.length
           variantOwned += dots.filter(v => v.quantity > 0).length
         } else {
