@@ -7,8 +7,7 @@ import CardGrid from '@/components/CardGrid'
 import CollectionGoalSelector from '@/components/CollectionGoalSelector'
 import BinderCalculatorModal from '@/components/BinderCalculatorModal'
 import { useCollectionStore, useAuthStore } from '@/lib/store'
-import { PokemonCard, CollectionGoal, QuickAddVariant, PriceSource } from '@/types'
-import { formatPrice } from '@/lib/pricing'
+import { PokemonCard, CollectionGoal, QuickAddVariant } from '@/types'
 
 /** Card-id → variant structure, pre-fetched server-side. Passed from the set page / browse page. */
 export type InitialCardVariants = Record<string, QuickAddVariant[]>
@@ -31,13 +30,7 @@ interface SetPageCardsProps {
   userId?: string
   hasPromos: boolean
   initialGoal?: CollectionGoal
-  // Pricing (optional — only provided by the set detail page)
-  cardPricesUSD?: Record<string, number>
   currency?: string
-  /** Whether prices come from the live DB (true) or mock fallback (false) */
-  pricesAreLive?: boolean
-  /** User's preferred price source — drives the source badge label */
-  priceSource?: PriceSource
   /**
    * When true, cards are never greyed out regardless of the user's grey_out_unowned setting.
    * Used on the browse/search page where collection status should not affect card appearance.
@@ -56,13 +49,12 @@ interface SetPageCardsProps {
 }
 
 type FilterTab    = 'all' | 'owned' | 'missing' | 'duplicates'
-type SortBy       = 'number' | 'name' | 'price' | 'date'
+type SortBy       = 'number' | 'name' | 'date'
 type SortDirection = 'asc' | 'desc'
 
 const sortOptions: { label: string; value: SortBy }[] = [
   { label: 'Number', value: 'number' },
   { label: 'Name',   value: 'name'   },
-  { label: 'Price',  value: 'price'  },
   { label: 'Date',   value: 'date'   },
 ]
 
@@ -78,17 +70,11 @@ export default function SetPageCards({
   userId,
   hasPromos,
   initialGoal = 'normal',
-  cardPricesUSD = {},
   currency = 'USD',
-  pricesAreLive = false,
-  priceSource = 'tcgplayer',
   disableGreyOut = false,
   statSeries,
   statReleased,
   statCards,
-  statMostExpensiveName,
-  statMostExpensiveUSD,
-  statSetValueUSD,
 }: SetPageCardsProps) {
   const [activeFilter, setActiveFilter]     = useState<FilterTab>('all')
   const [searchQuery, setSearchQuery]       = useState('')
@@ -155,14 +141,6 @@ export default function SetPageCards({
   const haveCount = useMemo(() =>
     cards.filter(c => (storeUserCards.get(c.id)?.quantity ?? 0) > 0).length,
     [cards, storeUserCards])
-
-  // Reactive total value of the user's collected cards in this set
-  const myCollectedValue = useMemo(() =>
-    cards
-      .filter(c => (storeUserCards.get(c.id)?.quantity ?? 0) > 0)
-      .reduce((sum, c) => sum + (cardPricesUSD[c.id] ?? 0), 0),
-    [cards, storeUserCards, cardPricesUSD]
-  )
 
   const needCount = useMemo(() =>
     cards.filter(c => (storeUserCards.get(c.id)?.quantity ?? 0) === 0).length,
@@ -248,23 +226,11 @@ export default function SetPageCards({
           <div className="max-w-screen-2xl mx-auto px-6 py-4">
             <div className="flex items-center gap-8 flex-wrap">
               {[
-                  { label: 'Series',         value: statSeries ?? '—' },
-                  { label: 'Released',       value: statReleased ?? '—' },
-                  { label: 'Cards',          value: statCards ?? '—' },
-                  {
-                    label: 'Most Expensive',
-                    value: statMostExpensiveName != null && statMostExpensiveUSD != null && statMostExpensiveUSD > 0
-                      ? `${statMostExpensiveName} · ${formatPrice(statMostExpensiveUSD, effectiveCurrency)}`
-                      : '—',
-                  },
-                  {
-                    label: 'Set Value',
-                    value: statSetValueUSD != null && statSetValueUSD > 0 ? formatPrice(statSetValueUSD, effectiveCurrency) : '—',
-                  },
-                ...(isAuthenticated && myCollectedValue > 0
-                  ? [{ label: 'My Collection', value: formatPrice(myCollectedValue, effectiveCurrency) }]
-                  : []
-                ),
+                { label: 'Series',   value: statSeries   ?? '—' },
+                { label: 'Released', value: statReleased ?? '—' },
+                { label: 'Cards',    value: statCards    ?? '—' },
+                { label: 'Most Expensive', value: '—' },
+                { label: 'Set Value',      value: '—' },
               ].map(({ label, value }) => (
                 <div key={label} className="flex flex-col gap-0.5">
                   <span className="text-xs text-muted uppercase tracking-wider">{label}</span>
@@ -501,28 +467,26 @@ export default function SetPageCards({
           </div>
         ) : (
           <CardGrid
-              cards={filteredCards}
-              userCards={storeUserCards}
-              filter={safeFilter}
-              sortBy={sortBy}
-              sortDirection={sortDirection}
-              setTotal={setTotal}
-              setName={setName}
-              setComplete={setComplete}
-              initialCardId={initialCardId}
-              collectionGoal={collectionGoal}
-              cardPricesUSD={cardPricesUSD}
-              currency={effectiveCurrency}
-              priceSource={priceSource}
-              userId={userId}
-              allCards={cards}
-              onCountsChange={handleCountsChange}
-              onVariantsLegendChange={setLegendVariants}
-              onHasExtraVariants={setHasExtraVariants}
-              onVariantsBatchLoading={setVariantsBatchLoading}
-              initialCardVariants={initialCardVariants}
-              disableGreyOut={disableGreyOut}
-            />
+             cards={filteredCards}
+             userCards={storeUserCards}
+             filter={safeFilter}
+             sortBy={sortBy}
+             sortDirection={sortDirection}
+             setTotal={setTotal}
+             setName={setName}
+             setComplete={setComplete}
+             initialCardId={initialCardId}
+             collectionGoal={collectionGoal}
+             currency={effectiveCurrency}
+             userId={userId}
+             allCards={cards}
+             onCountsChange={handleCountsChange}
+             onVariantsLegendChange={setLegendVariants}
+             onHasExtraVariants={setHasExtraVariants}
+             onVariantsBatchLoading={setVariantsBatchLoading}
+             initialCardVariants={initialCardVariants}
+             disableGreyOut={disableGreyOut}
+           />
         )}
       </div>
 

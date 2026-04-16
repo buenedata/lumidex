@@ -2,8 +2,6 @@
 
 import { useState, useCallback } from 'react'
 import { cn } from '@/lib/utils'
-import { formatPrice, EUR_TO_USD, type SetProductPrice } from '@/lib/pricing'
-import type { PriceSource } from '@/types'
 
 // ── Product type badge colours ────────────────────────────────────────────────
 const PRODUCT_TYPE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
@@ -19,21 +17,23 @@ const PRODUCT_TYPE_STYLES: Record<string, { bg: string; text: string; label: str
 
 function getProductTypeStyle(type: string | null) {
   if (!type) return { bg: 'bg-gray-500/15', text: 'text-gray-400', label: 'Product' }
-  // Exact match first
   if (PRODUCT_TYPE_STYLES[type]) return PRODUCT_TYPE_STYLES[type]
-  // Partial match
   for (const [key, style] of Object.entries(PRODUCT_TYPE_STYLES)) {
     if (type.toLowerCase().includes(key.toLowerCase())) return style
   }
   return { bg: 'bg-gray-500/15', text: 'text-gray-400', label: type }
 }
 
+interface SealedProduct {
+  id:           string
+  name:         string
+  product_type: string | null
+  image_url:    string | null
+}
+
 interface ProductCardProps {
-  product:          SetProductPrice
+  product:          SealedProduct
   setName:          string
-  currency:         string
-  /** User's preferred price source — drives which price is shown first */
-  priceSource:      PriceSource
   userId:           string | null
   initialQuantity?: number
 }
@@ -41,34 +41,13 @@ interface ProductCardProps {
 export default function ProductCard({
   product,
   setName,
-  currency,
-  priceSource,
   userId,
   initialQuantity = 0,
 }: ProductCardProps) {
-  const [quantity, setQuantity]   = useState(initialQuantity)
-  const [saving,   setSaving]     = useState(false)
+  const [quantity, setQuantity] = useState(initialQuantity)
+  const [saving,   setSaving]   = useState(false)
 
   const typeStyle = getProductTypeStyle(product.product_type)
-
-  // Resolve best price in USD honouring the user's preferred price source.
-  // CardMarket prices are stored in EUR — convert to USD for uniform math.
-  const priceUSD: number | null = (() => {
-    if (priceSource === 'tcgplayer') {
-      // Prefer TCGPlayer market; fall back to CardMarket converted to USD
-      if (product.tcgp_market != null) return product.tcgp_market
-      const cm = product.cm_avg_sell ?? product.cm_trend
-      return cm != null ? Math.round(cm * EUR_TO_USD * 100) / 100 : null
-    } else {
-      // CardMarket preferred: prefer cm_avg_sell, fall back to tcgp_market
-      const cm = product.cm_avg_sell ?? product.cm_trend
-      if (cm != null) return Math.round(cm * EUR_TO_USD * 100) / 100
-      return product.tcgp_market ?? null
-    }
-  })()
-
-  const priceSourceLabel = priceSource === 'tcgplayer' ? 'TCGPlayer' : 'CardMarket'
-  const productUrl = priceSource === 'tcgplayer' ? product.tcgp_url : (product.cm_url ?? product.tcgp_url)
 
   const updateQuantity = useCallback(async (newQty: number) => {
     if (!userId || saving) return
@@ -141,30 +120,8 @@ export default function ProductCard({
           {product.name}
         </h3>
 
-        {/* Price */}
-        <div className="flex items-end justify-between gap-2">
-          <div>
-            {priceUSD !== null ? (
-              <p className="text-base font-bold text-accent">
-                {formatPrice(priceUSD, currency)}
-              </p>
-            ) : (
-              <p className="text-sm text-muted italic">Price unavailable</p>
-            )}
-            {productUrl && (
-                <a
-                  href={productUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-muted hover:text-accent transition-colors"
-                  onClick={e => e.stopPropagation()}
-                >
-                  {priceSourceLabel} ↗
-                </a>
-              )}
-          </div>
-
-          {/* Quantity controls */}
+        {/* Quantity controls */}
+        <div className="flex items-end justify-end gap-2">
           {userId ? (
             <div className="flex items-center gap-1.5">
               <button

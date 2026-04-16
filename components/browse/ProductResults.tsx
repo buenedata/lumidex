@@ -136,16 +136,11 @@ export default function ProductResults({ products, query }: ProductResultsProps)
                 </p>
                 <p className="text-xs text-muted truncate">{product.set_name}</p>
 
-                {/* Type badge + price row */}
-                <div className="flex items-center justify-between mt-auto pt-1.5 gap-1">
+                {/* Type badge */}
+                <div className="flex items-center mt-auto pt-1.5">
                   {product.product_type && (
                     <span className={cn('text-xs px-1.5 py-0.5 rounded-full font-medium shrink-0', bg, text)}>
                       {shortType(product.product_type)}
-                    </span>
-                  )}
-                  {product.tcgp_market != null && (
-                    <span className="text-xs font-semibold text-price ml-auto">
-                      ${product.tcgp_market.toFixed(2)}
                     </span>
                   )}
                 </div>

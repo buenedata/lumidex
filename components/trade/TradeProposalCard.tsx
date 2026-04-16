@@ -1,10 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
-import { fmtCardPrice, sumAndFormatPrices } from '@/lib/currency'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface TPUser {
@@ -84,19 +83,10 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 // ── Detailed card tile ────────────────────────────────────────────────────────
-function CardDetailTile({
-  item,
-  price,
-  currency,
-}: {
-  item: TPItem
-  price: { eur: number | null; usd: number | null } | undefined
-  currency: string
-}) {
+function CardDetailTile({ item }: { item: TPItem }) {
   const card = item.cards
   if (!card) return null
   const setInfo = (Array.isArray(card.sets) ? card.sets[0] : card.sets) as { name: string | null; logo_url: string | null } | null
-  const priceStr = fmtCardPrice(price, currency)
 
   return (
     <div className="flex flex-col items-start gap-1.5 w-[90px] shrink-0">
@@ -136,11 +126,7 @@ function CardDetailTile({
       </p>
 
       {/* Price */}
-      {priceStr ? (
-        <p className="text-[11px] font-bold text-price leading-none">{priceStr}</p>
-      ) : (
-        <p className="text-[10px] text-muted leading-none italic">No price</p>
-      )}
+      <span className="text-xs text-gray-400 italic">Prices coming soon</span>
     </div>
   )
 }
@@ -152,27 +138,17 @@ function CardSidePanel({
   items,
   cashAmount,
   currencyCode,
-  userCurrency,
-  prices,
 }: {
   label: string
   labelClass: string
   items: TPItem[]
   cashAmount: number
   currencyCode: string
-  userCurrency: string
-  prices: Record<string, { eur: number | null; usd: number | null }>
 }) {
-  const cardIds  = items.map(i => i.cards?.id).filter((id): id is string => !!id)
-  const totalStr = sumAndFormatPrices(cardIds, prices, userCurrency)
-
   return (
     <div className="px-5 py-4 flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <p className={`text-xs font-semibold uppercase tracking-wider ${labelClass}`}>{label}</p>
-        {totalStr && (
-          <p className="text-xs font-bold text-primary">{totalStr}</p>
-        )}
       </div>
 
       {items.length > 0 ? (
@@ -181,8 +157,6 @@ function CardSidePanel({
             <CardDetailTile
               key={item.id}
               item={item}
-              price={item.cards ? prices[item.cards.id] : undefined}
-              currency={userCurrency}
             />
           ))}
         </div>
@@ -205,9 +179,8 @@ function CardSidePanel({
 
 // ── Main component ────────────────────────────────────────────────────────────
 export default function TradeProposalCard({ proposal, onStatusChange }: TradeProposalCardProps) {
-  const [acting,  setActing]  = useState(false)
-  const [error,   setError]   = useState<string | null>(null)
-  const [prices,  setPrices]  = useState<Record<string, { eur: number | null; usd: number | null }>>({})
+  const [acting, setActing] = useState(false)
+  const [error,  setError]  = useState<string | null>(null)
 
   const { profile } = useAuthStore()
   const userCurrency: string = (profile as any)?.preferred_currency ?? 'USD'
@@ -222,18 +195,6 @@ export default function TradeProposalCard({ proposal, onStatusChange }: TradePro
   const theirItems     = isProposer ? requestingItems : offeringItems
   const myCashOffer    = isProposer ? proposal.cash_offered   : proposal.cash_requested
   const theirCashOffer = isProposer ? proposal.cash_requested : proposal.cash_offered
-
-  // Fetch prices for all cards in this proposal
-  useEffect(() => {
-    const ids = proposal.trade_proposal_items
-      .map(i => i.cards?.id)
-      .filter((id): id is string => !!id)
-    if (ids.length === 0) return
-    fetch(`/api/cards/prices?ids=${ids.join(',')}`)
-      .then(r => r.json())
-      .then(d => { if (d.prices) setPrices(d.prices) })
-      .catch(() => {})
-  }, [proposal.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function act(newStatus: 'accepted' | 'declined' | 'withdrawn') {
     setActing(true)
@@ -302,8 +263,6 @@ export default function TradeProposalCard({ proposal, onStatusChange }: TradePro
           items={myOfferItems}
           cashAmount={myCashOffer}
           currencyCode={proposal.currency_code}
-          userCurrency={userCurrency}
-          prices={prices}
         />
         <CardSidePanel
           label={`${otherName} Offers`}
@@ -311,8 +270,6 @@ export default function TradeProposalCard({ proposal, onStatusChange }: TradePro
           items={theirItems}
           cashAmount={theirCashOffer}
           currencyCode={proposal.currency_code}
-          userCurrency={userCurrency}
-          prices={prices}
         />
       </div>
 

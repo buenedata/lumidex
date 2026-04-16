@@ -3,8 +3,7 @@
 import { useState, useMemo } from 'react'
 import ProductCard from '@/components/ProductCard'
 import { cn } from '@/lib/utils'
-import type { SeriesProductGroup } from '@/lib/pricing'
-import type { PriceSource } from '@/types'
+import type { SeriesProductGroup } from '@/types'
 
 // ── Known product types for the type filter pills ─────────────────────────────
 const KNOWN_PRODUCT_TYPES = [
@@ -23,8 +22,6 @@ interface ProductsPageClientProps {
   initialSeries:   string   // 'All' or a specific series name
   ownedQuantities: Record<string, number>
   userId:          string | null
-  currency:        string
-  priceSource:     PriceSource
 }
 
 export default function ProductsPageClient({
@@ -32,8 +29,6 @@ export default function ProductsPageClient({
   initialSeries,
   ownedQuantities,
   userId,
-  currency,
-  priceSource,
 }: ProductsPageClientProps) {
   const [activeSeries, setActiveSeries] = useState<string>(initialSeries)
   const [activeType,   setActiveType]   = useState<string>('All')
@@ -220,8 +215,6 @@ export default function ProductsPageClient({
                     key={product.id}
                     product={product}
                     setName={setGroup.setName}
-                    currency={currency}
-                    priceSource={priceSource}
                     userId={userId}
                     initialQuantity={ownedQuantities[product.id] ?? 0}
                   />

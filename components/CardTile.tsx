@@ -3,7 +3,7 @@
 import { memo } from 'react'
 import Link from 'next/link'
 import { PokemonCard, QuickAddVariant } from '@/types'
-import { formatPrice } from '@/lib/pricing'
+import { formatPrice } from '@/lib/currency'
 
 // ── Shared constants (mirrors CardGrid) ────────────────────────────────────
 const COLOR_MAP = {

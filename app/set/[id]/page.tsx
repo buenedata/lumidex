@@ -1,8 +1,7 @@
 import { getSetById, getCardsBySet, hasPromoCards } from '@/lib/db'
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import { supabaseAdmin } from '@/lib/supabase'
-import { PokemonCard, PokemonSet, CollectionGoal, PriceSource, QuickAddVariant } from '@/types'
-import { getCardPricesForSet, buildCardPriceMap } from '@/lib/pricing'
+import { PokemonCard, PokemonSet, CollectionGoal, QuickAddVariant } from '@/types'
 import { batchFetchVariantStructure } from '@/lib/variantServer'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -26,10 +25,9 @@ interface SetPageProps {
 // the effective TTFB for the full page drops by ~40 %.
 //
 interface AuthPrefs {
-  userId:       string | undefined
-  priceSource:  PriceSource
-  currency:     string
-  currentGoal:  CollectionGoal
+  userId:      string | undefined
+  currency:    string
+  currentGoal: CollectionGoal
 }
 
 async function getAuthAndPrefs(setId: string): Promise<AuthPrefs> {
@@ -38,14 +36,14 @@ async function getAuthAndPrefs(setId: string): Promise<AuthPrefs> {
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
-      return { userId: undefined, priceSource: 'tcgplayer', currency: 'USD', currentGoal: 'normal' }
+      return { userId: undefined, currency: 'USD', currentGoal: 'normal' }
     }
 
     // Profile preferences and collection goal are independent — fetch in parallel.
     const [profileResult, userSetResult] = await Promise.all([
       supabaseAdmin
         .from('users')
-        .select('preferred_currency, price_source')
+        .select('preferred_currency')
         .eq('id', user.id)
         .maybeSingle(),
       supabaseAdmin
@@ -62,14 +60,13 @@ async function getAuthAndPrefs(setId: string): Promise<AuthPrefs> {
 
     return {
       userId:      user.id,
-      priceSource: (profileResult.data?.price_source ?? 'tcgplayer') as PriceSource,
       currency:    profileResult.data?.preferred_currency ?? 'USD',
       currentGoal: (userSetResult.data?.collection_goal ?? 'normal') as CollectionGoal,
     }
   } catch (err) {
     // Auth errors are non-fatal — guest view still works.
     console.warn('[set page] Could not fetch user session:', err)
-    return { userId: undefined, priceSource: 'tcgplayer', currency: 'USD', currentGoal: 'normal' }
+    return { userId: undefined, currency: 'USD', currentGoal: 'normal' }
   }
 }
 
@@ -87,7 +84,7 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
   let fetchError: string | null = null
   let rawSetData: Awaited<ReturnType<typeof getSetById>> = null
   let rawCards:   Awaited<ReturnType<typeof getCardsBySet>> = []
-  let authPrefs:  AuthPrefs = { userId: undefined, priceSource: 'tcgplayer', currency: 'USD', currentGoal: 'normal' }
+  let authPrefs:  AuthPrefs = { userId: undefined, currency: 'USD', currentGoal: 'normal' }
 
   try {
     ;[rawSetData, rawCards, authPrefs] = await Promise.all([
@@ -134,7 +131,7 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
     rarity:    card.rarity || '',
   })) as PokemonCard[]
 
-  const { userId, priceSource, currency, currentGoal } = authPrefs
+  const { userId, currency, currentGoal } = authPrefs
 
   // ── Phase 2: prices + variant structure (parallel) ───────────────────────
   //
@@ -146,32 +143,11 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
   // paint without waiting for a client-side POST /api/variants call.
   //
   const cardIds = rawCards.map(c => c.id)
-  let cardPricesUSD: Record<string, number> = {}
-  let pricesAreLive = false
   let initialCardVariants: Record<string, QuickAddVariant[]> = {}
 
-  await Promise.all([
-    getCardPricesForSet(id, priceSource, cardIds)
-      .then(realPrices => {
-        cardPricesUSD = buildCardPriceMap(cards, realPrices)
-        pricesAreLive = Object.keys(cardPricesUSD).length > 0
-      })
-      .catch(err => console.warn('[set page] Price lookup failed:', err)),
-
-    batchFetchVariantStructure(cardIds, id)
-      .then(r => { initialCardVariants = r })
-      .catch(() => { /* non-fatal — dots fall back to client-side batch fetch */ }),
-  ])
-
-  // ── Set-level stats ───────────────────────────────────────────────────────
-  const setTotalValue = Object.values(cardPricesUSD).reduce((s, p) => s + p, 0)
-  const mostExpensive = cards.reduce<PokemonCard | null>(
-    (best, c) =>
-      best === null || (cardPricesUSD[c.id] ?? 0) > (cardPricesUSD[best.id] ?? 0)
-        ? c
-        : best,
-    null,
-  )
+  await batchFetchVariantStructure(cardIds, id)
+    .then(r => { initialCardVariants = r })
+    .catch(() => { /* non-fatal — dots fall back to client-side batch fetch */ })
 
   const set   = rawSetData as unknown as PokemonSet
   const setTotal = set.total || cards.length
@@ -256,10 +232,7 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
         userId={userId}
         hasPromos={hasPromos}
         initialGoal={currentGoal}
-        cardPricesUSD={cardPricesUSD}
         currency={currency}
-        pricesAreLive={pricesAreLive}
-        priceSource={priceSource}
         statSeries={set.series ?? '—'}
         statReleased={
           set.release_date
@@ -278,9 +251,6 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
           }
           return `${total ?? '?'}`
         })()}
-        statMostExpensiveName={mostExpensive?.name ?? undefined}
-        statMostExpensiveUSD={mostExpensive ? (cardPricesUSD[mostExpensive.id] ?? 0) : undefined}
-        statSetValueUSD={setTotalValue}
       />
     </div>
   )

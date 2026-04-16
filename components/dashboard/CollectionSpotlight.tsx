@@ -1,63 +1,13 @@
 'use client'
 
-import type { ReactNode } from 'react'
 import Link from 'next/link'
 import type { PokemonSet, SetProgress } from '@/types'
-import { formatPrice } from '@/lib/currency'
-
-interface SpotlightCard {
-  name: string
-  image: string
-}
-
-interface SpotlightExpensiveCard extends SpotlightCard {
-  price: number
-}
 
 interface CollectionSpotlightProps {
   sets: PokemonSet[]
   getProgress: (setId: string) => SetProgress
   completedSets: number
   totalCardsToComplete: number
-  mostOwnedCard: SpotlightCard | null
-  mostOwnedQty: number
-  mostExpensiveCard: SpotlightExpensiveCard | null
-  statsLoading?: boolean
-  /** User's preferred currency code (ISO 4217). Defaults to 'USD'. */
-  currency?: string
-}
-
-// ── Mini stat chip ────────────────────────────────────────────────────────────
-interface MiniStatProps {
-  emoji: string
-  label: string
-  value: ReactNode
-  sub?: ReactNode
-  loading?: boolean
-}
-
-function MiniStat({ emoji, label, value, sub, loading }: MiniStatProps) {
-  return (
-    <div className="rounded-xl bg-surface border border-subtle p-3 flex flex-col gap-1.5 min-w-0">
-      <div className="flex items-center gap-1.5">
-        <span className="text-sm leading-none" role="img" aria-hidden>{emoji}</span>
-        <p className="text-[10px] text-muted uppercase tracking-wider font-medium truncate leading-none">
-          {label}
-        </p>
-      </div>
-      {loading ? (
-        <div className="space-y-1.5">
-          <div className="skeleton h-3.5 w-24 rounded" />
-          <div className="skeleton h-3 w-16 rounded" />
-        </div>
-      ) : (
-        <>
-          <p className="text-sm font-bold text-primary truncate leading-tight">{value}</p>
-          {sub && <p className="text-xs text-muted truncate leading-tight">{sub}</p>}
-        </>
-      )}
-    </div>
-  )
 }
 
 export default function CollectionSpotlight({
@@ -65,11 +15,6 @@ export default function CollectionSpotlight({
   getProgress,
   completedSets,
   totalCardsToComplete,
-  mostOwnedCard,
-  mostOwnedQty,
-  mostExpensiveCard,
-  statsLoading = false,
-  currency = 'USD',
 }: CollectionSpotlightProps) {
   if (sets.length === 0) return null
 
@@ -209,46 +154,44 @@ export default function CollectionSpotlight({
           </Link>
         </div>
 
-        {/* ── Right: Mini fun stats ──────────────────────────────────── */}
+        {/* ── Right: Stats ──────────────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-2 lg:w-80 xl:w-96 gap-3 content-start shrink-0">
-          <MiniStat
-            emoji="💎"
-            label="Most Expensive"
-            loading={statsLoading && !mostExpensiveCard}
-            value={mostExpensiveCard?.name ?? (statsLoading ? '' : '—')}
-            sub={
-              mostExpensiveCard
-                ? <span className="text-price font-semibold">{formatPrice(mostExpensiveCard.price, currency)}</span>
-                : undefined
-            }
-          />
-          <MiniStat
-            emoji="📦"
-            label="Most Owned"
-            loading={statsLoading && !mostOwnedCard}
-            value={mostOwnedCard?.name ?? (statsLoading ? '' : '—')}
-            sub={
-              mostOwnedCard && mostOwnedQty > 0
-                ? <span>×{mostOwnedQty} {mostOwnedQty === 1 ? 'copy' : 'copies'}</span>
-                : undefined
-            }
-          />
-          <MiniStat
-            emoji="🎯"
-            label="Sets Complete"
-            value={completedSets}
-            sub={completedSets === 1 ? '1 set finished' : `${completedSets} sets finished`}
-          />
-          <MiniStat
-            emoji="📋"
-            label="Cards Needed"
-            value={totalCardsToComplete.toLocaleString()}
-            sub={
-              totalCardsToComplete === 0
-                ? <span className="text-price">All sets complete!</span>
-                : 'to finish tracked sets'
-            }
-          />
+          <div className="rounded-xl bg-surface border border-subtle p-3 flex flex-col gap-1.5 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm leading-none" role="img" aria-hidden>💎</span>
+              <p className="text-[10px] text-muted uppercase tracking-wider font-medium truncate leading-none">Most Expensive</p>
+            </div>
+            <p className="text-sm font-bold text-primary truncate leading-tight">—</p>
+            <p className="text-xs text-muted truncate leading-tight">Pricing coming soon</p>
+          </div>
+          <div className="rounded-xl bg-surface border border-subtle p-3 flex flex-col gap-1.5 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm leading-none" role="img" aria-hidden>🎯</span>
+              <p className="text-[10px] text-muted uppercase tracking-wider font-medium truncate leading-none">Sets Complete</p>
+            </div>
+            <p className="text-sm font-bold text-primary truncate leading-tight">{completedSets}</p>
+            <p className="text-xs text-muted truncate leading-tight">{completedSets === 1 ? '1 set finished' : `${completedSets} sets finished`}</p>
+          </div>
+          <div className="rounded-xl bg-surface border border-subtle p-3 flex flex-col gap-1.5 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm leading-none" role="img" aria-hidden>📋</span>
+              <p className="text-[10px] text-muted uppercase tracking-wider font-medium truncate leading-none">Cards Needed</p>
+            </div>
+            <p className="text-sm font-bold text-primary truncate leading-tight">{totalCardsToComplete.toLocaleString()}</p>
+            <p className="text-xs text-muted truncate leading-tight">
+              {totalCardsToComplete === 0
+                ? 'All sets complete!'
+                : 'to finish tracked sets'}
+            </p>
+          </div>
+          <div className="rounded-xl bg-surface border border-subtle p-3 flex flex-col gap-1.5 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm leading-none" role="img" aria-hidden>💰</span>
+              <p className="text-[10px] text-muted uppercase tracking-wider font-medium truncate leading-none">Collection Value</p>
+            </div>
+            <p className="text-sm font-bold text-primary truncate leading-tight">—</p>
+            <p className="text-xs text-muted truncate leading-tight">Pricing coming soon</p>
+          </div>
         </div>
 
       </div>

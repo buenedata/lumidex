@@ -2,7 +2,6 @@
 
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/Input'
-import type { PriceSource, PortfolioVisibility } from '@/types'
 
 // ── Public type shared with wizard + settings modal ───────────
 export interface SettingsValues {
@@ -11,10 +10,8 @@ export interface SettingsValues {
   location: string
   preferred_language: string
   preferred_currency: string
-  price_source: PriceSource
   grey_out_unowned: boolean
   profile_private: boolean
-  show_portfolio_value: PortfolioVisibility
   lists_public_by_default: boolean
   /** Social / marketplace profile links */
   social_cardmarket: string
@@ -28,10 +25,8 @@ export const defaultSettings: SettingsValues = {
   location: '',
   preferred_language: 'en',
   preferred_currency: 'USD',
-  price_source: 'tcgplayer',
   grey_out_unowned: true,
   profile_private: false,
-  show_portfolio_value: 'public',
   lists_public_by_default: false,
   social_cardmarket: '',
   social_instagram: '',
@@ -333,23 +328,11 @@ export default function SettingsForm({
             Collection Display
           </h3>
 
-          <SegmentedControl<PriceSource>
-            label="Price Source"
-            value={values.price_source}
-            onChange={v => onChange({ price_source: v })}
-            options={[
-              {
-                value: 'tcgplayer',
-                label: 'TCGPlayer',
-                description: 'US market prices from TCGPlayer',
-              },
-              {
-                value: 'cardmarket',
-                label: 'Cardmarket',
-                description: 'European market prices from Cardmarket',
-              },
-            ]}
-          />
+          {/* Pricing preferences — coming soon */}
+          <div className="opacity-50 cursor-not-allowed">
+            <label className="block text-sm font-medium text-gray-400">Price Source</label>
+            <p className="text-xs text-gray-500 mt-1">Price source preferences are coming soon with the new pricing system.</p>
+          </div>
 
           <Toggle
             id="grey_out_unowned"
@@ -376,28 +359,11 @@ export default function SettingsForm({
             onChange={v => onChange({ profile_private: v })}
           />
 
-          <SegmentedControl<PortfolioVisibility>
-            label="Portfolio Value Visibility"
-            value={values.show_portfolio_value}
-            onChange={v => onChange({ show_portfolio_value: v })}
-            options={[
-              {
-                value: 'public',
-                label: 'Public',
-                description: 'Anyone can see your portfolio value',
-              },
-              {
-                value: 'friends_only',
-                label: 'Friends only',
-                description: 'Only mutual connections can see your portfolio value',
-              },
-              {
-                value: 'private',
-                label: 'Private',
-                description: 'Only you can see your portfolio value',
-              },
-            ]}
-          />
+          {/* Portfolio value visibility — coming soon */}
+          <div className="opacity-50 cursor-not-allowed">
+            <label className="block text-sm font-medium text-gray-400">Portfolio Value Visibility</label>
+            <p className="text-xs text-gray-500 mt-1">Price source preferences are coming soon with the new pricing system.</p>
+          </div>
 
           <Toggle
             id="lists_public_by_default"

@@ -1,7 +1,6 @@
 import { getSets } from '@/lib/db'
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import SetsPageClient, { type EnrichedSet } from '@/components/SetsPageClient'
-import { getSeriesWithProducts } from '@/lib/pricing'
 
 // Opt out of static pre-rendering: this route reads auth cookies at request time.
 export const dynamic = 'force-dynamic'
@@ -24,18 +23,16 @@ export default async function SetsPage() {
       // Parallel fetch: sets, favorites, per-set card counts, and series w/ products.
       // The RPC pushes the GROUP BY into Postgres, returning ~1 row per set instead
       // of pulling every user_card_variants row into Node.js memory for JS aggregation.
-      const [setsData, favoritesResult, cardCountsResult, seriesProductsSet] = await Promise.all([
+      const [setsData, favoritesResult, cardCountsResult] = await Promise.all([
         getSets(),
         supabase
           .from('user_sets')
           .select('set_id')
           .eq('user_id', user.id),
         supabase.rpc('get_user_card_counts_by_set', { p_user_id: user.id }),
-        getSeriesWithProducts(),
       ])
 
       favoritedSetIds = favoritesResult.data?.map(r => r.set_id) ?? []
-      seriesWithProducts = [...seriesProductsSet]
 
       // RPC already returns one row per set with distinct card counts — no JS aggregation needed.
       const cardCounts: Record<string, number> = Object.fromEntries(
@@ -50,11 +47,8 @@ export default async function SetsPage() {
         user_card_count: cardCounts[s.id] ?? 0,
       }))
     } else {
-      // Guest: fetch public set data + series-with-products (no auth required)
-      ;[sets, seriesWithProducts] = await Promise.all([
-        getSets(),
-        getSeriesWithProducts().then(s => [...s]),
-      ])
+      // Guest: fetch public set data (no auth required)
+      sets = await getSets()
     }
 
   } catch (err) {

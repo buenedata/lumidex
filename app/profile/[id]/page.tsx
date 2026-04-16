@@ -26,27 +26,6 @@ import { User, Achievement, PokemonSet, SetProgress } from '@/types'
 import type { FriendEntry } from '@/components/profile/FriendsList'
 import { cn } from '@/lib/utils'
 
-// ── Pure price formatter (client-safe, no server imports) ─────────────────────
-const EXCHANGE_RATES: Record<string, number> = {
-  USD: 1.00, EUR: 0.92, GBP: 0.79, NOK: 10.55,
-  SEK: 10.35, DKK: 6.88, CAD: 1.36, AUD: 1.52, JPY: 149.00, CHF: 0.90,
-}
-const CURRENCY_LOCALES: Record<string, string> = {
-  USD: 'en-US', EUR: 'de-DE', GBP: 'en-GB', NOK: 'nb-NO',
-  SEK: 'sv-SE', DKK: 'da-DK', CAD: 'en-CA', AUD: 'en-AU', JPY: 'ja-JP', CHF: 'de-CH',
-}
-function formatPrice(usdAmount: number, toCurrency: string): string {
-  const rate     = EXCHANGE_RATES[toCurrency] ?? 1
-  const locale   = CURRENCY_LOCALES[toCurrency] ?? 'en-US'
-  const currency = toCurrency in EXCHANGE_RATES ? toCurrency : 'USD'
-  return new Intl.NumberFormat(locale, {
-    style:                 'currency',
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(usdAmount * rate)
-}
-
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type ProfileUser = User
@@ -65,10 +44,8 @@ function userToSettings(u: ProfileUser): SettingsValues {
     location:                  u.location                  ?? '',
     preferred_language:        u.preferred_language        ?? 'en',
     preferred_currency:        u.preferred_currency        ?? 'USD',
-    price_source:              u.price_source              ?? 'tcgplayer',
     grey_out_unowned:          u.grey_out_unowned          ?? true,
     profile_private:           u.profile_private           ?? false,
-    show_portfolio_value:      u.show_portfolio_value      ?? 'public',
     lists_public_by_default:   u.lists_public_by_default   ?? false,
     social_cardmarket:         u.social_cardmarket          ?? '',
     social_instagram:          u.social_instagram           ?? '',
@@ -94,8 +71,7 @@ export default function ProfilePage() {
     completedSets: 0,
     achievementCount: 0,
   })
-  const [collectionValueUsd, setCollectionValueUsd] = useState<number | null>(null)
-  const [profileUserIsPro, setProfileUserIsPro]     = useState(false)
+  const [profileUserIsPro, setProfileUserIsPro] = useState(false)
   const [loading, setLoading] = useState(true)
 
   // Local mutable URLs (may change after an upload without re-fetching the whole profile)
@@ -272,88 +248,6 @@ export default function ProfilePage() {
         }
       }
 
-      // ── Portfolio value: card variants + sealed products ──────────────────────
-      try {
-        const priceSource = userData?.price_source ?? 'tcgplayer'
-
-        // 1. Card variant values — join fetched cardsData with card_prices
-        const cardIds = [
-          ...new Set(
-            (cardsData ?? [])
-              .map(v => v.card_id)
-              .filter((id): id is string => typeof id === 'string')
-          ),
-        ]
-
-        let cardValueUsd = 0
-        // Track whether the card_prices table actually has any rows for these cards.
-        // If there are cards but price data is completely absent we want to show
-        // "—" instead of the misleading "$0.00".
-        let hasPriceData = cardIds.length === 0  // trivially true when no cards
-        if (cardIds.length > 0) {
-          const { data: prices } = await supabase
-            .from('card_prices')
-            .select('card_id, tcgp_normal, tcgp_reverse_holo, tcgp_holo, tcgp_1st_edition, tcgp_market, cm_trend')
-            .in('card_id', cardIds)
-
-          hasPriceData = prices !== null && prices.length > 0
-          const priceMap = new Map(prices?.map(p => [p.card_id, p]) ?? [])
-
-          for (const v of cardsData ?? []) {
-            if (!v.card_id || !v.quantity) continue
-            const row = priceMap.get(v.card_id)
-            if (!row) continue
-
-            let unitPrice: number | null = null
-            if (priceSource === 'cardmarket') {
-              unitPrice = (row.cm_trend as number | null) ?? null
-            } else {
-              const vt = (v.variant_type ?? '').toLowerCase()
-              if (vt === 'normal')                                 unitPrice = row.tcgp_normal as number | null
-              else if (vt === 'reverse' || vt === 'reverse_holo') unitPrice = row.tcgp_reverse_holo as number | null
-              else if (vt === 'holo')                             unitPrice = row.tcgp_holo as number | null
-              else if (vt.includes('1st'))                        unitPrice = row.tcgp_1st_edition as number | null
-              unitPrice ??= (row.tcgp_market as number | null)
-            }
-            cardValueUsd += (unitPrice ?? 0) * v.quantity
-          }
-        }
-
-        // 2. Sealed product values
-        const { data: ownedSealed } = await supabase
-          .from('user_sealed_products')
-          .select('product_id, quantity')
-          .eq('user_id', userId)
-          .gt('quantity', 0)
-
-        let sealedValueUsd = 0
-        if (ownedSealed && ownedSealed.length > 0) {
-          const productIds = ownedSealed.map(p => p.product_id)
-          const { data: productPrices } = await supabase
-            .from('set_products')
-            .select('api_product_id, tcgp_market, cm_trend')
-            .in('api_product_id', productIds)
-
-          const productMap = new Map(productPrices?.map(p => [p.api_product_id, p]) ?? [])
-          for (const owned of ownedSealed) {
-            const product = productMap.get(owned.product_id)
-            if (!product || !owned.quantity) continue
-            const unitPrice =
-              priceSource === 'cardmarket'
-                ? ((product.cm_trend as number | null) ?? (product.tcgp_market as number | null) ?? 0)
-                : ((product.tcgp_market as number | null) ?? 0)
-            sealedValueUsd += (unitPrice ?? 0) * owned.quantity
-          }
-        }
-
-        // Only show a real dollar value if we actually have price data.
-        // An empty card_prices table should display "—" not "$0.00".
-        setCollectionValueUsd(hasPriceData ? cardValueUsd + sealedValueUsd : null)
-      } catch (err) {
-        console.warn('[profile] portfolio value computation failed:', err)
-        setCollectionValueUsd(null)
-      }
-
       setLoading(false)
     }
 
@@ -503,13 +397,6 @@ export default function ProfilePage() {
       })
     : null
   const isPrivate = !isOwnProfile && (profileUser.profile_private ?? false)
-
-  // Portfolio visibility: own profile always, else check the user's setting
-  const canSeePortfolioValue =
-    isOwnProfile ||
-    profileUser.show_portfolio_value === 'public' ||
-    (profileUser.show_portfolio_value === 'friends_only' &&
-      currentUserFriendship?.status === 'accepted')
 
   // Sort sets: highest completion % first, then newest release date
   const displaySets = (isPrivate ? [] : profileSets)
@@ -747,19 +634,9 @@ export default function ProfilePage() {
                 <span className="text-xs text-muted uppercase tracking-wider">Sets Started</span>
                 <span className="text-2xl font-bold text-primary">{userSets.length}</span>
               </div>
-              <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
-                <span className="text-xs text-muted uppercase tracking-wider">Collection Value</span>
-                <span className="text-2xl font-bold text-primary">
-                  {!canSeePortfolioValue
-                    ? '—'
-                    : collectionValueUsd === null
-                      ? '…'
-                      : formatPrice(collectionValueUsd, profileUser.preferred_currency ?? 'USD')
-                  }
-                </span>
-                {!canSeePortfolioValue && (
-                  <span className="text-[10px] text-muted">Private</span>
-                )}
+              <div className="rounded-lg bg-white/5 border border-white/10 p-4 text-center">
+                <p className="text-sm font-semibold text-white">Portfolio Value</p>
+                <p className="text-xs text-gray-400 mt-1">Coming soon with the new pricing system</p>
               </div>
               <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
                 <span className="text-xs text-muted uppercase tracking-wider">Friends</span>

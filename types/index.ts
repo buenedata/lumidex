@@ -1,7 +1,4 @@
 // Database types
-export type PriceSource = 'tcgplayer' | 'cardmarket'
-export type PortfolioVisibility = 'public' | 'friends_only' | 'private'
-
 /**
  * How the user intends to complete a set.
  *  normal          – one of each card
@@ -33,10 +30,8 @@ export interface User {
   setup_completed?: boolean;
   preferred_language?: string;
   preferred_currency?: string;
-  price_source?: PriceSource;
   grey_out_unowned?: boolean;
   profile_private?: boolean;
-  show_portfolio_value?: PortfolioVisibility;
   lists_public_by_default?: boolean;
   /** Social / marketplace profile links (optional) */
   social_cardmarket?: string | null;
@@ -345,4 +340,27 @@ export interface UserGradedCard {
   quantity: number
   created_at: string
   updated_at: string
+}
+
+// ── Sealed Products ────────────────────────────────────────────────────────────
+
+/** A sealed product row from the set_products table. */
+export interface SealedProduct {
+  id:           string
+  set_id:       string
+  name:         string
+  product_type: string | null
+  image_url:    string | null
+}
+
+/** Groups sealed products by series → set. Used by /products and browse pages. */
+export interface SeriesProductGroup {
+  /** Series name, e.g. "Scarlet & Violet" */
+  series: string
+  sets: Array<{
+    setId:    string
+    setName:  string
+    logoUrl:  string | null
+    products: SealedProduct[]
+  }>
 }

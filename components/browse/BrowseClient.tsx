@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState, useEffect } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCollectionStore, useAuthStore } from '@/lib/store'
 import BrowseHero      from './BrowseHero'
@@ -8,7 +8,7 @@ import ArtistResults   from './ArtistResults'
 import ProductResults  from './ProductResults'
 import BrowseDiscovery from './BrowseDiscovery'
 import SetPageCards    from '@/components/SetPageCards'
-import type { PokemonCard, PriceSource, QuickAddVariant } from '@/types'
+import type { PokemonCard, QuickAddVariant } from '@/types'
 import type {
   SearchMode, CardSearchResult, ArtistResult,
   BrowseProduct, DiscoveryData,
@@ -42,14 +42,12 @@ interface BrowseClientProps {
   initialProducts: BrowseProduct[]
   allProducts:     BrowseProduct[]
   discoveryData:        DiscoveryData | null
-  // cardPricesUSD is no longer fetched server-side — loaded lazily on the client
   /**
    * Variant structure pre-fetched server-side (set page only).
    * On the browse page this is omitted and the client-side batch fetch handles it.
    */
   initialCardVariants?: Record<string, QuickAddVariant[]>
   currency:             string
-  priceSource:          PriceSource
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -64,7 +62,6 @@ export default function BrowseClient({
   discoveryData,
   initialCardVariants,
   currency,
-  priceSource,
 }: BrowseClientProps) {
   const router       = useRouter()
   const searchParams = useSearchParams()
@@ -81,22 +78,6 @@ export default function BrowseClient({
     // Only re-run when the user identity changes; fetchUserCards is stable.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id])
-
-  // ── Bug #2a: load card prices client-side after initial render ─────────────
-  // Removing this from SSR halves server render time for card searches.
-  // Prices load asynchronously after the card grid is already visible.
-  const [cardPricesUSD, setCardPricesUSD] = useState<Record<string, number>>({})
-  useEffect(() => {
-    if (initialCards.length === 0) {
-      setCardPricesUSD({})
-      return
-    }
-    const ids = initialCards.map(c => c.id).join(',')
-    fetch(`/api/prices/batch?ids=${encodeURIComponent(ids)}&source=${priceSource}`)
-      .then(r => r.json())
-      .then(data => setCardPricesUSD(data.prices ?? {}))
-      .catch(() => setCardPricesUSD({}))
-  }, [initialCards, priceSource])
 
   const mode: SearchMode = (searchParams.get('mode') as SearchMode) ?? initialMode
 
@@ -128,10 +109,8 @@ export default function BrowseClient({
     showSearch:          false as const,
     setId:               '',
     hasPromos,
-    cardPricesUSD,
     initialCardVariants: initialCardVariants ?? {},
     currency,
-    priceSource,
     disableGreyOut:      true as const,
   }
 

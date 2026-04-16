@@ -63,10 +63,8 @@ export default function FirstTimeSetupModal({
           location: values.location || null,
           preferred_language: values.preferred_language,
           preferred_currency: values.preferred_currency,
-          price_source: values.price_source,
           grey_out_unowned: values.grey_out_unowned,
           profile_private: values.profile_private,
-          show_portfolio_value: values.show_portfolio_value,
           lists_public_by_default: values.lists_public_by_default,
           setup_completed: true,
         }

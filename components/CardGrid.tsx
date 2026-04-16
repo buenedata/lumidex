@@ -1,58 +1,21 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import dynamic from 'next/dynamic'
 import { CardTile } from '@/components/CardTile'
 import Link from 'next/link'
-import { PokemonCard, UserCard, Variant, VariantWithQuantity, QuickAddVariant, VARIANT_COLOR_CLASSES, CollectionGoal, PriceHistoryPoint, FriendCardOwner, PriceSource, UserGradedCard } from '@/types'
+import { PokemonCard, UserCard, Variant, VariantWithQuantity, QuickAddVariant, VARIANT_COLOR_CLASSES, CollectionGoal, PriceHistoryPoint, FriendCardOwner, UserGradedCard } from '@/types'
 import { useCollectionStore, useAuthStore } from '@/lib/store'
 import { useProGate } from '@/hooks/useProGate'
 import Modal from '@/components/ui/Modal'
 import VariantSuggestionModal from '@/components/VariantSuggestionModal'
 import AddGradedCardModal from '@/components/AddGradedCardModal'
 import { UpgradeModal } from '@/components/upgrade/UpgradeModal'
-import { formatPrice, EUR_TO_USD } from '@/lib/pricing'
-import type { PriceChartRange } from '@/components/PriceChart'
 import { updateVariant, deleteVariant, removeVariantFromCard } from '@/app/admin/variants/actions'
 import AddToListDropdown from '@/components/lists/AddToListDropdown'
 
-// Recharts has SSR issues — load only on client
-const PriceChart = dynamic(() => import('@/components/PriceChart'), { ssr: false })
-
-// ── Price row shape returned by /api/prices/card/[cardId] ─────────────────────
-interface CardPriceRow {
-  tcgp_normal:       number | null
-  tcgp_reverse_holo: number | null
-  tcgp_holo:         number | null
-  tcgp_1st_edition:  number | null
-  tcgp_market:       number | null
-  tcgp_psa10:        number | null
-  tcgp_psa9:         number | null
-  tcgp_bgs95:        number | null
-  tcgp_bgs9:         number | null
-  tcgp_cgc10:        number | null
-  cm_avg_sell:       number | null
-  cm_low:            number | null
-  cm_trend:          number | null
-  cm_avg_30d:        number | null
-  /** CardMarket avg sell price for the reverse holo variant (EUR) */
-  cm_reverse_holo:   number | null
-  /** CardMarket avg sell price for the Cosmos Holo variant (EUR) — manually set */
-  cm_cosmos_holo:    number | null
-  /** Direct URL to this card's CardMarket product page */
-  cm_url:            string | null
-  fetched_at:        string
-  /**
-   * Per-variant CardMarket URL overrides from card_cm_url_overrides table.
-   * Keys are variant_key values (e.g. 'normal', 'cosmos_holo').
-   * Reverse holo URL is auto-derived at render time: normal_url + ?isReverseHolo=Y
-   */
-  variant_cm_urls:   Record<string, string> | null
-}
-
 type ModalTab = 'card' | 'price' | 'friends'
 
-type SortBy    = 'number' | 'name' | 'price' | 'date'
+type SortBy    = 'number' | 'name' | 'date'
 type FilterTab = 'all' | 'owned' | 'missing' | 'duplicates'
 
 interface RelatedCard {
@@ -85,12 +48,8 @@ interface CardGridProps {
    *  grandmasterset  – same as masterset (promo cards included via full card list)
    */
   collectionGoal?: CollectionGoal
-  /** Mock price map (cardId → USD). Supplied by SetPageCards. */
-  cardPricesUSD?: Record<string, number>
   /** User's preferred currency code, e.g. 'USD', 'NOK'. */
   currency?: string
-  /** User's preferred price source — drives which source label is shown. */
-  priceSource?: PriceSource
   /** Called once the batch variant fetch completes with the deduplicated legend variants. */
   onVariantsLegendChange?: (variants: QuickAddVariant[]) => void
   /**
@@ -313,7 +272,7 @@ function getTypeGlowClass(type: string | null | undefined): string {
   return known.includes(key) ? `card-type-${key}` : ''
 }
 
-export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', sortDirection = 'asc', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', cardPricesUSD, currency = 'USD', priceSource = 'tcgplayer', onVariantsLegendChange, onHasExtraVariants, allCards, onCountsChange, disableGreyOut = false, onWantedStatusChange, onVariantsBatchLoading, initialCardVariants }: CardGridProps) {
+export default function CardGrid({ cards, userCards: propsUserCards, filter = 'all', sortBy = 'number', sortDirection = 'asc', userId: propsUserId, setTotal, setName, setComplete, initialCardId, collectionGoal = 'normal', currency = 'USD', onVariantsLegendChange, onHasExtraVariants, allCards, onCountsChange, disableGreyOut = false, onWantedStatusChange, onVariantsBatchLoading, initialCardVariants }: CardGridProps) {
   const { updateCardQuantity, userCards: storeUserCards, fetchUserCards } = useCollectionStore()
   const { user, isLoading, profile } = useAuthStore()
   const { isPro } = useProGate()
@@ -397,14 +356,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const [relatedCards, setRelatedCards] = useState<RelatedCard[]>([])
   const [relatedCardsTotal, setRelatedCardsTotal] = useState(0)
   const [isFetchingRelated, setIsFetchingRelated] = useState(false)
-  // Modal tab state (Card / Price / Trade / Friends)
-  const [modalTab, setModalTab]             = useState<ModalTab>('card')
-  const [cardPriceCache, setCardPriceCache] = useState<Map<string, CardPriceRow | null>>(new Map())
-  const [isLoadingPrice, setIsLoadingPrice] = useState(false)
-  // Price history chart state — default to 7d (free tier); Pro users can select longer ranges
-  const [priceChartRange, setPriceChartRange]           = useState<PriceChartRange>('7d')
-  const [priceHistoryCache, setPriceHistoryCache]       = useState<Map<string, PriceHistoryPoint[]>>(new Map())
-  const [isLoadingHistory, setIsLoadingHistory]         = useState(false)
+  // Modal tab state (Card / Price / Friends)
+  const [modalTab, setModalTab] = useState<ModalTab>('card')
   // User's own graded copies for the currently open card
   const [userGradedCards, setUserGradedCards]           = useState<UserGradedCard[]>([])
   const [isLoadingOwnGraded, setIsLoadingOwnGraded]     = useState(false)
@@ -733,12 +686,6 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       if (sortBy === 'name') {
         return dir * (a.name ?? '').localeCompare(b.name ?? '')
       }
-      if (sortBy === 'price') {
-        const priceA = cardPricesUSD?.[a.id] ?? 0
-        const priceB = cardPricesUSD?.[b.id] ?? 0
-        // base order: highest price first (desc = 1, asc = -1)
-        return dir * (priceB - priceA)
-      }
       if (sortBy === 'date') {
         const dateA = (a as any).set_release_date ?? ''
         const dateB = (b as any).set_release_date ?? ''
@@ -753,7 +700,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       const diff = getNum(a.number) - getNum(b.number)
       return dir * (diff !== 0 ? diff : (a.number ?? '').localeCompare(b.number ?? ''))
     })
-  }, [cards, userCards, filter, sortBy, sortDirection, collectionGoal, cardVariantDots, cardPricesUSD])
+  }, [cards, userCards, filter, sortBy, sortDirection, collectionGoal, cardVariantDots])
 
   // ── Goal-aware Have / Need counts ────────────────────────────────────────────
   // Uses allCards (the full unsearch-filtered set) when provided, so the numbers
@@ -1186,59 +1133,6 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     }
   }, [updateVariantQuantity])
 
-  // Fetch full price row for a card (cached — one fetch per card per session)
-  const fetchCardPrice = useCallback(async (cardId: string) => {
-    if (cardPriceCache.has(cardId)) return // already fetched
-    setIsLoadingPrice(true)
-    try {
-      const res = await fetch(`/api/prices/card/${cardId}`)
-      if (res.ok) {
-        const json = await res.json()
-        // Merge variant_cm_urls into the price row so the cache contains
-        // everything needed to render per-variant prices and links.
-        const priceRow: CardPriceRow | null = json.price
-          ? { ...json.price, variant_cm_urls: json.variant_cm_urls ?? null }
-          : null
-        setCardPriceCache(prev => new Map(prev).set(cardId, priceRow))
-      }
-    } catch {
-      setCardPriceCache(prev => new Map(prev).set(cardId, null))
-    } finally {
-      setIsLoadingPrice(false)
-    }
-  }, [cardPriceCache])
-
-  // Fetch price history for a card (cached per session, re-fetched on range change).
-  // No source filter is passed to the API — we let it return all available sources
-  // so that sets tracked only by CardMarket (e.g. EU promo sets) still show data
-  // for users whose priceSource preference is 'tcgplayer'.
-  //
-  // Empty arrays are NOT cached: if the API returns no data (e.g. backfill hasn't
-  // run yet, or the previous request raced before a sync completed) the next open
-  // or range-click will automatically retry instead of showing a permanent empty
-  // state until the user hard-refreshes.
-  const fetchCardPriceHistory = useCallback(async (cardId: string, range: PriceChartRange) => {
-    const cacheKey = `${cardId}:${range}`
-    if (priceHistoryCache.has(cacheKey)) return
-    setIsLoadingHistory(true)
-    try {
-      const res = await fetch(`/api/prices/history/${cardId}?range=${range}`)
-      if (res.ok) {
-        const json = await res.json()
-        const history: PriceHistoryPoint[] = json.history ?? []
-        // Only cache when there is real data — empty results are not stored so
-        // that a subsequent open/range-switch retries the API automatically.
-        if (history.length > 0) {
-          setPriceHistoryCache(prev => new Map(prev).set(cacheKey, history))
-        }
-      }
-    } catch {
-      // Network errors are also not cached so the user can retry.
-    } finally {
-      setIsLoadingHistory(false)
-    }
-  }, [priceHistoryCache])
-
   // Fetch the authenticated user's own graded copies for a given card — called on modal open
   // and after a successful graded-card add.
   const fetchUserGradedCards = useCallback(async (cardId: string) => {
@@ -1353,7 +1247,6 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     setSelectedCard(card)
     setModalTab('card')      // always open on Card tab
     fetchRelatedCards(card)
-    fetchCardPrice(card.id)  // eagerly load so Market Price column is populated on Card tab
     // Variants are pre-populated from the batch (instant modal display).
     // On first open, kick off a background GET to add missing variant_image_url data
     // (used by the hover image-swap feature), without any delay.
@@ -1365,7 +1258,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       fetchWantedCards()
       fetchListCardIds()
     }
-  }, [fetchRelatedCards, fetchCardPrice, loadCardVariants, fetchWantedCards, fetchListCardIds, user])
+  }, [fetchRelatedCards, loadCardVariants, fetchWantedCards, fetchListCardIds, user])
 
   // Navigate to the previous / next card while the modal is open
   const navigateCard = (dir: 1 | -1) => {
@@ -1540,7 +1433,6 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
               isPartiallyOwned={isPartiallyOwned}
               customVariantCount={customVariantCount}
               greyOutUnowned={greyOutUnowned}
-              cardPricesUSD={cardPricesUSD}
               effectiveCurrency={effectiveCurrency}
               onCardBadgeClick={handleCardClick}
               onCardImageClick={handleCardImageClick}
@@ -1679,11 +1571,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                   </button>
                   <button
                     className={modalTab === 'price' ? 'tab-active pb-2 text-sm font-medium' : 'tab-inactive pb-2 text-sm'}
-                    onClick={() => {
-                      setModalTab('price')
-                      fetchCardPrice(selectedCard.id)
-                      fetchCardPriceHistory(selectedCard.id, priceChartRange)
-                    }}
+                    onClick={() => setModalTab('price')}
                   >
                     Price
                   </button>
@@ -1701,174 +1589,9 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
               {/* ── Price Tab ─── */}
               {modalTab === 'price' && (
-                <div className="flex-1 overflow-y-auto space-y-5">
-
-                  {/* Price history line chart */}
-                  <PriceChart
-                    history={priceHistoryCache.get(`${selectedCard.id}:${priceChartRange}`) ?? []}
-                    currency={effectiveCurrency}
-                    isLoading={isLoadingHistory && !priceHistoryCache.has(`${selectedCard.id}:${priceChartRange}`)}
-                    range={priceChartRange}
-                    isPro={isPro}
-                    priceSource={priceSource}
-                    onRangeChange={(r) => {
-                      setPriceChartRange(r)
-                      fetchCardPriceHistory(selectedCard.id, r)
-                    }}
-                  />
-
-                  {/* Current prices snapshot */}
-                  {isLoadingPrice && !cardPriceCache.has(selectedCard.id) ? (
-                    <div className="text-muted text-center py-4 animate-pulse text-sm">Loading prices…</div>
-                  ) : (() => {
-                    const row = cardPriceCache.get(selectedCard.id)
-                    if (!row) {
-                      return (
-                        <div className="rounded-lg bg-elevated border border-subtle px-4 py-5 text-center">
-                          <p className="text-muted text-sm">No price data synced for this card yet.</p>
-                          <p className="text-muted/60 text-xs mt-0.5">An admin can sync prices from /admin/prices.</p>
-                        </div>
-                      )
-                    }
-
-                    const variantRows = [
-                      { label: 'Normal',       price: row.tcgp_normal,       dot: '#10b981' },
-                      { label: 'Reverse Holo', price: row.tcgp_reverse_holo, dot: '#3b82f6' },
-                      { label: 'Holofoil',     price: row.tcgp_holo,         dot: '#8b5cf6' },
-                      { label: '1st Edition',  price: row.tcgp_1st_edition,  dot: '#f59e0b' },
-                    ].filter(r => r.price != null)
-
-                    const gradeRows: { label: string; price: number }[] = [
-                      { label: 'PSA 10',  price: row.tcgp_psa10  ?? 0 },
-                      { label: 'BGS 9.5', price: row.tcgp_bgs95  ?? 0 },
-                      { label: 'CGC 10',  price: row.tcgp_cgc10  ?? 0 },
-                      { label: 'PSA 9',   price: row.tcgp_psa9   ?? 0 },
-                      { label: 'BGS 9',   price: row.tcgp_bgs9   ?? 0 },
-                    ].filter(g => g.price > 0)
-                    const maxGraded = gradeRows.length > 0 ? Math.max(...gradeRows.map(g => g.price)) : 0
-
-                    return (
-                      <div className="space-y-5">
-
-                        {/* TCGPlayer variant prices */}
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-xs font-semibold text-muted uppercase tracking-wider">Current Prices · TCGPlayer</h3>
-                            <a
-                              href={`https://www.tcgplayer.com/search/pokemon/product?productLineName=pokemon&q=${encodeURIComponent(selectedCard.name ?? '')}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-secondary hover:text-primary transition-colors flex items-center gap-1"
-                            >
-                              View on TCGPlayer
-                              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14V3zm-1 2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8h-2v8H5V7h8V5z"/>
-                              </svg>
-                            </a>
-                          </div>
-                          {variantRows.length === 0 ? (
-                            <p className="text-muted text-xs">No variant prices available.</p>
-                          ) : (
-                            <div className="space-y-1.5">
-                              {variantRows.map(r => (
-                                <div key={r.label} className="flex items-center justify-between text-sm bg-elevated rounded-lg px-3 py-2 border border-subtle">
-                                  <div className="flex items-center gap-2">
-                                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: r.dot }} />
-                                    <span className="text-secondary">{r.label}</span>
-                                  </div>
-                                  <span className="font-semibold tabular-nums text-success">{formatPrice(r.price!, effectiveCurrency)}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* CardMarket prices */}
-                        {(row.cm_avg_sell != null || row.cm_trend != null || row.cm_reverse_holo != null) && (
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <h3 className="text-xs font-semibold text-muted uppercase tracking-wider">CardMarket</h3>
-                              {row.cm_url && (
-                                <a
-                                  href={row.cm_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-secondary hover:text-primary transition-colors flex items-center gap-1"
-                                >
-                                  View on CardMarket
-                                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14V3zm-1 2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8h-2v8H5V7h8V5z"/>
-                                  </svg>
-                                </a>
-                              )}
-                            </div>
-                            <div className="space-y-1.5">
-                              {[
-                                { label: 'Normal · Avg Sell',  dot: '#10b981', val: row.cm_avg_sell      != null ? formatPrice(row.cm_avg_sell      * EUR_TO_USD, effectiveCurrency) : null, url: row.cm_url ?? null },
-                                { label: 'Reverse · Avg Sell', dot: '#3b82f6', val: row.cm_reverse_holo  != null ? formatPrice(row.cm_reverse_holo  * EUR_TO_USD, effectiveCurrency) : null, url: row.cm_url ? `${row.cm_url}?isReverseHolo=Y` : null },
-                                { label: 'Trend',              dot: '#a855f7', val: row.cm_trend         != null ? formatPrice(row.cm_trend         * EUR_TO_USD, effectiveCurrency) : null, url: null },
-                                { label: '30-day Avg',         dot: '#f59e0b', val: row.cm_avg_30d       != null ? formatPrice(row.cm_avg_30d       * EUR_TO_USD, effectiveCurrency) : null, url: null },
-                              ].filter(r => r.val != null).map(r => (
-                                <div key={r.label} className="flex items-center justify-between text-sm bg-elevated rounded-lg px-3 py-2 border border-subtle">
-                                  <div className="flex items-center gap-2">
-                                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: r.dot }} />
-                                    <span className="text-secondary">{r.label}</span>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-semibold tabular-nums text-success">{r.val}</span>
-                                    {r.url && (
-                                      <a
-                                        href={r.url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        title="View on CardMarket"
-                                        className="text-muted hover:text-primary transition-colors"
-                                        onClick={e => e.stopPropagation()}
-                                      >
-                                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-                                          <path d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14V3zm-1 2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8h-2v8H5V7h8V5z"/>
-                                        </svg>
-                                      </a>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Graded prices — bar chart style */}
-                        {maxGraded > 0 && (
-                          <div>
-                            <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-2">🏅 Graded Value</h3>
-                            <div className="space-y-2">
-                              {gradeRows.map(g => {
-                                const pct = Math.round((g.price / maxGraded) * 100)
-                                return (
-                                  <div key={g.label} className="flex items-center gap-3">
-                                    <span className="text-xs text-secondary w-14 shrink-0">{g.label}</span>
-                                    <div className="flex-1 h-1.5 bg-elevated rounded-full overflow-hidden">
-                                      <div
-                                        className="h-full rounded-full transition-all"
-                                        style={{ width: `${pct}%`, backgroundColor: '#7c3aed' }}
-                                      />
-                                    </div>
-                                    <span className="text-xs font-semibold text-success tabular-nums w-16 text-right shrink-0">
-                                      {formatPrice(g.price, effectiveCurrency)}
-                                    </span>
-                                  </div>
-                                )
-                              })}
-                            </div>
-                          </div>
-                        )}
-
-                        <p className="text-muted/50 text-xs border-t border-subtle pt-3">
-                          Prices synced {new Date(row.fetched_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    )
-                  })()}
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <p className="text-lg font-semibold text-white">Prices Coming Soon</p>
+                  <p className="text-sm text-gray-400 mt-2">We&apos;re rebuilding the pricing system with live TCGGO data.</p>
                 </div>
               )}
 
@@ -1877,7 +1600,6 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                 <div className="mb-4">
                   <div className="flex items-center text-xs font-medium text-muted mb-3 px-1 gap-2">
                     <div className="flex-1 min-w-0">Variant</div>
-                    <div className="w-20 text-center shrink-0">Market Price</div>
                     <div className="w-28 text-center shrink-0">Quantity</div>
                   </div>
 
@@ -1960,119 +1682,6 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                             <div className="text-muted text-xs">
                               {variant.description || 'Found in Booster Packs'}
                             </div>
-                          </div>
-
-                          {/* Market Price — variant-specific (Normal / Reverse Holo / Holo) */}
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <div className="w-20 text-center">
-                              <div className="text-price font-medium text-sm">
-                                {(() => {
-                                  // Always use the per-variant price from the full price row so that
-                                  // Normal and Reverse Holo show different values.
-                                  // cardPricesUSD is the set-grid "best price" (tcgp_market or CM
-                                  // equivalent) — it is the same for every variant and must NOT be
-                                  // used here.
-                                  const priceRow = cardPriceCache.get(selectedCard.id)
-                                  if (!priceRow) return isLoadingPrice ? '…' : '—'
-
-                                  const vName        = variant.name.toLowerCase()
-                                  const vKey         = variant.key ?? ''
-                                  const isReverse    = vName.includes('reverse')
-                                  const isCosmosHolo = vKey === 'cosmos_holo' ||
-                                    (vName.includes('cosmos') && vName.includes('holo'))
-                                  const isHolo       = vName.includes('holo') && !isReverse
-                                  const is1stEdition = vName.includes('1st') || vName.includes('first edition')
-
-                                  let price: number | null = null
-                                  if (priceSource === 'cardmarket') {
-                                    // CardMarket prices per variant:
-                                    //   Cosmos Holo           → cm_cosmos_holo (manually set, EUR)
-                                    //   Reverse Holo          → cm_reverse_holo (EUR, from pokemontcg.io reverseHoloSell)
-                                    //   Reverse Holo (Cosmos) → no separate CM price available; show —
-                                    //   Normal / other        → cm_avg_sell ?? cm_trend (EUR)
-                                    let eur: number | null = null
-                                    if (isCosmosHolo && isReverse) {
-                                      eur = null // Reverse Cosmos Holo has no dedicated CM price
-                                    } else if (isCosmosHolo) {
-                                      eur = priceRow.cm_cosmos_holo ?? null
-                                    } else if (isReverse) {
-                                      eur = priceRow.cm_reverse_holo ?? null
-                                    } else {
-                                      eur = priceRow.cm_avg_sell ?? priceRow.cm_trend ?? null
-                                    }
-                                    price = eur != null ? Math.round(eur * EUR_TO_USD * 100) / 100 : null
-                                  } else {
-                                    // TCGPlayer per-variant columns — only show a price when we have a
-                                    // dedicated column for the variant type. Do NOT fall back to
-                                    // tcgp_market for unrecognised variants (e.g. Play! Pokémon Prize
-                                    // Pack) — showing the wrong price is more misleading than showing —.
-                                    price = isReverse    ? (priceRow.tcgp_reverse_holo ?? null)
-                                          : isHolo       ? (priceRow.tcgp_holo         ?? null)
-                                          : is1stEdition ? (priceRow.tcgp_1st_edition  ?? null)
-                                          :                (priceRow.tcgp_normal        ?? null)
-                                  }
-                                  return price != null ? formatPrice(price, effectiveCurrency) : '—'
-                                })()}
-                              </div>
-                            </div>
-
-                            {/* CardMarket external link — per-variant URL resolution:
-                                1. Check variant_cm_urls override for this variant key
-                                2. For reverse holo: base_url + ?isReverseHolo=Y
-                                3. Fall back to cm_url (API-provided, may be wrong version) */}
-                            {(() => {
-                              const priceRow = cardPriceCache.get(selectedCard.id)
-                              if (!priceRow) return null
-
-                              const vName     = variant.name.toLowerCase()
-                              const vKey      = variant.key ?? ''
-                              const isRev     = vName.includes('reverse')
-                              const isCosmos  = vKey === 'cosmos_holo' ||
-                                (vName.includes('cosmos') && vName.includes('holo'))
-                              const overrides = priceRow.variant_cm_urls ?? {}
-
-                              // Determine the correct base URL for this variant
-                              let resolvedUrl: string | null = null
-                              if (isCosmos) {
-                                const cosmosBase = overrides['cosmos_holo'] ?? null
-                                if (!cosmosBase) {
-                                  // No cosmos override set yet — don't show a link rather
-                                  // than linking to the wrong version
-                                  resolvedUrl = null
-                                } else {
-                                  resolvedUrl = isRev ? `${cosmosBase}?isReverseHolo=Y` : cosmosBase
-                                }
-                              } else if (isRev) {
-                                // Reverse holo: check a 'reverse_holo'-keyed override first,
-                                // then derive from the normal URL + ?isReverseHolo=Y
-                                const reverseSpecific = overrides['reverse_holo'] ?? null
-                                const normalBase      = overrides['normal'] ?? priceRow.cm_url ?? null
-                                resolvedUrl = reverseSpecific ?? (normalBase ? `${normalBase}?isReverseHolo=Y` : null)
-                              } else {
-                                // Normal / holo / other:
-                                //   1. variant-specific override (e.g. 'holo', 'jumbo')
-                                //   2. 'normal' override (generic fallback)
-                                //   3. API-provided cm_url
-                                resolvedUrl = (vKey ? overrides[vKey] : null) ?? overrides['normal'] ?? priceRow.cm_url ?? null
-                              }
-
-                              if (!resolvedUrl) return null
-
-                              return (
-                                <a
-                                  href={resolvedUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title="View on CardMarket"
-                                  className="shrink-0 text-muted hover:text-primary transition-colors"
-                                  onClick={e => e.stopPropagation()}
-                                >
-                                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                                    <path d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14V3zm-1 2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8h-2v8H5V7h8V5z"/>
-                                  </svg>
-                                </a>
-                              )
-                            })()}
                           </div>
 
                           {/* Quantity Controls */}

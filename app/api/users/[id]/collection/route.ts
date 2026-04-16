@@ -4,9 +4,8 @@ import { supabaseAdmin } from '@/lib/supabase'
 /**
  * GET /api/users/[id]/collection?q=&limit=
  *
- * Returns a user's owned cards with full card details and price data.
+ * Returns a user's owned cards with full card details.
  * Source of truth is `user_card_variants` (quantities aggregated per card).
- * Prices come from `card_prices` (cm_trend EUR / tcgp_market USD).
  *
  * Used by the Trade Hub FriendCardPickerModal so the current user can
  * browse a trading partner's collection.
@@ -51,7 +50,7 @@ export async function GET(
 
   const cardIds = Array.from(ownedMap.keys())
 
-  // 2. Fetch card details + prices in parallel
+  // 2. Fetch card details
   let cardQuery = supabaseAdmin
     .from('cards')
     .select(`id, set_id, name, number, rarity, type, image, sets!set_id(name, logo_url)`)
@@ -62,30 +61,15 @@ export async function GET(
     cardQuery = cardQuery.or(`name.ilike.%${q}%,number.ilike.%${q}%`)
   }
 
-  const [{ data: cardRows, error: cardsError }, { data: priceRows }] = await Promise.all([
-    cardQuery,
-    supabaseAdmin
-      .from('card_prices')
-      .select('card_id, cm_trend, cm_avg_sell, tcgp_market')
-      .in('card_id', cardIds),
-  ])
+  const { data: cardRows, error: cardsError } = await cardQuery
 
   if (cardsError) {
     console.error('[users/collection] cards error:', cardsError)
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
 
-  const priceMap = new Map<string, { eur: number | null; usd: number | null }>()
-  for (const p of priceRows ?? []) {
-    priceMap.set(p.card_id, {
-      eur: p.cm_trend ?? p.cm_avg_sell ?? null,
-      usd: p.tcgp_market ?? null,
-    })
-  }
-
   const cards = (cardRows ?? []).map(c => {
     const setInfo = (Array.isArray(c.sets) ? c.sets[0] : c.sets) as Record<string, unknown> | null
-    const price   = priceMap.get(c.id as string)
     return {
       id:           c.id,
       set_id:       c.set_id,
@@ -97,8 +81,6 @@ export async function GET(
       set_name:     setInfo?.name     ?? null,
       set_logo_url: setInfo?.logo_url ?? null,
       quantity:     ownedMap.get(c.id as string) ?? 1,
-      price_eur:    price?.eur ?? null,
-      price_usd:    price?.usd ?? null,
     }
   })
 

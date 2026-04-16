@@ -12,7 +12,7 @@ import {
 } from 'recharts'
 import { useMemo, useState } from 'react'
 import type { PriceHistoryPoint } from '@/types'
-import { formatPrice } from '@/lib/pricing'
+import { formatPrice } from '@/lib/currency'
 
 // ── Variant display config ────────────────────────────────────────────────────
 // Colors mirror the Lumidex variant system defined in types/index.ts

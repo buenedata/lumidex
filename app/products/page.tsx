@@ -1,9 +1,7 @@
 import Link from 'next/link'
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import { supabaseAdmin } from '@/lib/supabase'
-import { getSealedProductsForAllSeries } from '@/lib/pricing'
-import type { SeriesProductGroup } from '@/lib/pricing'
-import type { PriceSource } from '@/types'
+import type { SeriesProductGroup } from '@/types'
 import ProductsPageClient from '@/components/ProductsPageClient'
 
 // Opt out of static pre-rendering: reads auth cookies at request time.
@@ -23,16 +21,10 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   let ownedQuantities: Record<string, number> = {}
   let userId: string | null = null
   let currency = 'USD'
-  let priceSource: PriceSource = 'tcgplayer'
   let error: string | null = null
 
-  try {
-    // Fetch all products (no auth required)
-    allSeries = await getSealedProductsForAllSeries()
-  } catch (err) {
-    console.error('[products page] Failed to fetch sealed products:', err)
-    error = 'Failed to load products. Please try again later.'
-  }
+  // Products will be empty until the new pricing system is implemented
+  allSeries = []
 
   // Fetch auth user + preferences + owned quantities
   try {
@@ -45,7 +37,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
       const [profileResult, ownedResult] = await Promise.all([
           supabaseAdmin
             .from('users')
-            .select('preferred_currency, price_source')
+            .select('preferred_currency')
             .eq('id', user.id)
             .maybeSingle(),
           supabaseAdmin
@@ -56,9 +48,6 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   
         if (profileResult.data?.preferred_currency) {
           currency = profileResult.data.preferred_currency
-        }
-        if (profileResult.data?.price_source) {
-          priceSource = profileResult.data.price_source as PriceSource
         }
 
       // Build productId → quantity map
@@ -174,7 +163,6 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
           ownedQuantities={ownedQuantities}
           userId={userId}
           currency={currency}
-          priceSource={priceSource}
         />
       </div>
     </div>

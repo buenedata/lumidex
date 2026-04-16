@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { useAuthStore, useCollectionStore } from '@/lib/store'
 import { useRouter } from 'next/navigation'
-import { SetProgress, UserCard } from '@/types'
+import { SetProgress } from '@/types'
 
 // ── Above-the-fold components (loaded eagerly) ───────────────────────────────
 import DashboardHero  from '@/components/dashboard/DashboardHero'
@@ -17,14 +17,8 @@ const WantedBoard         = dynamic(() => import('@/components/dashboard/WantedB
 const NewsStories         = dynamic(() => import('@/components/dashboard/NewsStories'))
 const ComingSoonFeatures  = dynamic(() => import('@/components/dashboard/ComingSoonFeatures'))
 
-// ── Spotlight extra stats ────────────────────────────────────────────────────
-interface SpotlightStats {
-  mostOwnedCard: { name: string; image: string } | null
-  mostExpensiveCard: { name: string; image: string; price: number } | null
-}
-
 export default function DashboardPage() {
-  const { user, isLoading, profile } = useAuthStore()
+  const { user, isLoading } = useAuthStore()
   const {
     userSets,
     userCards,
@@ -34,12 +28,6 @@ export default function DashboardPage() {
   } = useCollectionStore()
 
   const router = useRouter()
-
-  const [spotlightStats, setSpotlightStats] = useState<SpotlightStats>({
-    mostOwnedCard: null,
-    mostExpensiveCard: null,
-  })
-  const [spotlightLoading, setSpotlightLoading] = useState(false)
 
   useEffect(() => {
     if (!isLoading && !user) {
@@ -77,38 +65,12 @@ export default function DashboardPage() {
     return sum + Math.max(0, total - owned)
   }, 0)
 
-  // Most-owned card — highest total quantity across all variants
-  const mostOwnedEntry = Array.from(userCards.entries()).reduce<[string, UserCard] | null>(
-    (best, entry) => (!best || entry[1].quantity > best[1].quantity ? entry : best),
-    null
-  )
-  const mostOwnedCardId = mostOwnedEntry?.[0] ?? null
-  const mostOwnedQty    = mostOwnedEntry?.[1].quantity ?? 0
-
   const calculateSetProgress = (setId: string): SetProgress => {
     const setTotal   = pokemonSets.get(setId)?.total ?? 0
     const ownedCards = userCardCountBySet.get(setId) ?? 0
     const percentage = setTotal > 0 ? Math.round((ownedCards / setTotal) * 100) : 0
     return { owned_cards: ownedCards, total_cards: setTotal, percentage }
   }
-
-  // ── Fetch spotlight extra stats once we know the most-owned card ──────────
-  useEffect(() => {
-    if (!mostOwnedCardId) return
-
-    let cancelled = false
-    setSpotlightLoading(true)
-
-    fetch(`/api/dashboard/spotlight-stats?mostOwnedCardId=${mostOwnedCardId}`)
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (!cancelled && data) setSpotlightStats(data)
-      })
-      .catch(() => { /* silent — widget degrades gracefully */ })
-      .finally(() => { if (!cancelled) setSpotlightLoading(false) })
-
-    return () => { cancelled = true }
-  }, [mostOwnedCardId])
 
   // ── Loading skeleton ─────────────────────────────────────────────────────
   if (isLoading) {
@@ -177,11 +139,6 @@ export default function DashboardPage() {
             getProgress={calculateSetProgress}
             completedSets={completedSets}
             totalCardsToComplete={totalCardsToComplete}
-            mostOwnedCard={spotlightStats.mostOwnedCard}
-            mostOwnedQty={mostOwnedQty}
-            mostExpensiveCard={spotlightStats.mostExpensiveCard}
-            statsLoading={spotlightLoading}
-            currency={profile?.preferred_currency ?? 'USD'}
           />
         </div>
 

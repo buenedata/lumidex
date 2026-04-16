@@ -1,10 +1,8 @@
 import { Suspense } from 'react'
 import BrowseClient from '@/components/browse/BrowseClient'
-import { getSealedProductsForAllSeries } from '@/lib/pricing'
 import { supabaseAdmin } from '@/lib/supabase'
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
-import type { SeriesProductGroup } from '@/lib/pricing'
-import type { PriceSource } from '@/types'
+import type { SeriesProductGroup } from '@/types'
 import type {
   SearchMode,
   CardSearchResult,
@@ -164,7 +162,7 @@ function flattenProducts(groups: SeriesProductGroup[]): BrowseProduct[] {
           name:         product.name,
           product_type: product.product_type,
           image_url:    product.image_url,
-          tcgp_market:  product.tcgp_market,
+          tcgp_market:  null,
         })
       }
     }
@@ -216,8 +214,7 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
   const isArtistView = !!artistQuery
 
   // ── User preferences (non-fatal) ─────────────────────────────────────────
-  let currency:    string      = 'USD'
-  let priceSource: PriceSource = 'tcgplayer'
+  let currency: string = 'USD'
 
   try {
     const serverSupabase = await createSupabaseServerClient()
@@ -225,11 +222,10 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
     if (user) {
       const { data: profile } = await supabaseAdmin
         .from('users')
-        .select('preferred_currency, price_source')
+        .select('preferred_currency')
         .eq('id', user.id)
         .maybeSingle() as any
-      if (profile?.preferred_currency) currency    = profile.preferred_currency
-      if (profile?.price_source)       priceSource = profile.price_source as PriceSource
+      if (profile?.preferred_currency) currency = profile.preferred_currency
     }
   } catch { /* non-fatal — guest view still works */ }
 
@@ -256,16 +252,8 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
       ? fetchArtistResults(rawQuery).then(r => { initialArtists = r })
       : Promise.resolve(),
 
-    // Products (needed for Products mode view + typeahead)
-    mode === 'products' || !hasQuery
-      ? getSealedProductsForAllSeries()
-          .then(groups => {
-            const flat = flattenProducts(groups)
-            allProducts = flat
-            if (mode === 'products') initialProducts = flat
-          })
-          .catch(() => { /* non-fatal — show empty products */ })
-      : Promise.resolve(),
+    // Products: empty until new pricing system is implemented
+    Promise.resolve(),
 
     // Discovery data (landing state — fetched only when there is no query)
     !hasQuery
@@ -292,7 +280,6 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
           allProducts={allProducts}
           discoveryData={discoveryData}
           currency={currency}
-          priceSource={priceSource}
         />
       </Suspense>
     </div>
