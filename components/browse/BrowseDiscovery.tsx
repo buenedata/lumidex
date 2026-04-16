@@ -46,9 +46,9 @@ export default function BrowseDiscovery({ data, onSearch, onArtistSelect }: Brow
             <h2 className="text-xs font-semibold text-muted uppercase tracking-widest">
               Featured Artists
             </h2>
-            <Link href="/browse?mode=artists" className="text-xs text-accent hover:underline">
-                Browse artists →
-              </Link>
+            <Link href="/artists" className="text-xs text-accent hover:underline">
+              Browse all artists →
+            </Link>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -148,6 +148,12 @@ export default function BrowseDiscovery({ data, onSearch, onArtistSelect }: Brow
           className="px-5 py-2.5 rounded-xl bg-elevated border border-subtle text-sm text-secondary hover:text-primary hover:border-accent/30 transition-all"
         >
           📚 Browse Sets
+        </Link>
+        <Link
+          href="/artists"
+          className="px-5 py-2.5 rounded-xl bg-elevated border border-subtle text-sm text-secondary hover:text-primary hover:border-accent/30 transition-all"
+        >
+          🎨 Browse Artists
         </Link>
         <Link
           href="/products"
