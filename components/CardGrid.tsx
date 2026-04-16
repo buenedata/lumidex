@@ -1216,16 +1216,15 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   }, [cardPriceCache])
 
   // Fetch price history for a card (cached per session, re-fetched on range change).
-  // `source` is passed to the API so users get history from their preferred price
-  // source (tcgplayer or cardmarket).  When omitted the API returns all sources,
-  // which is the safe fallback for sets that are only tracked by one source.
-  const fetchCardPriceHistory = useCallback(async (cardId: string, range: PriceChartRange, source?: string) => {
-    const cacheKey = `${cardId}:${range}:${source ?? 'all'}`
+  // No source filter is passed to the API — we let it return all available sources
+  // so that sets tracked only by CardMarket (e.g. EU promo sets) still show data
+  // for users whose priceSource preference is 'tcgplayer'.
+  const fetchCardPriceHistory = useCallback(async (cardId: string, range: PriceChartRange) => {
+    const cacheKey = `${cardId}:${range}`
     if (priceHistoryCache.has(cacheKey)) return
     setIsLoadingHistory(true)
-    const sourceQs = source ? `&source=${encodeURIComponent(source)}` : ''
     try {
-      const res = await fetch(`/api/prices/history/${cardId}?range=${range}${sourceQs}`)
+      const res = await fetch(`/api/prices/history/${cardId}?range=${range}`)
       if (res.ok) {
         const json = await res.json()
         setPriceHistoryCache(prev => new Map(prev).set(cacheKey, json.history ?? []))
@@ -1698,7 +1697,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                       setModalTab('price')
                       fetchCardPrice(selectedCard.id)
                       fetchGradedPrices(selectedCard.id)
-                      fetchCardPriceHistory(selectedCard.id, priceChartRange, priceSource)
+                      fetchCardPriceHistory(selectedCard.id, priceChartRange)
                     }}
                   >
                     Price
@@ -1721,14 +1720,14 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
                   {/* Price history line chart */}
                   <PriceChart
-                    history={priceHistoryCache.get(`${selectedCard.id}:${priceChartRange}:${priceSource ?? 'all'}`) ?? []}
+                    history={priceHistoryCache.get(`${selectedCard.id}:${priceChartRange}`) ?? []}
                     currency={effectiveCurrency}
-                    isLoading={isLoadingHistory && !priceHistoryCache.has(`${selectedCard.id}:${priceChartRange}:${priceSource ?? 'all'}`)}
+                    isLoading={isLoadingHistory && !priceHistoryCache.has(`${selectedCard.id}:${priceChartRange}`)}
                     range={priceChartRange}
                     isPro={isPro}
                     onRangeChange={(r) => {
                       setPriceChartRange(r)
-                      fetchCardPriceHistory(selectedCard.id, r, priceSource)
+                      fetchCardPriceHistory(selectedCard.id, r)
                     }}
                   />
 
