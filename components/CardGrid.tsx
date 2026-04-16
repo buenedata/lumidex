@@ -107,8 +107,9 @@ interface CardGridProps {
    * badge numbers always match the full set (not just the visible search subset).
    */
   allCards?: PokemonCard[]
-  /** Called whenever the goal-aware Have/Need counts change after variant data loads. */
-  onCountsChange?: (have: number, need: number) => void
+  /** Called whenever the goal-aware Have/Need counts change after variant data loads.
+   *  For grandmasterset, also emits variantOwned/variantTotal (individual slot counts). */
+  onCountsChange?: (have: number, need: number, variantOwned?: number, variantTotal?: number) => void
   /**
    * When true, cards are never greyed out regardless of the user's grey_out_unowned setting.
    * Used on the browse/search page where collection status should not affect card appearance.
@@ -769,6 +770,9 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const goalAwareCounts = useMemo(() => {
     const source = allCards ?? cards
     let have = 0
+    // Variant-level slot counters for grandmasterset progress bar.
+    let variantOwned = 0
+    let variantTotal = 0
     for (const card of source) {
       const userCard = userCards.get(card.id)
       const dots     = cardVariantDots.get(card.id)
@@ -787,21 +791,31 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       } else if (collectionGoal === 'grandmasterset') {
         if (dots && dots.length > 0) {
           owned = dots.every(v => v.quantity > 0)
+          // Track individual variant slot ownership.
+          variantTotal += dots.length
+          variantOwned += dots.filter(v => v.quantity > 0).length
         } else {
           owned = anyOwned
+          variantTotal += 1
+          variantOwned += anyOwned ? 1 : 0
         }
       } else {
         owned = anyOwned
       }
       if (owned) have++
     }
-    return { have, need: source.length - have }
+    return { have, need: source.length - have, variantOwned, variantTotal }
   }, [allCards, cards, userCards, collectionGoal, cardVariantDots])
 
   // Emit goal-aware counts whenever they change — uses the ref so the effect
   // deps list is just the counts object, preventing callback identity re-renders.
   useEffect(() => {
-    onCountsChangeRef.current?.(goalAwareCounts.have, goalAwareCounts.need)
+    onCountsChangeRef.current?.(
+      goalAwareCounts.have,
+      goalAwareCounts.need,
+      goalAwareCounts.variantOwned,
+      goalAwareCounts.variantTotal,
+    )
   }, [goalAwareCounts])
 
   // Load variants for a specific card — stable (useCallback + isLoadingVariantsRef)
