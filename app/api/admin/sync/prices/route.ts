@@ -6,7 +6,7 @@ import { runPriceUpdateJob } from '@/services/pricing/pricingJobRunner'
  * POST /api/admin/sync/prices
  *
  * Admin-protected endpoint to trigger the full pricing pipeline.
- * Accepts optional body: { setId?, limit?, includeGraded? }
+ * Accepts optional body: { setId?, limit? }
  */
 export const maxDuration = 300
 
@@ -24,20 +24,18 @@ export async function POST(req: NextRequest) {
   // 2. Parse body — all fields are optional
   let setId: string | undefined
   let limit: number | undefined
-  let includeGraded: boolean | undefined
 
   try {
     const body = await req.json()
-    setId         = body.setId         ?? undefined
-    limit         = body.limit         ?? undefined
-    includeGraded = body.includeGraded ?? undefined
+    setId = body.setId ?? undefined
+    limit = body.limit ?? undefined
   } catch {
     // body may be empty / malformed — all params are optional
   }
 
   // 3. Run the pipeline
   try {
-    const result = await runPriceUpdateJob({ setId, limit, includeGraded })
+    const result = await runPriceUpdateJob({ setId, limit })
     return NextResponse.json({ ok: true, ...result })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error'

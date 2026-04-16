@@ -17,13 +17,11 @@ export async function POST(req: NextRequest) {
   // 2. Parse body — all fields are optional
   let setId: string | undefined
   let limit: number | undefined
-  let includeGraded: boolean | undefined
 
   try {
     const body = await req.json()
-    setId          = body.setId         ?? undefined
-    limit          = body.limit         ?? undefined
-    includeGraded  = body.includeGraded ?? undefined
+    setId = body.setId ?? undefined
+    limit = body.limit ?? undefined
   } catch {
     // body may be empty / malformed — that's fine, all params are optional
   }
@@ -32,8 +30,7 @@ export async function POST(req: NextRequest) {
   try {
     const result = await updatePricesBatch({
       setId,
-      limit:         limit         ?? undefined,
-      includeGraded: includeGraded ?? false,
+      limit: limit ?? undefined,
     })
 
     // 4. Bust the Next.js Data Cache so the set page immediately reflects the

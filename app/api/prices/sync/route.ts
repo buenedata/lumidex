@@ -31,15 +31,14 @@ export async function POST(request: NextRequest) {
   }
 
   // 2. Parse body
-  let body: { setId?: string; apiSetId?: string | number; includeGraded?: boolean }
+  let body: { setId?: string; apiSetId?: string | number }
   try { body = await request.json() } catch {
     return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
       status: 400, headers: { 'Content-Type': 'application/json' },
     })
   }
 
-  const setId        = body.setId?.trim()
-  const includeGraded = typeof body.includeGraded === 'boolean' ? body.includeGraded : false
+  const setId = body.setId?.trim()
 
   if (!setId) {
     return new Response(JSON.stringify({ error: 'setId is required' }), {
@@ -62,7 +61,7 @@ export async function POST(request: NextRequest) {
 
   // ⬇ fire-and-forget: MUST be called before `return new Response(readable, ...)`
   ;(async () => {
-    console.log('[prices/sync] Sync worker started — setId:', setId, '— includeGraded:', includeGraded)
+    console.log('[prices/sync] Sync worker started — setId:', setId)
     const startTime = Date.now()
 
     // Capture apiSetId for product pricing (parsed before the worker fires)
@@ -83,18 +82,8 @@ export async function POST(request: NextRequest) {
         page:    1,
       })
 
-      // Optionally signal that graded pricing will run
-      if (includeGraded) {
-        emit({
-          type:    'graded',
-          message: 'Running graded card pricing (PSA / BGS eBay sold listings)…',
-        })
-      }
-
-      // Run the unified pricing pipeline — pass includeGraded so the runner
-      // fetches eBay graded sold listings in addition to raw card prices.
-      // Pass emit so per-card graded events stream to the client in real time.
-      const result = await runPriceUpdateJob({ setId, includeGraded, emit })
+      // Run the unified pricing pipeline
+      const result = await runPriceUpdateJob({ setId, emit })
 
       // Optionally import sealed-product prices from the cardmarket RapidAPI
       let productCount = 0
@@ -128,14 +117,13 @@ export async function POST(request: NextRequest) {
       //   event.matched       → matched state
       //   event.unmatched     → total = matched + unmatched
       emit({
-        type:             'complete',
+        type:          'complete',
         setId,
-        matched:          result.processed,
-        unmatched:        result.errors,
-        upsertedCount:    result.processed,
+        matched:       result.processed,
+        unmatched:     result.errors,
+        upsertedCount: result.processed,
         productCount,
-        gradedPointsSaved: result.gradedPointsSaved,
-        backfillCount:    0,
+        backfillCount: 0,
         elapsed,
       })
     } catch (err) {

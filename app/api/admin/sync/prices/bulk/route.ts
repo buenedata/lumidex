@@ -88,14 +88,12 @@ export async function POST(req: NextRequest) {
     `(${tierSummary}), concurrency=${concurrency}, forceAll=${forceAll}`
   )
 
-  // 4. Run the fast TCG-API-only pipeline
+  // 4. Run the pricing pipeline (TCG-API + tcggo CardMarket + graded via tcggo)
   try {
     const result = await updatePricesBatch({
       setIds,
-      includeGraded:  false,   // eBay graded runs during nightly cron
-      includeEbayRaw: false,   // eBay raw not aggregated into card_prices at all
       concurrency,
-      timeBudgetMs:   270_000,
+      timeBudgetMs: 270_000,
     })
 
     // Recalculate remaining: any sets skipped due to timeout are also remaining

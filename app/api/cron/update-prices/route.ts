@@ -96,8 +96,7 @@ export async function GET(req: NextRequest) {
   try {
     const result = await updatePricesBatch({
       setIds,
-      includeGraded:  true,
-      timeBudgetMs:   270_000,
+      timeBudgetMs: 270_000,
     })
 
     return NextResponse.json({
@@ -107,7 +106,6 @@ export async function GET(req: NextRequest) {
       setsSkippedDueToTimeout: result.setsSkippedDueToTimeout,
       cardsProcessed:          result.processed,
       errors:                  result.errors,
-      gradedPointsSaved:       result.gradedPointsSaved,
       undervaluedFound:        result.undervaluedFound,
     })
   } catch (err) {

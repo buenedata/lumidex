@@ -80,7 +80,6 @@ export default function AdminPricesPage() {
     status: 'idle', message: '', matched: 0, total: 0, products: 0, gradedPoints: 0, elapsed: 0,
   })
   const [probeCardId,      setProbeCardId]      = useState('')
-  const [includeGraded,   setIncludeGraded]   = useState(false)
   const [includeProducts, setIncludeProducts] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const [singleCardId,     setSingleCardId]     = useState('')
@@ -187,21 +186,6 @@ export default function AdminPricesPage() {
     }
   }, [])
 
-  const runGradedProbe = useCallback(async () => {
-    if (!probeCardId.trim()) return
-    setProbeLoading(true)
-    setProbeResult(null)
-    try {
-      const res = await fetch(`/api/admin/prices/probe-graded?cardId=${encodeURIComponent(probeCardId.trim())}`)
-      const json = await res.json()
-      setProbeResult(json)
-    } catch (e) {
-      setProbeResult({ error: String(e) })
-    } finally {
-      setProbeLoading(false)
-    }
-  }, [probeCardId])
-
   // Fetch ALL sets from the API (for browsing when name search fails)
   const browseAllSets = useCallback(async () => {
     setDiscoverLoading(true)
@@ -240,7 +224,7 @@ export default function AdminPricesPage() {
     setSyncState({ status: 'syncing', message: 'Starting…', matched: 0, total: 0, products: 0, gradedPoints: 0, elapsed: 0 })
 
     try {
-      const body: Record<string, unknown> = { setId, includeGraded }
+      const body: Record<string, unknown> = { setId }
       if (includeProducts && apiSetIdInput.trim()) body.apiSetId = apiSetIdInput.trim()
 
       const res = await fetch('/api/prices/sync', {
@@ -345,7 +329,7 @@ export default function AdminPricesPage() {
         message: e instanceof Error ? e.message : 'Sync failed',
       }))
     }
-  }, [loadStats, apiSetIdInput, includeGraded, includeProducts])
+  }, [loadStats, apiSetIdInput, includeProducts])
 
   // ── Sync Single Card ───────────────────────────────────────────────────────
   async function syncSingleCardAdmin() {
@@ -565,19 +549,6 @@ export default function AdminPricesPage() {
                   Card prices <span className="text-gray-500">(Pokémon TCG API — TCGPlayer &amp; CardMarket)</span>
                 </span>
                 <span className="ml-auto text-xs text-gray-600 italic">always included</span>
-              </label>
-
-              {/* Graded card prices */}
-              <label className="flex items-center gap-3 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={includeGraded}
-                  onChange={e => setIncludeGraded(e.target.checked)}
-                  className="w-4 h-4 rounded accent-purple-500"
-                />
-                <span className="text-sm text-gray-300">
-                  Graded card prices <span className="text-gray-500">(PSA 9/10 · CGC 9/10 · eBay last sold)</span>
-                </span>
               </label>
 
               {/* Sealed product prices */}
@@ -925,135 +896,6 @@ export default function AdminPricesPage() {
               {singleCardResult}
             </div>
           )}
-        </div>
-
-        {/* Probe eBay Graded */}
-        <div className="mt-6 bg-gray-900 border border-gray-700 rounded-xl p-6">
-          <h3 className="text-base font-semibold text-white mb-1">🔬 Probe eBay Graded Search</h3>
-          <p className="text-xs text-gray-500 mb-4">
-            Diagnostic tool — runs the eBay graded price search for a single card and returns the
-            raw API response without saving anything. Use this to diagnose why graded prices may be
-            returning 0 results (auth failures, no listings, etc.).
-          </p>
-          <div className="flex items-center gap-3">
-            <input
-              type="text"
-              placeholder="Card UUID (e.g. 550e8400-e29b-41d4-a716-…)"
-              value={probeCardId}
-              onChange={e => { setProbeCardId(e.target.value); setProbeResult(null) }}
-              className="flex-1 h-9 bg-gray-800 border border-gray-700 rounded-lg px-3 text-sm text-white placeholder:text-gray-600 focus:outline-none focus:border-indigo-500 font-mono"
-            />
-            <button
-              onClick={runGradedProbe}
-              disabled={probeLoading || !probeCardId.trim()}
-              className="px-5 py-2 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-lg transition-colors shrink-0"
-            >
-              {probeLoading ? '⏳ Probing…' : 'Run Probe'}
-            </button>
-          </div>
-
-          {probeResult && (() => {
-            const pr           = probeResult
-            const envCheck     = pr.envCheck     as Record<string, string> | undefined
-            const tokenSnippet = pr.tokenSnippet as string | undefined
-            const tokenError   = pr.tokenError   as string | null
-            const httpStatus   = pr.httpStatus   as number
-            const searchKw     = pr.searchKeywords as string
-            const rawCount     = pr.rawItemCount  as number
-            const apiTotal     = pr.apiTotal      as number
-            const grades       = pr.parsedGrades  as Record<string, { priceCount: number; avg: number | null }> | undefined
-            const samples      = pr.itemsSample   as { title: string; price: string | null; currency: string | null }[]
-            const finalCount   = (pr.finalResults as unknown[])?.length ?? 0
-
-            return (
-              <div className="mt-4 space-y-3">
-                {/* Env check */}
-                {envCheck && (
-                  <div className="bg-gray-800 rounded-lg p-3 text-xs font-mono space-y-1">
-                    <div className="text-gray-500 font-sans font-medium mb-1">Environment</div>
-                    {Object.entries(envCheck).map(([k, v]) => (
-                      <div key={k}>
-                        <span className="text-gray-500">{k}:</span>{' '}
-                        <span className={v.startsWith('⚠️') ? 'text-amber-400' : 'text-green-400'}>{v}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* OAuth + Browse API result summary */}
-                <div className="bg-gray-800 rounded-lg p-3 text-xs space-y-1">
-                  <div className="text-gray-500 font-medium mb-1">eBay Browse API Result</div>
-                  <div>
-                    <span className="text-gray-500">Search query:</span>{' '}
-                    <code className="text-indigo-300">{searchKw}</code>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">OAuth token:</span>{' '}
-                    {tokenError
-                      ? <span className="text-red-400">❌ {tokenError}</span>
-                      : <span className="text-green-400">✓ {tokenSnippet}</span>
-                    }
-                  </div>
-                  <div>
-                    <span className="text-gray-500">HTTP status:</span>{' '}
-                    <span className={httpStatus === 200 ? 'text-green-400' : 'text-red-400'}>{httpStatus || '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Items returned:</span>{' '}
-                    <span className="text-white">{rawCount}</span>
-                    {apiTotal > rawCount && (
-                      <span className="text-gray-500 ml-1">(API total: {apiTotal})</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Grade breakdown */}
-                {grades && Object.keys(grades).length > 0 && (
-                  <div className="bg-gray-800 rounded-lg p-3 text-xs">
-                    <div className="text-gray-500 font-medium mb-2">Parsed Grades (before MIN_ITEMS filter)</div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {Object.entries(grades)
-                        .sort(([a], [b]) => parseInt(b) - parseInt(a))
-                        .map(([grade, data]) => (
-                          <div key={grade} className="bg-gray-700 rounded p-2 text-center">
-                            <div className="text-indigo-300 font-semibold">PSA {grade}</div>
-                            <div className="text-gray-400">{data.priceCount} sales</div>
-                            <div className="text-white">{data.avg != null ? `$${data.avg.toFixed(2)}` : '—'}</div>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Sample items */}
-                {samples?.length > 0 && (
-                  <details className="bg-gray-800 rounded-lg p-3">
-                    <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-300">
-                      Sample listings ({samples.length})
-                    </summary>
-                    <div className="mt-2 space-y-1">
-                      {samples.map((item, i) => (
-                        <div key={i} className="text-xs text-gray-400 font-mono flex justify-between gap-2">
-                          <span className="truncate">{item.title}</span>
-                          <span className="text-green-400 shrink-0">
-                            {item.price ? `${item.currency === 'USD' ? '$' : (item.currency ?? '')}${item.price}` : '—'}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                )}
-
-                {/* Final results */}
-                <div className="text-xs text-gray-500">
-                  Final graded results after filtering:{' '}
-                  <span className={finalCount > 0 ? 'text-green-400' : 'text-amber-400'}>
-                    {finalCount} grade(s) would be saved
-                  </span>
-                </div>
-              </div>
-            )
-          })()}
         </div>
 
         {/* ── Bulk Seed All Sets ─────────────────────────────────────────── */}
