@@ -1829,17 +1829,33 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                             </div>
                             <div className="space-y-1.5">
                               {[
-                                { label: 'Normal · Avg Sell',  dot: '#10b981', val: row.cm_avg_sell      != null ? formatPrice(row.cm_avg_sell      * EUR_TO_USD, effectiveCurrency) : null },
-                                { label: 'Reverse · Avg Sell', dot: '#3b82f6', val: row.cm_reverse_holo  != null ? formatPrice(row.cm_reverse_holo  * EUR_TO_USD, effectiveCurrency) : null },
-                                { label: 'Trend',              dot: '#a855f7', val: row.cm_trend         != null ? formatPrice(row.cm_trend         * EUR_TO_USD, effectiveCurrency) : null },
-                                { label: '30-day Avg',         dot: '#f59e0b', val: row.cm_avg_30d       != null ? formatPrice(row.cm_avg_30d       * EUR_TO_USD, effectiveCurrency) : null },
+                                { label: 'Normal · Avg Sell',  dot: '#10b981', val: row.cm_avg_sell      != null ? formatPrice(row.cm_avg_sell      * EUR_TO_USD, effectiveCurrency) : null, url: row.cm_url ?? null },
+                                { label: 'Reverse · Avg Sell', dot: '#3b82f6', val: row.cm_reverse_holo  != null ? formatPrice(row.cm_reverse_holo  * EUR_TO_USD, effectiveCurrency) : null, url: row.cm_url ? `${row.cm_url}?isReverseHolo=Y` : null },
+                                { label: 'Trend',              dot: '#a855f7', val: row.cm_trend         != null ? formatPrice(row.cm_trend         * EUR_TO_USD, effectiveCurrency) : null, url: null },
+                                { label: '30-day Avg',         dot: '#f59e0b', val: row.cm_avg_30d       != null ? formatPrice(row.cm_avg_30d       * EUR_TO_USD, effectiveCurrency) : null, url: null },
                               ].filter(r => r.val != null).map(r => (
                                 <div key={r.label} className="flex items-center justify-between text-sm bg-elevated rounded-lg px-3 py-2 border border-subtle">
                                   <div className="flex items-center gap-2">
                                     <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: r.dot }} />
                                     <span className="text-secondary">{r.label}</span>
                                   </div>
-                                  <span className="font-semibold tabular-nums text-success">{r.val}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold tabular-nums text-success">{r.val}</span>
+                                    {r.url && (
+                                      <a
+                                        href={r.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        title="View on CardMarket"
+                                        className="text-muted hover:text-primary transition-colors"
+                                        onClick={e => e.stopPropagation()}
+                                      >
+                                        <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                                          <path d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42L17.59 5H14V3zm-1 2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8h-2v8H5V7h8V5z"/>
+                                        </svg>
+                                      </a>
+                                    )}
+                                  </div>
                                 </div>
                               ))}
                             </div>
