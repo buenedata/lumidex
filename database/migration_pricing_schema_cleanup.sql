@@ -64,7 +64,39 @@ ALTER TABLE public.card_prices DROP COLUMN IF EXISTS api_card_id;
 
 
 -- =============================================================================
--- SECTION 2 — DEDUPLICATION UNIQUE INDEXES
+-- SECTION 2 — REMOVE EXISTING DUPLICATE ROWS
+-- =============================================================================
+--
+-- The deduplication logic (midnight-UTC timestamps) was not in place when
+-- history was first backfilled, so the same date/card combination may appear
+-- multiple times. Keep the earliest row (lowest id) for each unique group.
+--
+-- This MUST run before the unique indexes are created; otherwise PostgreSQL
+-- will refuse to build the index on a table that already contains duplicates.
+-- =============================================================================
+
+-- ── Remove existing duplicate rows ───────────────────────────────────────────
+-- The deduplication logic (midnight-UTC timestamps) was not in place when
+-- history was first backfilled, so the same date/card combination may appear
+-- multiple times. Keep the earliest row (lowest id) for each unique group.
+
+DELETE FROM public.card_price_history
+WHERE id NOT IN (
+  SELECT MIN(id)
+  FROM public.card_price_history
+  GROUP BY card_id, source, variant_key, is_graded, recorded_at
+);
+
+DELETE FROM public.price_points
+WHERE id NOT IN (
+  SELECT MIN(id)
+  FROM public.price_points
+  GROUP BY card_id, source, COALESCE(variant_key, ''), is_graded, recorded_at
+);
+
+
+-- =============================================================================
+-- SECTION 3 — DEDUPLICATION UNIQUE INDEXES
 -- =============================================================================
 --
 -- Both price_points and card_price_history use plain INSERT (no ON CONFLICT)
@@ -117,7 +149,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_cph_dedup
 
 
 -- =============================================================================
--- SECTION 3 — FOLLOW-UP CODE CHANGES REQUIRED AFTER RUNNING THIS MIGRATION
+-- SECTION 4 — FOLLOW-UP CODE CHANGES REQUIRED AFTER RUNNING THIS MIGRATION
 -- =============================================================================
 --
 -- The migration is safe to run stand-alone; the column drops are backwards-
