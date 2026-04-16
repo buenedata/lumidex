@@ -203,9 +203,11 @@ export default function SetPageCards({
   }, [collectionGoal, cards.length, nonPromoCards.length, setTotal])
 
   const progressOwned = useMemo(() => {
-    if (collectionGoal === 'grandmasterset') return goalHave ?? haveCount
     if (collectionGoal === 'masterset')
-      return nonPromoCards.filter(c => (storeUserCards.get(c.id)?.quantity ?? 0) > 0).length
+      // goalHave is the variant-aware masterset count emitted by CardGrid;
+      // fall back to the raw non-promo owned count before the batch load completes.
+      return goalHave ?? nonPromoCards.filter(c => (storeUserCards.get(c.id)?.quantity ?? 0) > 0).length
+    // normal + grandmasterset: goalHave is always the correct variant-aware count.
     return goalHave ?? haveCount
   }, [collectionGoal, goalHave, haveCount, nonPromoCards, storeUserCards])
 
