@@ -19,7 +19,10 @@ import { formatPrice } from '@/lib/pricing'
 
 const VARIANT_CONFIG: Record<string, { label: string; color: string }> = {
   normal:       { label: 'Normal',       color: '#eab308' }, // yellow
-  reverse_holo: { label: 'Reverse Holo', color: '#3b82f6' }, // blue
+  // DB stores reverse holo as 'reverse' (see cardMatcher.mapVariant).
+  // 'reverse_holo' is kept as an alias for any legacy rows.
+  reverse:      { label: 'Reverse Holo', color: '#3b82f6' }, // blue
+  reverse_holo: { label: 'Reverse Holo', color: '#3b82f6' }, // blue (alias)
   holo:         { label: 'Holo Rare',    color: '#8b5cf6' }, // purple
   '1st_edition':{ label: '1st Edition',  color: '#f97316' }, // orange
   // Card-specific / unknown variants fall through to the '#6b7280' grey default
