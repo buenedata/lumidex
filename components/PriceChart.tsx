@@ -139,12 +139,33 @@ export default function PriceChart({
   isPro,
   priceSource,
 }: PriceChartProps) {
-  // Filter history to the preferred source first; fall back to all sources
-  // when no data exists for that source (e.g. CardMarket-only sets).
+  // Per-variant source filtering:
+  // For each variant_key present in the history, prefer the user's chosen
+  // priceSource.  If that source has no data for a given variant (e.g. CardMarket
+  // never records reverse-holo prices separately), fall back to whatever source
+  // has data for that variant.  This means:
+  //   - CM user: sees CM 'normal' data + TCGPlayer 'reverse' data (blue line)
+  //   - TCGPlayer user: sees TCGPlayer 'normal' + 'reverse' data
+  //   - Sets where only one source exists: always show all data
   const filteredHistory = useMemo(() => {
     if (!priceSource || !history.length) return history
-    const bySource = history.filter(p => p.source === priceSource)
-    return bySource.length > 0 ? bySource : history
+
+    // Group by variant_key
+    const byVariant = new Map<string, PriceHistoryPoint[]>()
+    for (const point of history) {
+      const list = byVariant.get(point.variantKey) ?? []
+      list.push(point)
+      byVariant.set(point.variantKey, list)
+    }
+
+    // For each variant prefer the chosen source; fall back to all sources for
+    // variants not covered by the preferred source.
+    const result: PriceHistoryPoint[] = []
+    for (const [, points] of byVariant) {
+      const fromPreferred = points.filter(p => p.source === priceSource)
+      result.push(...(fromPreferred.length > 0 ? fromPreferred : points))
+    }
+    return result
   }, [history, priceSource])
 
   // Pivot: date string → { [variantKey]: price }
