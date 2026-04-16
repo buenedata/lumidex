@@ -233,6 +233,19 @@ export default function PriceChart({
                 axisLine={false}
                 tickFormatter={(v: number) => formatPrice(v, currency)}
                 width={58}
+                domain={[
+                  // Lower bound: dataMin minus 20% of the range (or 10% of dataMin when
+                  // all prices are the same), floored at 0 to avoid negative values.
+                  (dataMin: number) => {
+                    const pad = Math.max(dataMin * 0.1, 0.01)
+                    return Math.max(0, Math.round((dataMin - pad) * 100) / 100)
+                  },
+                  // Upper bound: dataMax plus 20% of dataMin so there is breathing room above.
+                  (dataMax: number) => {
+                    const pad = Math.max(dataMax * 0.1, 0.01)
+                    return Math.round((dataMax + pad) * 100) / 100
+                  },
+                ]}
               />
               {!isBlurred && (
                 <Tooltip

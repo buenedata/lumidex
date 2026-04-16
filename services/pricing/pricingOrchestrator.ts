@@ -2,7 +2,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { fetchPokemonApiPrices } from './pokemonApiService'
 import { fetchEbayRawPrices } from './ebayService'
 import { fetchEbayGradedPrices, isRaritySkippedForGraded } from './ebayGradedService'
-import { normalizePoints } from './priceNormalizer'
+import { normalizePoints, toUsd } from './priceNormalizer'
 import { savePricePoints, savePriceHistory } from './priceRepository'
 import { upsertGradedPrices, deleteGradedPricesForCard } from './gradedPriceRepository'
 import { aggregatePricesForCard, writeCardPriceCache } from './priceAggregator'
@@ -251,6 +251,29 @@ async function processSingleSet(
       allPoints.push(...result.apiPoints)
       processedCardIds.push(result.card.id)
       if (result.cmUrl) cmUrlMap.set(result.card.id, result.cmUrl)
+
+      // When pokemontcg.io returned no CardMarket prices (common for EU promo
+      // sets like McDonald's collections), add a tcggo-sourced CardMarket point
+      // so that today's price is also written to card_price_history.
+      // Without this, the regular sync never records a history point for these
+      // cards and the 7-day chart stays empty even after a sync.
+      const hasApiCm = result.apiPoints.some(p => p.source === 'cardmarket')
+      if (!hasApiCm && tcggoPriceMap) {
+        const normNum = cardIdToNormNum.get(result.card.id)
+        const tcggo   = normNum ? tcggoPriceMap.get(normNum) : null
+        const cmEur   = tcggo?.cardmarket.avg7 ?? tcggo?.cardmarket.avg30 ?? tcggo?.cardmarket.low ?? null
+        if (cmEur != null) {
+          allPoints.push({
+            cardId:     result.card.id,
+            source:     'cardmarket',
+            variantKey: 'normal',
+            price:      cmEur,
+            currency:   'EUR',
+            isGraded:   false,
+            priceUsd:   toUsd(cmEur, 'EUR'),
+          })
+        }
+      }
     }
 
     // Batch write all price points for the whole set at once
