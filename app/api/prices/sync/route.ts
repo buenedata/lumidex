@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { requireAdmin } from '@/lib/admin'
 import { runPriceUpdateJob } from '@/services/pricing/pricingJobRunner'
 import { importProductPricing } from '@/services/pricing/productPricingService'
@@ -114,6 +115,11 @@ export async function POST(request: NextRequest) {
       }
 
       const elapsed = Date.now() - startTime
+
+      // Bust the Next.js Data Cache so the set page shows the new prices
+      // immediately on the next load rather than serving the pre-sync cached value.
+      revalidateTag('prices', { expire: 0 })
+      revalidateTag(`set-prices:${setId}`, { expire: 0 })
 
       // Emit complete event — shape must match what page.tsx expects:
       //   event.upsertedCount → message line

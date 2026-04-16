@@ -154,6 +154,8 @@ export interface PriceHistoryPoint {
   priceUsd: number;
   /** ISO timestamp when this price was recorded */
   recordedAt: string;
+  /** Price source: 'tcgplayer' | 'cardmarket' */
+  source: string;
 }
 
 /** Friend who owns a card — returned by /api/friends/card/[cardId] */

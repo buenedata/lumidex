@@ -18,10 +18,11 @@ import { formatPrice } from '@/lib/pricing'
 // Colors mirror the Lumidex variant system defined in types/index.ts
 
 const VARIANT_CONFIG: Record<string, { label: string; color: string }> = {
-  normal:       { label: 'Normal',       color: '#10b981' }, // green
+  normal:       { label: 'Normal',       color: '#eab308' }, // yellow
   reverse_holo: { label: 'Reverse Holo', color: '#3b82f6' }, // blue
   holo:         { label: 'Holo Rare',    color: '#8b5cf6' }, // purple
-  '1st_edition':{ label: '1st Edition',  color: '#f59e0b' }, // amber
+  '1st_edition':{ label: '1st Edition',  color: '#f97316' }, // orange
+  // Card-specific / unknown variants fall through to the '#6b7280' grey default
 }
 
 function variantLabel(key: string): string {
@@ -57,6 +58,13 @@ interface PriceChartProps {
   onRangeChange: (r: PriceChartRange) => void
   /** Whether the current user is on the Pro plan. Controls blur overlay + lock icons. */
   isPro: boolean
+  /**
+   * User's preferred price source ('tcgplayer' | 'cardmarket').
+   * When provided, history is filtered to that source before charting.
+   * Falls back to all sources when no data exists for the preferred source
+   * (e.g. a CardMarket-only set shown to a TCGPlayer user).
+   */
+  priceSource?: string
 }
 
 // ── Custom tooltip ────────────────────────────────────────────────────────────
@@ -126,15 +134,24 @@ export default function PriceChart({
   range,
   onRangeChange,
   isPro,
+  priceSource,
 }: PriceChartProps) {
+  // Filter history to the preferred source first; fall back to all sources
+  // when no data exists for that source (e.g. CardMarket-only sets).
+  const filteredHistory = useMemo(() => {
+    if (!priceSource || !history.length) return history
+    const bySource = history.filter(p => p.source === priceSource)
+    return bySource.length > 0 ? bySource : history
+  }, [history, priceSource])
+
   // Pivot: date string → { [variantKey]: price }
   const { chartData, variantKeys } = useMemo(() => {
-    if (!history.length) return { chartData: [], variantKeys: [] }
+    if (!filteredHistory.length) return { chartData: [], variantKeys: [] }
 
     const byDate = new Map<string, Record<string, number>>()
     const keys   = new Set<string>()
 
-    for (const point of history) {
+    for (const point of filteredHistory) {
       // Format date label: "Mar 31"
       const date = new Date(point.recordedAt)
       const label = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -157,7 +174,7 @@ export default function PriceChart({
     )
 
     return { chartData, variantKeys }
-  }, [history])
+  }, [filteredHistory])
 
   // ── Loading state ──────────────────────────────────────────────────────────
   if (isLoading) {
@@ -179,7 +196,7 @@ export default function PriceChart({
   const isBlurred = !isPro && PRO_RANGES.has(range)
 
   // ── Empty state ────────────────────────────────────────────────────────────
-  if (!history.length && !isBlurred) {
+  if (!filteredHistory.length && !isBlurred) {
     return (
       <div className="flex flex-col gap-3">
         {/* Range tabs — still rendered so the UI feels complete */}
@@ -315,7 +332,7 @@ function RangeTabs({
   isPro: boolean
 }) {
   return (
-    <div className="flex gap-1 flex-wrap">
+    <div className="flex gap-1 overflow-x-auto">
       {RANGES.map((r) => {
         const isLocked = !isPro && PRO_RANGES.has(r.value)
         const isActive = range === r.value

@@ -1735,6 +1735,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                     isLoading={isLoadingHistory && !priceHistoryCache.has(`${selectedCard.id}:${priceChartRange}`)}
                     range={priceChartRange}
                     isPro={isPro}
+                    priceSource={priceSource}
                     onRangeChange={(r) => {
                       setPriceChartRange(r)
                       fetchCardPriceHistory(selectedCard.id, r)

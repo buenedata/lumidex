@@ -81,6 +81,7 @@ export async function GET(
     variantKey:  row.variant_key,
     priceUsd:    Number(row.price_usd),
     recordedAt:  row.recorded_at,
+    source:      row.source,
   }))
 
   return NextResponse.json({ history })
