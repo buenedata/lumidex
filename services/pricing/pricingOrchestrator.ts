@@ -142,32 +142,14 @@ function mergeTcggoPrices(
   // tcggo fetches by episode/card number and is more accurate for CM pricing.
   // Overwrite whatever pokemontcg.io stored — if tcggo has no CM data for
   // this card, leave the existing value untouched.
-  //
-  // Apply the same 50× sanity check used in pokemonApiService: if the tcggo
-  // CM price is implausibly high compared to the TCGPlayer market price the
-  // card's api_id lookup already established, skip the tcggo CM value too.
-  // agg.tcgp_market is in USD; cm prices are in EUR (1 EUR ≈ 1.09 USD).
-  const EUR_TO_USD_APPROX = 1.09
-  const tcgpMarketUsd = agg.tcgp_market ?? 0
-  const cmCandidate   = tcggo.cardmarket.avg7 ?? tcggo.cardmarket.avg30 ?? null
-  const cmCandidateUsd = cmCandidate != null ? cmCandidate * EUR_TO_USD_APPROX : 0
-
-  const tcggoCmPlausible =
-    cmCandidate != null &&
-    (tcgpMarketUsd === 0 || cmCandidateUsd <= tcgpMarketUsd * 50)
-
-  if (tcggoCmPlausible) {
+  // Always trust tcggo CM data — never reject based on ratio checks.
+  const hasTcggoCm = tcggo.cardmarket.avg7 != null || tcggo.cardmarket.avg30 != null
+  if (hasTcggoCm) {
     if (tcggo.cardmarket.avg7  != null) agg.cm_avg_sell = tcggo.cardmarket.avg7
     if (tcggo.cardmarket.avg30 != null) agg.cm_avg_30d  = tcggo.cardmarket.avg30
     if (tcggo.cardmarket.low   != null) agg.cm_low      = tcggo.cardmarket.low
     if (tcggo.cardmarket.avg7  != null) agg.cm_trend    = tcggo.cardmarket.avg7
       else if (tcggo.cardmarket.avg30 != null) agg.cm_trend = tcggo.cardmarket.avg30
-  } else if (cmCandidate != null && tcgpMarketUsd > 0) {
-    console.warn(
-      `[PricingOrchestrator] tcggo CM price (${cmCandidate} EUR ≈ ${cmCandidateUsd.toFixed(2)} USD) ` +
-      `is >50× TCGPlayer (${tcgpMarketUsd.toFixed(2)} USD) for card ${cardId}. ` +
-      `Likely wrong CardMarket product match — skipping tcggo CM price.`
-    )
   }
 
   // ── TCGPlayer: only fill in when pokemontcg.io has no data ────────────────

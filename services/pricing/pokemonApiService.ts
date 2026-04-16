@@ -116,22 +116,9 @@ export async function fetchPokemonApiPrices(card: CardSearchData): Promise<Pokem
   const cmPrices  = cmSection?.prices;
   const cmUrl     = cmSection?.url ?? null;
 
-  let cmUrlAccepted = false  // tracks whether CM prices passed the sanity check
+  let cmUrlAccepted = false  // tracks whether we have any valid CM prices
 
   if (cmPrices && typeof cmPrices === 'object') {
-    // Rough EUR → USD factor used only for the sanity-check below.
-    // The actual conversion uses the full normalizer later in the pipeline.
-    const EUR_TO_USD_APPROX = 1.09
-
-    // Highest TCGPlayer USD price collected so far — used as a plausibility
-    // anchor for CardMarket prices.  A CM price > 50× the TCGPlayer price is
-    // a strong signal that pokemontcg.io linked this card to the wrong
-    // CardMarket product (e.g. a common matched to an expensive GameStop-promo
-    // version or an alt-art listing with the same card number).
-    const tcgpMaxUsd = points
-      .filter(p => p.source === 'tcgplayer')
-      .reduce((best, p) => Math.max(best, p.price), 0)
-
     // Normal variant price.
     // averageSellPrice is only populated after real sales have occurred (can take
     // weeks for new sets). Fall back to trendPrice then lowPrice so that newly
@@ -142,24 +129,15 @@ export async function fetchPokemonApiPrices(card: CardSearchData): Promise<Pokem
       cmPrices.lowPrice         ??
       null;
     if (normalPrice && normalPrice > 0) {
-      const cmNormalUsd = normalPrice * EUR_TO_USD_APPROX
-      if (tcgpMaxUsd > 0 && cmNormalUsd > tcgpMaxUsd * 50) {
-        console.warn(
-          `[pokemonApiService] CM normal price (${normalPrice} EUR ≈ ${cmNormalUsd.toFixed(2)} USD) ` +
-          `is >50× TCGPlayer (${tcgpMaxUsd.toFixed(2)} USD) for card ${card.api_id}. ` +
-          `Likely wrong CardMarket product match — skipping CM price and URL.`
-        )
-      } else {
-        points.push({
-          cardId: card.id,
-          source: 'cardmarket',
-          variantKey: 'normal',
-          price: normalPrice,
-          currency: 'EUR',
-          isGraded: false,
-        });
-        cmUrlAccepted = true
-      }
+      points.push({
+        cardId: card.id,
+        source: 'cardmarket',
+        variantKey: 'normal',
+        price: normalPrice,
+        currency: 'EUR',
+        isGraded: false,
+      });
+      cmUrlAccepted = true
     } else {
       console.warn(
         `[pokemonApiService] Skipping CM normal price for card ${card.api_id} — averageSellPrice/trendPrice/lowPrice all missing or zero`
@@ -170,27 +148,19 @@ export async function fetchPokemonApiPrices(card: CardSearchData): Promise<Pokem
     // Prefer reverseHoloSell (avg sell) — mirrors how dextcg.com reads CM data
     const reversePrice = cmPrices.reverseHoloSell ?? cmPrices.reverseHoloTrend ?? null;
     if (reversePrice && reversePrice > 0) {
-      const cmReverseUsd = reversePrice * EUR_TO_USD_APPROX
-      if (tcgpMaxUsd > 0 && cmReverseUsd > tcgpMaxUsd * 50) {
-        console.warn(
-          `[pokemonApiService] CM reverse price (${reversePrice} EUR) is >50× TCGPlayer for card ${card.api_id} — skipping.`
-        )
-      } else {
-        points.push({
-          cardId: card.id,
-          source: 'cardmarket',
-          variantKey: 'reverse',
-          price: reversePrice,
-          currency: 'EUR',
-          isGraded: false,
-        });
-        cmUrlAccepted = true
-      }
+      points.push({
+        cardId: card.id,
+        source: 'cardmarket',
+        variantKey: 'reverse',
+        price: reversePrice,
+        currency: 'EUR',
+        isGraded: false,
+      });
+      cmUrlAccepted = true
     }
   }
 
-  // Only propagate the CM URL when at least one CM price passed the sanity
-  // check — if all CM prices were rejected (wrong product match), the URL
-  // would link to the wrong CardMarket page too.
+  // Only propagate the CM URL when we have at least one valid CM price —
+  // avoids storing a URL that points to a page with no useful price data.
   return { cardId: card.id, points, cmUrl: cmUrlAccepted ? cmUrl : null };
 }
