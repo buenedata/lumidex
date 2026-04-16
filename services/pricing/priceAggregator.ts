@@ -137,6 +137,9 @@ export async function writeCardPriceCache(update: CardPriceUpdate): Promise<void
   if (update.tcgp_market       !== undefined) payload.tcgp_market       = update.tcgp_market
   if (update.tcgp_psa10        !== undefined) payload.tcgp_psa10        = update.tcgp_psa10
   if (update.tcgp_psa9         !== undefined) payload.tcgp_psa9         = update.tcgp_psa9
+  if (update.tcgp_bgs95        !== undefined) payload.tcgp_bgs95        = update.tcgp_bgs95
+  if (update.tcgp_bgs9         !== undefined) payload.tcgp_bgs9         = update.tcgp_bgs9
+  if (update.tcgp_cgc10        !== undefined) payload.tcgp_cgc10        = update.tcgp_cgc10
   if (update.cm_avg_sell       !== undefined) payload.cm_avg_sell       = update.cm_avg_sell
   if (update.cm_low            !== undefined) payload.cm_low            = update.cm_low
   if (update.cm_trend          !== undefined) payload.cm_trend          = update.cm_trend

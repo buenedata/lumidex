@@ -33,6 +33,24 @@ export interface TcggoTcgpPrices {
   market: number | null
 }
 
+/**
+ * Graded prices from the tcggo API's prices.cardmarket.graded object (EUR).
+ * For low-value cards the API returns `"graded": []` (empty array) — in that
+ * case this field is set to null on the entry.
+ */
+export interface TcggoGradedPrices {
+  /** PSA 10 Gem Mint price (EUR) */
+  psa10: number | null
+  /** PSA 9 Mint price (EUR) */
+  psa9:  number | null
+  /** BGS 10 Black Label price (EUR) */
+  bgs10: number | null
+  /** BGS 9 price (EUR) */
+  bgs9:  number | null
+  /** CGC 10 Gem Mint price (EUR) */
+  cgc10: number | null
+}
+
 export interface TcggoCardPriceEntry {
   cardNumber:    number
   /** tcggo.com internal card ID — used for per-card history-price API calls */
@@ -41,6 +59,11 @@ export interface TcggoCardPriceEntry {
   cardmarketId:  number | null
   cardmarket:    TcggoCmPrices
   tcgplayer:     TcggoTcgpPrices
+  /**
+   * Graded prices from prices.cardmarket.graded — null for low-value cards
+   * where the API returns an empty array instead of a graded object.
+   */
+  graded:        TcggoGradedPrices | null
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -152,6 +175,21 @@ function parseCards(raw: any[]): TcggoCardPriceEntry[] {
     const tcggoId      = typeof c.id === 'number' ? c.id : null
     const cardmarketId = typeof c.cardmarket_id === 'number' ? c.cardmarket_id : null
 
+    // Extract graded prices from prices.cardmarket.graded.
+    // The API returns an empty array `[]` for low-value cards (not an object),
+    // so we must guard: only extract when it is a non-array object.
+    const gradedRaw = cm.graded
+    const graded: TcggoGradedPrices | null =
+      gradedRaw != null && typeof gradedRaw === 'object' && !Array.isArray(gradedRaw)
+        ? {
+            psa10: safeNum(gradedRaw.psa?.psa10),
+            psa9:  safeNum(gradedRaw.psa?.psa9),
+            bgs10: safeNum(gradedRaw.bgs?.bgs10),
+            bgs9:  safeNum(gradedRaw.bgs?.bgs9),
+            cgc10: safeNum(gradedRaw.cgc?.cgc10),
+          }
+        : null
+
     entries.push({
       cardNumber,
       tcggoId,
@@ -165,6 +203,7 @@ function parseCards(raw: any[]): TcggoCardPriceEntry[] {
         // The API labels this EUR but values are USD for TCGPlayer prices
         market: safeNum(tcp.market_price),
       },
+      graded,
     })
   }
   return entries

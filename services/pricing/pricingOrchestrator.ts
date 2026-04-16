@@ -175,6 +175,19 @@ function mergeTcggoPrices(
     // Note: tcggo API mislabels these as EUR but values are USD
     agg.tcgp_market = tcggo.tcgplayer.market
   }
+
+  // ── Graded: write tcggo graded prices (CM/EUR → USD) ─────────────────────
+  // tcggo graded prices come from CardMarket (EUR), not TCGPlayer (USD).
+  // We store them in the tcgp_* columns as the best available graded price
+  // regardless of source; convert EUR → USD using the normalizer.
+  if (tcggo.graded) {
+    const g = tcggo.graded
+    if (g.psa10 != null) agg.tcgp_psa10 = toUsd(g.psa10, 'EUR')
+    if (g.psa9  != null) agg.tcgp_psa9  = toUsd(g.psa9,  'EUR')
+    if (g.bgs10 != null) agg.tcgp_bgs95 = toUsd(g.bgs10, 'EUR')
+    if (g.bgs9  != null) agg.tcgp_bgs9  = toUsd(g.bgs9,  'EUR')
+    if (g.cgc10 != null) agg.tcgp_cgc10 = toUsd(g.cgc10, 'EUR')
+  }
 }
 
 // ── Core: process a single set ────────────────────────────────────────────────

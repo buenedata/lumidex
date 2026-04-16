@@ -1,6 +1,6 @@
 -- ============================================================
 -- Lumidex – Current Database Schema
--- Last updated: 2026-04-11
+-- Last updated: 2026-04-16
 -- Generated from: live Supabase database introspection
 -- Project ref: ysvskytxewtlxpxeiskf
 -- ============================================================
@@ -15,7 +15,8 @@
 --   user_achievements, user_card_variants, user_cards,
 --   user_card_activity_log, user_sets, user_sealed_products,
 --   user_graded_cards, user_card_lists, user_card_list_items,
---   trade_proposals, trade_proposal_items, variant_suggestions
+--   trade_proposals, trade_proposal_items, variant_suggestions,
+--   stories, user_subscriptions
 --
 -- * cards ↔ variants have a circular FK:
 --     cards.default_variant_id → variants.id  (added via ALTER TABLE below)
@@ -68,7 +69,8 @@ create table if not exists public.cards (
     subtypes           text[],         -- e.g. '{"Stage 1","Pokémon"}'
     default_variant_id uuid,           -- FK → variants.id ON DELETE SET NULL (added below)
     api_id             text,           -- unique external API card ID
-    source_card_id     uuid        references public.cards(id) on delete set null
+    source_card_id     uuid        references public.cards(id) on delete set null,
+    tcggo_id           integer         -- tcggo.com / cardmarket-api-tcg RapidAPI internal card ID; populated during episode price sync
 );
 
 -- Variants (global catalog of card variant types)
@@ -134,7 +136,10 @@ create table if not exists public.users (
     profile_private        boolean     not null default false,
     show_portfolio_value   text        not null default 'public'
                                check (show_portfolio_value in ('public','friends_only','private')),
-    lists_public_by_default boolean    not null default false
+    lists_public_by_default boolean    not null default false,
+    social_cardmarket      text,
+    social_instagram       text,
+    social_facebook        text
 );
 
 -- Achievements
@@ -464,6 +469,43 @@ create table if not exists public.variant_suggestions (
     description text
 );
 
+-- Stories (CMS news/articles table)
+-- NOTE: content is a JSONB array of typed blocks (paragraphs, headings, lists, etc.)
+--       is_published defaults to true — no draft mode needed.
+create table if not exists public.stories (
+    id              uuid        not null default gen_random_uuid() primary key,
+    slug            text        not null unique,
+    category        text        not null,
+    category_icon   text        not null,
+    title           text        not null,
+    description     text        not null,
+    gradient        text        not null,
+    accent_colour   text        not null default 'text-indigo-300',
+    cover_image_url text,
+    content         jsonb       not null default '[]',
+    is_published    boolean     not null default true,
+    published_at    timestamptz not null default now(),
+    created_at      timestamptz not null default now(),
+    updated_at      timestamptz not null default now()
+);
+
+-- User subscriptions (membership tier: free / pro)
+-- NOTE: A missing row is treated as free tier by the application.
+--       Stripe billing metadata stored for Pro subscribers.
+create table if not exists public.user_subscriptions (
+    id                     uuid        not null default gen_random_uuid() primary key,
+    user_id                uuid        not null unique references public.users(id) on delete cascade,
+    tier                   text        not null default 'free'
+                               check (tier in ('free','pro')),
+    billing_period         text        check (billing_period in ('monthly','annual')),
+    current_period_start   timestamptz,
+    current_period_end     timestamptz,
+    stripe_customer_id     text,
+    stripe_subscription_id text,
+    created_at             timestamptz not null default now(),
+    updated_at             timestamptz not null default now()
+);
+
 
 -- ── ROW LEVEL SECURITY ────────────────────────────────────────
 
@@ -493,6 +535,8 @@ alter table public.users                     enable row level security;
 alter table public.variant_suggestions       enable row level security;
 alter table public.variants                  enable row level security;
 alter table public.wanted_cards              enable row level security;
+alter table public.stories                   enable row level security;
+alter table public.user_subscriptions        enable row level security;
 
 
 -- ── FUNCTIONS ─────────────────────────────────────────────────
@@ -680,6 +724,14 @@ create or replace trigger handle_updated_at_trade_proposals
 
 create or replace trigger handle_updated_at_user_sealed_products
     before update on public.user_sealed_products
+    for each row execute function public.handle_updated_at();
+
+create or replace trigger handle_updated_at_user_subscriptions
+    before update on public.user_subscriptions
+    for each row execute function public.handle_updated_at();
+
+create or replace trigger handle_updated_at_stories
+    before update on public.stories
     for each row execute function public.handle_updated_at();
 
 
@@ -912,6 +964,18 @@ create policy "wanted_cards_owner_delete"
 create policy "wanted_cards_admin_all"
     on public.wanted_cards for all using (public.is_admin());
 
+-- stories
+create policy "stories_public_select"
+    on public.stories for select using (is_published = true);
+create policy "stories_admin_all"
+    on public.stories for all using (public.is_admin());
+
+-- user_subscriptions
+create policy "user_subscriptions_owner_select"
+    on public.user_subscriptions for select using (auth.uid() = user_id);
+create policy "user_subscriptions_admin_all"
+    on public.user_subscriptions for all using (public.is_admin());
+
 
 -- ── INDEXES ───────────────────────────────────────────────────
 
@@ -961,6 +1025,8 @@ create index if not exists cards_source_card_id_idx
     on public.cards(source_card_id) where source_card_id is not null;
 create index if not exists idx_cards_name   on public.cards(name);
 create index if not exists idx_cards_set_id on public.cards(set_id);
+create index if not exists cards_tcggo_id_idx
+    on public.cards(tcggo_id) where tcggo_id is not null;
 
 -- ebay_webhooks
 create index if not exists ebay_webhooks_created_at_idx
@@ -1067,6 +1133,16 @@ create index if not exists variants_sort_order_idx
     on public.variants(sort_order);
 create index if not exists idx_variants_card_id
     on public.variants(card_id);
+
+-- stories
+create index if not exists stories_published_at_idx
+    on public.stories(published_at desc) where is_published = true;
+create index if not exists stories_slug_idx
+    on public.stories(slug);
+
+-- user_subscriptions
+create index if not exists user_subscriptions_user_id_idx
+    on public.user_subscriptions(user_id);
 
 -- wanted_cards
 create index if not exists wanted_cards_user_id_idx

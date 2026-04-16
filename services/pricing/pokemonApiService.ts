@@ -116,6 +116,8 @@ export async function fetchPokemonApiPrices(card: CardSearchData): Promise<Pokem
   const cmPrices  = cmSection?.prices;
   const cmUrl     = cmSection?.url ?? null;
 
+  let cmUrlAccepted = false  // tracks whether CM prices passed the sanity check
+
   if (cmPrices && typeof cmPrices === 'object') {
     // Rough EUR → USD factor used only for the sanity-check below.
     // The actual conversion uses the full normalizer later in the pipeline.
@@ -124,7 +126,8 @@ export async function fetchPokemonApiPrices(card: CardSearchData): Promise<Pokem
     // Highest TCGPlayer USD price collected so far — used as a plausibility
     // anchor for CardMarket prices.  A CM price > 50× the TCGPlayer price is
     // a strong signal that pokemontcg.io linked this card to the wrong
-    // CardMarket product (e.g. a common matched to an expensive alt-art listing).
+    // CardMarket product (e.g. a common matched to an expensive GameStop-promo
+    // version or an alt-art listing with the same card number).
     const tcgpMaxUsd = points
       .filter(p => p.source === 'tcgplayer')
       .reduce((best, p) => Math.max(best, p.price), 0)
@@ -144,7 +147,7 @@ export async function fetchPokemonApiPrices(card: CardSearchData): Promise<Pokem
         console.warn(
           `[pokemonApiService] CM normal price (${normalPrice} EUR ≈ ${cmNormalUsd.toFixed(2)} USD) ` +
           `is >50× TCGPlayer (${tcgpMaxUsd.toFixed(2)} USD) for card ${card.api_id}. ` +
-          `Likely wrong CardMarket product match — skipping CM price.`
+          `Likely wrong CardMarket product match — skipping CM price and URL.`
         )
       } else {
         points.push({
@@ -155,6 +158,7 @@ export async function fetchPokemonApiPrices(card: CardSearchData): Promise<Pokem
           currency: 'EUR',
           isGraded: false,
         });
+        cmUrlAccepted = true
       }
     } else {
       console.warn(
@@ -180,9 +184,13 @@ export async function fetchPokemonApiPrices(card: CardSearchData): Promise<Pokem
           currency: 'EUR',
           isGraded: false,
         });
+        cmUrlAccepted = true
       }
     }
   }
 
-  return { cardId: card.id, points, cmUrl };
+  // Only propagate the CM URL when at least one CM price passed the sanity
+  // check — if all CM prices were rejected (wrong product match), the URL
+  // would link to the wrong CardMarket page too.
+  return { cardId: card.id, points, cmUrl: cmUrlAccepted ? cmUrl : null };
 }

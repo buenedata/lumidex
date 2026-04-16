@@ -84,6 +84,9 @@ export interface CardPriceUpdate {
   tcgp_market?: number | null;
   tcgp_psa10?: number | null;
   tcgp_psa9?: number | null;
+  tcgp_bgs95?: number | null;
+  tcgp_bgs9?: number | null;
+  tcgp_cgc10?: number | null;
   cm_avg_sell?: number | null;
   cm_low?: number | null;
   cm_trend?: number | null;
