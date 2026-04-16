@@ -1219,6 +1219,11 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   // No source filter is passed to the API — we let it return all available sources
   // so that sets tracked only by CardMarket (e.g. EU promo sets) still show data
   // for users whose priceSource preference is 'tcgplayer'.
+  //
+  // Empty arrays are NOT cached: if the API returns no data (e.g. backfill hasn't
+  // run yet, or the previous request raced before a sync completed) the next open
+  // or range-click will automatically retry instead of showing a permanent empty
+  // state until the user hard-refreshes.
   const fetchCardPriceHistory = useCallback(async (cardId: string, range: PriceChartRange) => {
     const cacheKey = `${cardId}:${range}`
     if (priceHistoryCache.has(cacheKey)) return
@@ -1227,10 +1232,15 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       const res = await fetch(`/api/prices/history/${cardId}?range=${range}`)
       if (res.ok) {
         const json = await res.json()
-        setPriceHistoryCache(prev => new Map(prev).set(cacheKey, json.history ?? []))
+        const history: PriceHistoryPoint[] = json.history ?? []
+        // Only cache when there is real data — empty results are not stored so
+        // that a subsequent open/range-switch retries the API automatically.
+        if (history.length > 0) {
+          setPriceHistoryCache(prev => new Map(prev).set(cacheKey, history))
+        }
       }
     } catch {
-      setPriceHistoryCache(prev => new Map(prev).set(cacheKey, []))
+      // Network errors are also not cached so the user can retry.
     } finally {
       setIsLoadingHistory(false)
     }
