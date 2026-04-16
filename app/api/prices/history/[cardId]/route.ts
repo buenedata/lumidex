@@ -23,13 +23,14 @@ import { supabaseAdmin } from '@/lib/supabase'
 
 type RangeKey = '7d' | '14d' | '30d' | '3m' | '6m' | '1y'
 
-const RANGE_INTERVALS: Record<RangeKey, string> = {
-  '7d':  '7 days',
-  '14d': '14 days',
-  '30d': '30 days',
-  '3m':  '3 months',
-  '6m':  '6 months',
-  '1y':  '1 year',
+/** Map each range key to its duration in milliseconds. */
+const RANGE_MS: Record<RangeKey, number> = {
+  '7d':  7  * 24 * 60 * 60 * 1000,
+  '14d': 14 * 24 * 60 * 60 * 1000,
+  '30d': 30 * 24 * 60 * 60 * 1000,
+  '3m':  90 * 24 * 60 * 60 * 1000,
+  '6m': 180 * 24 * 60 * 60 * 1000,
+  '1y': 365 * 24 * 60 * 60 * 1000,
 }
 
 const VALID_SOURCES = new Set(['tcgplayer', 'cardmarket'])
@@ -47,7 +48,12 @@ export async function GET(
   const { searchParams } = new URL(request.url)
   const rangeParam  = (searchParams.get('range')  ?? '7d') as RangeKey
   const sourceParam = searchParams.get('source')
-  const interval    = RANGE_INTERVALS[rangeParam] ?? RANGE_INTERVALS['7d']
+
+  // Compute the cutoff as a proper ISO 8601 timestamp — passing a raw SQL
+  // expression like "now() - interval '7 days'" to .gte() is treated as a
+  // literal string by PostgREST and fails type-casting to timestamptz.
+  const rangeMs  = RANGE_MS[rangeParam] ?? RANGE_MS['7d']
+  const cutoffAt = new Date(Date.now() - rangeMs).toISOString()
 
   // When the caller passes a recognised source (e.g. 'tcgplayer' or 'cardmarket'),
   // filter to that source only.  When omitted or unrecognised, return all sources
@@ -57,7 +63,7 @@ export async function GET(
     .from('card_price_history')
     .select('variant_key, price_usd, source, recorded_at')
     .eq('card_id', cardId)
-    .gte('recorded_at', `now() - interval '${interval}'`)
+    .gte('recorded_at', cutoffAt)
     .order('recorded_at', { ascending: true })
 
   if (sourceParam && VALID_SOURCES.has(sourceParam)) {
@@ -80,10 +86,10 @@ export async function GET(
   // ── Temporary debug log — remove once history chart is confirmed working ──
   console.log(
     `[prices/history] cardId=${cardId} range=${rangeParam} source=${sourceParam ?? 'all'} ` +
-    `rows=${history.length}` +
-    (history.length === 0
-      ? ` interval="${interval}" (no data — check card_price_history for this card_id)`
-      : ` first=${history[0].recordedAt} last=${history[history.length - 1].recordedAt}`)
+    `rows=${history.length} cutoff=${cutoffAt}` +
+    (history.length > 0
+      ? ` first=${history[0].recordedAt} last=${history[history.length - 1].recordedAt}`
+      : ' (no data)')
   )
 
   return NextResponse.json({ history })
