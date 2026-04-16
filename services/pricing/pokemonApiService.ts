@@ -117,6 +117,18 @@ export async function fetchPokemonApiPrices(card: CardSearchData): Promise<Pokem
   const cmUrl     = cmSection?.url ?? null;
 
   if (cmPrices && typeof cmPrices === 'object') {
+    // Rough EUR → USD factor used only for the sanity-check below.
+    // The actual conversion uses the full normalizer later in the pipeline.
+    const EUR_TO_USD_APPROX = 1.09
+
+    // Highest TCGPlayer USD price collected so far — used as a plausibility
+    // anchor for CardMarket prices.  A CM price > 50× the TCGPlayer price is
+    // a strong signal that pokemontcg.io linked this card to the wrong
+    // CardMarket product (e.g. a common matched to an expensive alt-art listing).
+    const tcgpMaxUsd = points
+      .filter(p => p.source === 'tcgplayer')
+      .reduce((best, p) => Math.max(best, p.price), 0)
+
     // Normal variant price.
     // averageSellPrice is only populated after real sales have occurred (can take
     // weeks for new sets). Fall back to trendPrice then lowPrice so that newly
@@ -127,14 +139,23 @@ export async function fetchPokemonApiPrices(card: CardSearchData): Promise<Pokem
       cmPrices.lowPrice         ??
       null;
     if (normalPrice && normalPrice > 0) {
-      points.push({
-        cardId: card.id,
-        source: 'cardmarket',
-        variantKey: 'normal',
-        price: normalPrice,
-        currency: 'EUR',
-        isGraded: false,
-      });
+      const cmNormalUsd = normalPrice * EUR_TO_USD_APPROX
+      if (tcgpMaxUsd > 0 && cmNormalUsd > tcgpMaxUsd * 50) {
+        console.warn(
+          `[pokemonApiService] CM normal price (${normalPrice} EUR ≈ ${cmNormalUsd.toFixed(2)} USD) ` +
+          `is >50× TCGPlayer (${tcgpMaxUsd.toFixed(2)} USD) for card ${card.api_id}. ` +
+          `Likely wrong CardMarket product match — skipping CM price.`
+        )
+      } else {
+        points.push({
+          cardId: card.id,
+          source: 'cardmarket',
+          variantKey: 'normal',
+          price: normalPrice,
+          currency: 'EUR',
+          isGraded: false,
+        });
+      }
     } else {
       console.warn(
         `[pokemonApiService] Skipping CM normal price for card ${card.api_id} — averageSellPrice/trendPrice/lowPrice all missing or zero`
@@ -145,14 +166,21 @@ export async function fetchPokemonApiPrices(card: CardSearchData): Promise<Pokem
     // Prefer reverseHoloSell (avg sell) — mirrors how dextcg.com reads CM data
     const reversePrice = cmPrices.reverseHoloSell ?? cmPrices.reverseHoloTrend ?? null;
     if (reversePrice && reversePrice > 0) {
-      points.push({
-        cardId: card.id,
-        source: 'cardmarket',
-        variantKey: 'reverse',
-        price: reversePrice,
-        currency: 'EUR',
-        isGraded: false,
-      });
+      const cmReverseUsd = reversePrice * EUR_TO_USD_APPROX
+      if (tcgpMaxUsd > 0 && cmReverseUsd > tcgpMaxUsd * 50) {
+        console.warn(
+          `[pokemonApiService] CM reverse price (${reversePrice} EUR) is >50× TCGPlayer for card ${card.api_id} — skipping.`
+        )
+      } else {
+        points.push({
+          cardId: card.id,
+          source: 'cardmarket',
+          variantKey: 'reverse',
+          price: reversePrice,
+          currency: 'EUR',
+          isGraded: false,
+        });
+      }
     }
   }
 
