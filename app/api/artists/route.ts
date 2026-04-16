@@ -21,6 +21,8 @@ export async function GET(request: NextRequest) {
       .from('cards')
       .select('artist, image')
       .not('artist', 'is', null)
+      .not('artist', 'ilike', 'n/a')
+      .not('artist', 'ilike', 'N/A')
       .limit(10000)
 
     // Server-side name filter when a query is provided
@@ -39,7 +41,7 @@ export async function GET(request: NextRequest) {
     const artistMap = new Map<string, { images: string[]; count: number }>()
 
     for (const card of data ?? []) {
-      if (!card.artist) continue
+      if (!card.artist || card.artist.trim() === '' || card.artist.toLowerCase() === 'n/a') continue
       const entry = artistMap.get(card.artist)
       if (entry) {
         entry.count++
@@ -60,6 +62,8 @@ export async function GET(request: NextRequest) {
         card_count:    count,
         sample_images: images,
       }))
+      // Safety-net: exclude any placeholder/null artist names that slipped through
+      .filter(({ name }) => name.trim() !== '' && name.toLowerCase() !== 'n/a')
       .sort((a, b) => b.card_count - a.card_count)
       .slice(0, limit)
 
