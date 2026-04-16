@@ -32,6 +32,8 @@ const RANGE_INTERVALS: Record<RangeKey, string> = {
   '1y':  '1 year',
 }
 
+const VALID_SOURCES = new Set(['tcgplayer', 'cardmarket'])
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ cardId: string }> },
@@ -43,16 +45,26 @@ export async function GET(
   }
 
   const { searchParams } = new URL(request.url)
-  const rangeParam = (searchParams.get('range') ?? '7d') as RangeKey
-  const interval   = RANGE_INTERVALS[rangeParam] ?? RANGE_INTERVALS['7d']
+  const rangeParam  = (searchParams.get('range')  ?? '7d') as RangeKey
+  const sourceParam = searchParams.get('source')
+  const interval    = RANGE_INTERVALS[rangeParam] ?? RANGE_INTERVALS['7d']
 
-  const { data, error } = await supabaseAdmin
+  // When the caller passes a recognised source (e.g. 'tcgplayer' or 'cardmarket'),
+  // filter to that source only.  When omitted or unrecognised, return all sources
+  // so that sets tracked only by CardMarket (common for EU promotional sets) also
+  // display history data.
+  let query = supabaseAdmin
     .from('card_price_history')
     .select('variant_key, price_usd, source, recorded_at')
     .eq('card_id', cardId)
-    .eq('source', 'tcgplayer')                          // TCGPlayer USD prices for the chart
     .gte('recorded_at', `now() - interval '${interval}'`)
     .order('recorded_at', { ascending: true })
+
+  if (sourceParam && VALID_SOURCES.has(sourceParam)) {
+    query = query.eq('source', sourceParam)
+  }
+
+  const { data, error } = await query
 
   if (error) {
     console.error('[prices/history] DB error:', error)

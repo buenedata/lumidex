@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { requireAdmin } from '@/lib/admin'
 import { updatePricesBatch } from '@/services/pricing/pricingOrchestrator'
 
@@ -35,7 +36,14 @@ export async function POST(req: NextRequest) {
       includeGraded: includeGraded ?? false,
     })
 
-    // 4. Return success result
+    // 4. Bust the Next.js Data Cache so the set page immediately reflects the
+    //    new prices rather than serving the pre-sync cached-empty result.
+    //    revalidateTag('prices') covers the global tag; set-specific tag covers
+    //    getCardPricesForSet() which is keyed by setId.
+    revalidateTag('prices', { expire: 0 })
+    if (setId) revalidateTag(`set-prices:${setId}`, { expire: 0 })
+
+    // 5. Return success result
     return NextResponse.json({
       ok:               true,
       processed:        result.processed,
