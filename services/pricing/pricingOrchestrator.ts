@@ -111,9 +111,17 @@ async function mapConcurrent<T, R>(
 // ── Tcggo price merge helper ──────────────────────────────────────────────────
 
 /**
- * Merge tcggo.com CardMarket price data into a CardPriceUpdate when pokemontcg.io
- * returned no CardMarket prices (cm_avg_sell and cm_trend both null).
- * Also fills tcgp_market when pokemontcg.io returned no TCGPlayer price.
+ * Merge tcggo.com CardMarket price data into a CardPriceUpdate.
+ *
+ * tcggo fetches by episode ID + card number (precise), whereas pokemontcg.io
+ * maps cards to CardMarket product pages which can point to the wrong listing
+ * (e.g. common Charmander matched to the Charmander-ex full-art page).
+ *
+ * Strategy:
+ *   - CardMarket: ALWAYS use tcggo prices when available — overrides
+ *     pokemontcg.io prices which are frequently wrong for CM.
+ *   - TCGPlayer: only fill in from tcggo when pokemontcg.io has no data.
+ *
  * Mutates `agg` in-place. Safe to call when tcggoPriceMap is null (no-op).
  */
 function mergeTcggoPrices(
@@ -124,18 +132,18 @@ function mergeTcggoPrices(
 ): void {
   if (!tcggoPriceMap) return
 
-  const cmMissing   = agg.cm_avg_sell == null && agg.cm_trend == null
-  const tcgpMissing = agg.tcgp_market == null
-
-  if (!cmMissing && !tcgpMissing) return
-
   const normNum = cardIdToNormNum.get(cardId)
   if (!normNum) return
 
   const tcggo = tcggoPriceMap.get(normNum)
   if (!tcggo) return
 
-  if (cmMissing) {
+  // ── CardMarket: prefer tcggo over pokemontcg.io ───────────────────────────
+  // tcggo fetches by episode/card number and is more accurate for CM pricing.
+  // Overwrite whatever pokemontcg.io stored — if tcggo has no CM data for
+  // this card, leave the existing value untouched.
+  const hasTcggoCm = tcggo.cardmarket.avg7 != null || tcggo.cardmarket.avg30 != null
+  if (hasTcggoCm) {
     // 7-day average is the best proxy for current avg sell price
     if (tcggo.cardmarket.avg7  != null) agg.cm_avg_sell = tcggo.cardmarket.avg7
     if (tcggo.cardmarket.avg30 != null) agg.cm_avg_30d  = tcggo.cardmarket.avg30
@@ -145,8 +153,9 @@ function mergeTcggoPrices(
       else if (tcggo.cardmarket.avg30 != null) agg.cm_trend = tcggo.cardmarket.avg30
   }
 
-  if (tcgpMissing && tcggo.tcgplayer.market != null) {
-    // TCGPlayer market price — note: tcggo API mislabels these as EUR but values are USD
+  // ── TCGPlayer: only fill in when pokemontcg.io has no data ────────────────
+  if (agg.tcgp_market == null && tcggo.tcgplayer.market != null) {
+    // Note: tcggo API mislabels these as EUR but values are USD
     agg.tcgp_market = tcggo.tcgplayer.market
   }
 }
