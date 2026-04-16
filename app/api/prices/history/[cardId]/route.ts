@@ -77,5 +77,14 @@ export async function GET(
     recordedAt:  row.recorded_at,
   }))
 
+  // ── Temporary debug log — remove once history chart is confirmed working ──
+  console.log(
+    `[prices/history] cardId=${cardId} range=${rangeParam} source=${sourceParam ?? 'all'} ` +
+    `rows=${history.length}` +
+    (history.length === 0
+      ? ` interval="${interval}" (no data — check card_price_history for this card_id)`
+      : ` first=${history[0].recordedAt} last=${history[history.length - 1].recordedAt}`)
+  )
+
   return NextResponse.json({ history })
 }
