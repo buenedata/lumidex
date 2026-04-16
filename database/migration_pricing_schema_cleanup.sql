@@ -95,13 +95,7 @@ ALTER TABLE public.card_prices DROP COLUMN IF EXISTS api_card_id;
 -- insert.  If per-grade deduplication is needed later, add grade to this index.
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_price_points_dedup
-  ON public.price_points (
-    card_id,
-    source,
-    COALESCE(variant_key, ''),
-    is_graded,
-    (recorded_at::date)
-  );
+  ON public.price_points (card_id, source, COALESCE(variant_key, ''), is_graded, recorded_at);
 
 -- Compound lookup index used by aggregatePricesForCard (last-24h window query):
 --   .from('price_points').select(...).eq('card_id', cardId).gte('recorded_at', since)
@@ -119,13 +113,7 @@ CREATE INDEX IF NOT EXISTS idx_price_points_card_id_recorded
 -- for time-series chart queries — this unique index adds deduplication on top.
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_cph_dedup
-  ON public.card_price_history (
-    card_id,
-    source,
-    variant_key,
-    is_graded,
-    (recorded_at::date)
-  );
+  ON public.card_price_history (card_id, source, variant_key, is_graded, recorded_at);
 
 
 -- =============================================================================

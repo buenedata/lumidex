@@ -10,18 +10,15 @@ import { toUsd } from './priceNormalizer'
  *
  * Deduplication: after migration_pricing_schema_cleanup.sql is applied, the DB
  * enforces a unique index idx_price_points_dedup on
- *   (card_id, source, COALESCE(variant_key,''), is_graded, (recorded_at::date)).
- * Inserting a duplicate row for the same card+source+variant+day will produce a
- * unique-key violation caught by the error handler below and logged; no duplicate
- * rows are stored.  Because the index uses functional expressions (COALESCE, date
- * cast) it cannot be referenced by name in Supabase JS upsert — plain INSERT is
- * intentionally kept here and the DB silently rejects duplicates at its own level.
+ *   (card_id, source, COALESCE(variant_key,''), is_graded, recorded_at).
+ * recorded_at is stored as midnight UTC so all inserts within the same calendar
+ * day share the same timestamp and the plain equality index deduplicates them.
  */
 export async function savePricePoints(points: NormalizedPricePoint[]): Promise<void> {
   if (points.length === 0) return
 
   const supabase = supabaseAdmin
-  const now = new Date().toISOString()
+  const todayMidnight = `${new Date().toISOString().split('T')[0]}T00:00:00.000Z`
 
   const rows = points.map(point => ({
     card_id: point.cardId,
@@ -33,7 +30,7 @@ export async function savePricePoints(points: NormalizedPricePoint[]): Promise<v
     is_graded: point.isGraded,
     grade: point.grade ?? null,
     grading_company: point.gradingCompany ?? null,
-    recorded_at: now,
+    recorded_at: todayMidnight,
   }))
 
   const BATCH_SIZE = 100
@@ -57,12 +54,9 @@ export async function savePricePoints(points: NormalizedPricePoint[]): Promise<v
  *
  * Deduplication: after migration_pricing_schema_cleanup.sql is applied, the DB
  * enforces a unique index idx_cph_dedup on
- *   (card_id, source, variant_key, is_graded, (recorded_at::date)).
- * Inserting a duplicate row for the same card+source+variant+day will produce a
- * unique-key violation caught by the error handler below and logged; no duplicate
- * rows are stored.  The index uses a functional date expression and cannot be
- * referenced by name in Supabase JS upsert — plain INSERT is intentionally kept
- * here and the DB silently rejects duplicates at its own level.
+ *   (card_id, source, variant_key, is_graded, recorded_at).
+ * recorded_at is stored as midnight UTC so all inserts within the same calendar
+ * day share the same timestamp and the plain equality index deduplicates them.
  */
 export async function savePriceHistory(points: NormalizedPricePoint[]): Promise<void> {
   const historyPoints = points.filter(
@@ -72,14 +66,14 @@ export async function savePriceHistory(points: NormalizedPricePoint[]): Promise<
   if (historyPoints.length === 0) return
 
   const supabase = supabaseAdmin
-  const now = new Date().toISOString()
+  const todayMidnight = `${new Date().toISOString().split('T')[0]}T00:00:00.000Z`
 
   const rows = historyPoints.map(point => ({
     card_id: point.cardId,
     variant_key: point.variantKey ?? 'normal',
     price_usd: point.priceUsd,
     source: point.source,
-    recorded_at: now,
+    recorded_at: todayMidnight,
     is_graded: false,
     grade: null,
     grading_company: null,
