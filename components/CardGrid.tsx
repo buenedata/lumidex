@@ -19,6 +19,15 @@ import type { PriceChartRange } from '@/components/PriceChart'
 // PriceChart uses recharts (no SSR) — loaded client-side only to avoid hydration issues
 const PriceChart = dynamic(() => import('@/components/PriceChart'), { ssr: false })
 
+/**
+ * Maps a Lumidex variant name to the Cardmarket price variant key used in item_prices.
+ * Cardmarket only distinguishes 'normal' and 'reverse_holo'.
+ * All other variants (holo, jumbo, metal_card, cosmos_holo, etc.) map to 'normal'.
+ */
+function toPriceVariant(lumidexVariant: string): string {
+  return lumidexVariant === 'reverse_holo' ? 'reverse_holo' : 'normal'
+}
+
 type ModalTab = 'card' | 'price' | 'friends'
 
 type SortBy    = 'number' | 'name' | 'date'
@@ -1890,7 +1899,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                               {modalVariantPricesLoading
                                 ? <span className="opacity-40">…</span>
                                 : (() => {
-                                    const p = modalVariantPrices?.[variant.key]
+                                    const p = modalVariantPrices?.[toPriceVariant(variant.key)]
                                     return p != null
                                       ? (fmtCardPrice({ eur: p, usd: null }, effectiveCurrency) ?? '—')
                                       : '—'
