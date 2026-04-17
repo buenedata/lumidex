@@ -5,6 +5,7 @@ import { CardTile } from '@/components/CardTile'
 import Link from 'next/link'
 import { PokemonCard, UserCard, Variant, VariantWithQuantity, QuickAddVariant, VARIANT_COLOR_CLASSES, CollectionGoal, PriceHistoryPoint, FriendCardOwner, UserGradedCard } from '@/types'
 import { useCollectionStore, useAuthStore } from '@/lib/store'
+import { fmtCardPrice } from '@/lib/currency'
 import { useProGate } from '@/hooks/useProGate'
 import { useItemPrice } from '@/hooks/useItemPrice'
 import Modal from '@/components/ui/Modal'
@@ -1600,34 +1601,39 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
               {/* ── Price Tab ─── */}
               {modalTab === 'price' && (
                 <div className="py-2">
-                  {selectedCard?.tcggo_id != null ? (
-                    <div className="space-y-3">
-                      {/* Source header */}
-                      <h3 className="text-xs font-semibold text-muted uppercase tracking-wider px-1">
-                        CardMarket
-                      </h3>
+                  <div className="space-y-3">
+                    {/* Source header */}
+                    <h3 className="text-xs font-semibold text-muted uppercase tracking-wider px-1">
+                      CardMarket
+                    </h3>
 
-                      {/* Normal variant price row */}
-                      <div className="bg-elevated rounded-lg border border-subtle px-4 py-3 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          {/* Green dot = normal variant */}
-                          <div className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0" />
-                          <span className="text-sm text-secondary">Normal</span>
-                        </div>
-                        <span className="text-base font-semibold text-primary tabular-nums">
-                          {modalCmLoading
+                    {/* Normal variant price row — always rendered.
+                        Shows '...' while fetching, formatted price on success, '—' when no data.
+                        Root cause fix: previously gated on tcggo_id != null, but tcggo_id is an
+                        optional field that may be undefined (not fetched), causing the section to
+                        never render. Now always shown with graceful fallbacks. */}
+                    <div className="bg-elevated rounded-lg border border-subtle px-4 py-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {/* Green dot = normal variant */}
+                        <div className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0" />
+                        <span className="text-sm text-secondary">Normal</span>
+                      </div>
+                      <span className="text-base font-semibold text-primary tabular-nums">
+                        {selectedCard?.tcggo_id == null
+                          ? '—'
+                          : modalCmLoading
                             ? '...'
                             : modalCmPrice !== null
-                              ? `€${modalCmPrice.toFixed(2)}`
+                              ? (fmtCardPrice({ eur: modalCmPrice, usd: null }, effectiveCurrency) ?? '—')
                               : '—'}
-                        </span>
-                      </div>
+                      </span>
                     </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-16 text-center">
-                      <p className="text-sm text-gray-400">No pricing data available for this card.</p>
-                    </div>
-                  )}
+
+                    {/* Note when card has no pricing link */}
+                    {selectedCard?.tcggo_id == null && (
+                      <p className="text-xs text-muted text-center">No pricing data linked to this card yet.</p>
+                    )}
+                  </div>
                 </div>
               )}
 

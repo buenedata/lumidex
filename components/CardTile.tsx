@@ -4,6 +4,7 @@ import { memo } from 'react'
 import Link from 'next/link'
 import { PokemonCard, QuickAddVariant } from '@/types'
 import { useItemPrice } from '@/hooks/useItemPrice'
+import { fmtCardPrice } from '@/lib/currency'
 
 // ── Shared constants (mirrors CardGrid) ────────────────────────────────────
 const COLOR_MAP = {
@@ -186,17 +187,25 @@ function CardTileInner({
         <p className="text-sm font-semibold text-primary truncate leading-tight">
           {card.name}
         </p>
-        {/* Row 2: Number · Price */}
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-secondary tabular-nums">#{card.number}</span>
-          {/* EUR price badge — only shown when tcggo_id is present and price has loaded */}
-          {card.tcggo_id != null && !cmLoading && (
-            <span className="text-xs font-medium text-secondary tabular-nums">
-              {cmPrice !== null ? `€${cmPrice.toFixed(2)}` : '—'}
+        {/* Row 2: Price badge — prominent, shown for any card with a tcggo_id.
+            Displays '...' while loading, formatted price on success, '—' when unavailable.
+            Uses the user's preferred currency via effectiveCurrency prop. */}
+        {card.tcggo_id != null && (
+          <div className="flex items-center mt-0.5">
+            <span className="text-sm font-bold tabular-nums bg-green-900/40 text-green-300 border border-green-500/30 rounded-md px-2 py-0.5 leading-tight">
+              {cmLoading
+                ? '...'
+                : cmPrice !== null
+                  ? (fmtCardPrice({ eur: cmPrice, usd: null }, effectiveCurrency) ?? '—')
+                  : '—'}
             </span>
-          )}
+          </div>
+        )}
+        {/* Row 3: Card number */}
+        <div className="flex items-center">
+          <span className="text-xs font-medium text-secondary tabular-nums">#{card.number}</span>
         </div>
-        {/* Row 3: Set name (browse/search only — cards from multiple sets) */}
+        {/* Row 4: Set name (browse/search only — cards from multiple sets) */}
         {card.set_name && (
           <Link
             href={`/set/${card.set_id}`}
