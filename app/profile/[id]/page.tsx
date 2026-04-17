@@ -192,13 +192,16 @@ export default function ProfilePage() {
         setUserAchievements(achievements)
       }
 
-      // Calculate stats — sum quantities from user_card_variants (the source of truth)
+      // Calculate stats — count distinct card IDs owned (quantity > 0) so that
+      // "Cards Collected" represents unique cards, matching the dashboard's
+      // "Unique Cards" metric (store.userCards.size) rather than total copies.
       const { data: cardsData } = await supabase
         .from('user_card_variants')
-        .select('card_id, quantity, variant_type')
+        .select('card_id, quantity')
         .eq('user_id', userId)
+        .gt('quantity', 0)
 
-      const totalCards = cardsData?.reduce((sum, row) => sum + (row.quantity ?? 0), 0) || 0
+      const totalCards = new Set(cardsData?.map(r => r.card_id) ?? []).size
 
       // Fetch portfolio value — aggregate set-stats for every set the user has started.
       if ((setsInfo ?? []).length > 0) {
