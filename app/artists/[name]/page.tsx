@@ -54,7 +54,11 @@ export default async function ArtistDetailPage(
     notFound()
   }
 
-  const cards = data as ArtistCard[]
+  // Supabase's generated types infer the joined `sets` relation as an array,
+  // but PostgREST always returns a single object for a many-to-one FK join at
+  // runtime. We cast through `unknown` to satisfy the TypeScript compiler while
+  // keeping the correct runtime-shaped ArtistCard type.
+  const cards = data as unknown as ArtistCard[]
 
   return (
     <ArtistDetailClient
