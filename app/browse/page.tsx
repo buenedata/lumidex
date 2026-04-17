@@ -116,7 +116,7 @@ async function fetchDiscoveryData(): Promise<DiscoveryData> {
       .from('cards')
       .select('artist, image')
       .not('artist', 'is', null)
-      .limit(2000),
+      .limit(10000),
   ])
 
   const recentSets: DiscoverySet[] = (setsResult.data ?? []).map((s) => ({
