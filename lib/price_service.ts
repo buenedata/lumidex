@@ -18,7 +18,7 @@ import { supabaseAdmin as db } from '@/lib/supabase'
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const PRICE_TTL_MS   = 24 * 60 * 60 * 1000   // 24 hours
-const TCGGO_BASE_URL = 'https://cardmarket-api-tcg.p.rapidapi.com/v1'
+const TCGGO_BASE_URL = 'https://cardmarket-api-tcg.p.rapidapi.com'
 const TCGGO_GAME     = 'pokemon'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

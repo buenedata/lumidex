@@ -14,7 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
-const TCGGO_BASE_URL  = 'https://cardmarket-api-tcg.p.rapidapi.com/v1'
+const TCGGO_BASE_URL  = 'https://cardmarket-api-tcg.p.rapidapi.com'
 const PER_PAGE        = 100   // max supported by the episode-cards endpoint
 const UPSERT_BATCH    = 50    // rows per Supabase upsert call
 
@@ -84,7 +84,11 @@ export async function POST(req: NextRequest) {
       })
 
       if (!res.ok) {
-        throw new Error(`TCGGO responded ${res.status} ${res.statusText}`)
+        const errorBody = await res.text()
+        return NextResponse.json(
+          { error: 'Failed to fetch from TCGGO', status: res.status, detail: errorBody },
+          { status: 502 },
+        )
       }
 
       const json   = (await res.json()) as TcggoEpisodeCardsResponse
