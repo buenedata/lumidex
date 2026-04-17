@@ -1,16 +1,15 @@
 -- ============================================================
 -- Lumidex – Current Database Schema
--- Last updated: 2026-04-16
+-- Last updated: 2026-04-17
 -- Generated from: live Supabase database introspection
--- Project ref: ysvskytxewtlxpxeiskf
+-- WARNING: This schema is for context only and is not meant to be run.
+--          Table order and constraints may not be valid for execution.
 -- ============================================================
 --
 -- Tables (in dependency order):
 --   sets, cards*, variants*, users, achievements,
---   ebay_oauth_tokens, ebay_webhooks, set_products,
---   card_prices, card_price_history, card_graded_prices,
+--   set_products, item_prices,
 --   card_variant_availability, card_variant_images,
---   card_cm_url_overrides, price_points,
 --   friendships, wanted_cards,
 --   user_achievements, user_card_variants, user_cards,
 --   user_card_activity_log, user_sets, user_sealed_products,
@@ -31,18 +30,17 @@
 --       setTotal    = cards excluding secret rares.
 --       setComplete = cards including secret rares.
 create table if not exists public.sets (
-    set_id                text        primary key,
-    name                  text        not null,
-    series                text,
-    "setTotal"            integer,
-    release_date          date,
-    created_at            timestamp   default now(),
-    "setComplete"         integer,
-    logo_url              text,
-    symbol_url            text,
-    language              text        not null default 'en',
-    prices_last_synced_at timestamptz,
-    api_set_id            text
+    set_id       text        primary key,
+    name         text        not null,
+    series       text,
+    "setTotal"   integer,
+    release_date date,
+    created_at   timestamp   default now(),
+    "setComplete" integer,
+    logo_url     text,
+    symbol_url   text,
+    language     text        not null default 'en',
+    api_set_id   text        -- tcggo.com / cardmarket-api-tcg RapidAPI episode ID
 );
 
 -- Cards
@@ -56,7 +54,7 @@ create table if not exists public.sets (
 --       api_id: unique external API identifier (nullable; unique WHERE NOT NULL).
 create table if not exists public.cards (
     id                 uuid        not null default gen_random_uuid() primary key,
-    set_id             text        not null references public.sets(set_id) on delete cascade,
+    set_id             text        not null references public.sets(set_id),
     name               text        not null,
     number             text,
     rarity             text,
@@ -69,8 +67,8 @@ create table if not exists public.cards (
     subtypes           text[],         -- e.g. '{"Stage 1","Pokémon"}'
     default_variant_id uuid,           -- FK → variants.id ON DELETE SET NULL (added below)
     api_id             text,           -- unique external API card ID
-    source_card_id     uuid        references public.cards(id) on delete set null,
-    tcggo_id           integer         -- tcggo.com / cardmarket-api-tcg RapidAPI internal card ID; populated during episode price sync
+    source_card_id     uuid        references public.cards(id),
+    tcggo_id           integer         -- tcggo.com / cardmarket-api-tcg RapidAPI internal card ID
 );
 
 -- Variants (global catalog of card variant types)
@@ -82,7 +80,7 @@ create table if not exists public.variants (
     variant_type text,                 -- legacy column
     created_at   timestamp   default now(),
     name         text        not null,
-    key          text        not null,
+    key          text        not null unique,
     description  text,
     color        text        not null default 'gray'
                    check (color in ('green','blue','purple','red','pink','yellow','gray','orange','teal')),
@@ -91,8 +89,7 @@ create table if not exists public.variants (
     sort_order   integer     not null default 0,
     is_official  boolean     not null default true,
     created_by   uuid,                 -- FK → users.id (nullable)
-    card_id      uuid        references public.cards(id) on delete cascade,
-    constraint variants_key_unique unique (key)
+    card_id      uuid        references public.cards(id)
 );
 
 -- Resolve the circular FK: cards.default_variant_id → variants.id
@@ -114,185 +111,83 @@ $$;
 
 -- Users (extends auth.users)
 -- NOTE: id references auth.users.id (auth schema FK, ON DELETE CASCADE).
---       profile preferences (language, currency, price_source, etc.) are stored here.
 create table if not exists public.users (
-    id                     uuid        primary key references auth.users(id) on delete cascade,
-    username               text        unique,
-    email                  text,
-    avatar_url             text,
-    created_at             timestamp   default now(),
-    role                   text        not null default 'user'
-                               check (role in ('user','admin')),
-    display_name           text,
-    banner_url             text,
-    bio                    text,
-    location               text,
-    setup_completed        boolean     not null default false,
-    preferred_language     text        not null default 'en',
-    preferred_currency     text        not null default 'USD',
-    price_source           text        not null default 'tcgplayer'
-                               check (price_source in ('tcgplayer','cardmarket')),
-    grey_out_unowned       boolean     not null default true,
-    profile_private        boolean     not null default false,
-    show_portfolio_value   text        not null default 'public'
-                               check (show_portfolio_value in ('public','friends_only','private')),
-    lists_public_by_default boolean    not null default false,
-    social_cardmarket      text,
-    social_instagram       text,
-    social_facebook        text
+    id                      uuid        primary key references auth.users(id),
+    username                text        unique,
+    email                   text,
+    avatar_url              text,
+    created_at              timestamp   default now(),
+    role                    text        not null default 'user'
+                                check (role in ('user','admin')),
+    display_name            text,
+    banner_url              text,
+    bio                     text,
+    location                text,
+    setup_completed         boolean     not null default false,
+    preferred_language      text        not null default 'en',
+    preferred_currency      text        not null default 'USD',
+    grey_out_unowned        boolean     not null default true,
+    profile_private         boolean     not null default false,
+    lists_public_by_default boolean     not null default false,
+    social_cardmarket       text,
+    social_instagram        text,
+    social_facebook         text
 );
 
 -- Achievements
 create table if not exists public.achievements (
     id          uuid        not null default gen_random_uuid() primary key,
-    name        text        not null unique,
+    name        text        not null,
     description text        not null,
     icon        text        not null,
     created_at  timestamptz not null default timezone('utc'::text, now())
 );
 
--- eBay OAuth token cache
--- Single-row table keyed on 'client_credentials'. Survives serverless cold starts.
-create table if not exists public.ebay_oauth_tokens (
-    token_key    text        primary key,   -- always 'client_credentials'
-    access_token text        not null,
-    expires_at   timestamptz not null,
-    updated_at   timestamptz not null default now()
-);
-
--- eBay webhook event log
--- Raw payloads from eBay Marketplace Account Deletion / notification subscriptions.
--- Written server-side via service role only.
-create table if not exists public.ebay_webhooks (
-    id         uuid        not null default gen_random_uuid() primary key,
-    payload    jsonb,
-    created_at timestamp   default now()
-);
-
 -- Set products (sealed product catalog per set)
 -- NOTE: set_id is a text reference to sets.set_id (no FK enforced at DB level).
 --       api_product_id is the external API product identifier (unique).
---       image_url is the product box image.
 create table if not exists public.set_products (
     id             uuid        not null default gen_random_uuid() primary key,
     set_id         text        not null,    -- text ref → sets.set_id (no FK)
     api_product_id text        unique,
     name           text        not null,
     product_type   text,
-    tcgp_market    numeric,
-    tcgp_low       numeric,
-    tcgp_high      numeric,
-    tcgp_url       text,
-    cm_avg_sell    numeric,
-    cm_trend       numeric,
-    cm_url         text,
-    fetched_at     timestamptz not null default now(),
     updated_at     timestamptz not null default now(),
     image_url      text
 );
 
--- Card prices (latest prices per card, one row per card)
--- NOTE: card_id has a UNIQUE constraint (one price row per card).
-create table if not exists public.card_prices (
-    id                uuid        not null default gen_random_uuid() primary key,
-    card_id           uuid        not null unique references public.cards(id) on delete cascade,
-    tcgp_normal       numeric,
-    tcgp_reverse_holo numeric,
-    tcgp_holo         numeric,
-    tcgp_1st_edition  numeric,
-    tcgp_market       numeric,
-    tcgp_psa10        numeric,
-    tcgp_psa9         numeric,
-    tcgp_bgs95        numeric,
-    tcgp_bgs9         numeric,
-    tcgp_cgc10        numeric,
-    cm_avg_sell       numeric,
-    cm_low            numeric,
-    cm_trend          numeric,
-    cm_avg_30d        numeric,
-    api_card_id       text,
-    tcgp_updated_at   text,
-    cm_updated_at     text,
-    fetched_at        timestamptz not null default now(),
-    updated_at        timestamptz not null default now(),
-    cm_reverse_holo   numeric,
-    cm_url            text,
-    cm_cosmos_holo    numeric
-);
-
--- Card price history (time-series price records)
-create table if not exists public.card_price_history (
-    id              uuid        not null default gen_random_uuid() primary key,
-    card_id         uuid        not null references public.cards(id) on delete cascade,
-    variant_key     text        not null,
-    price_usd       numeric     not null,
-    source          text        not null default 'tcgplayer',
-    recorded_at     timestamptz not null default now(),
-    is_graded       boolean     not null default false,
-    grade           numeric,
-    grading_company text
-);
-
--- Card graded prices (latest graded prices per card+company+grade combo)
--- NOTE: unique on (card_id, grading_company, grade).
-create table if not exists public.card_graded_prices (
-    id              uuid        not null default gen_random_uuid() primary key,
-    card_id         uuid        not null references public.cards(id) on delete cascade,
-    grading_company text        not null check (grading_company in ('PSA','CGC','ACE')),
-    grade           integer     not null check (grade >= 1 and grade <= 10),
-    avg_price_usd   numeric     not null,
-    sample_size     integer     not null default 1,
-    fetched_at      timestamptz not null default now(),
-    constraint card_graded_prices_unique unique (card_id, grading_company, grade)
+-- Item prices (latest prices for singles, graded cards, and sealed products)
+-- NOTE: item_id is a text identifier (card uuid or product id as text).
+--       item_type: 'single' | 'graded' | 'product'
+--       source: 'tcggo' | 'cardmarket'
+create table if not exists public.item_prices (
+    id         uuid        not null default gen_random_uuid() primary key,
+    item_id    text        not null,
+    item_type  text        not null check (item_type in ('single','graded','product')),
+    variant    text        not null default 'normal',
+    price      numeric,
+    currency   text        not null default 'EUR',
+    source     text        not null check (source in ('tcggo','cardmarket')),
+    updated_at timestamptz not null default now()
 );
 
 -- Card variant availability (which variants are available for a given card)
--- NOTE: created_by may reference auth.users (no public FK enforced).
 create table if not exists public.card_variant_availability (
     id         uuid        not null default gen_random_uuid() primary key,
-    card_id    uuid        not null references public.cards(id) on delete cascade,
-    variant_id uuid        not null references public.variants(id) on delete cascade,
-    created_by uuid,       -- optional ref to auth.users
-    created_at timestamptz default now(),
-    constraint unique_card_variant unique (card_id, variant_id)
+    card_id    uuid        not null references public.cards(id),
+    variant_id uuid        not null references public.variants(id),
+    created_by uuid        references auth.users(id),
+    created_at timestamptz default now()
 );
 
 -- Card variant images (custom images per card+variant combo)
--- NOTE: created_by may reference auth.users (no public FK enforced).
 create table if not exists public.card_variant_images (
     id         uuid        not null default gen_random_uuid() primary key,
-    card_id    uuid        not null references public.cards(id) on delete cascade,
-    variant_id uuid        not null references public.variants(id) on delete cascade,
+    card_id    uuid        not null references public.cards(id),
+    variant_id uuid        not null references public.variants(id),
     image_url  text        not null,
-    created_by uuid,       -- optional ref to auth.users
-    created_at timestamptz not null default now(),
-    constraint unique_card_variant_image unique (card_id, variant_id)
-);
-
--- Card CardMarket URL overrides (manual cm_url overrides per card+variant)
-create table if not exists public.card_cm_url_overrides (
-    id          uuid        not null default gen_random_uuid() primary key,
-    card_id     uuid        not null references public.cards(id) on delete cascade,
-    variant_key text        not null,
-    cm_url      text        not null,
-    created_at  timestamptz default now(),
-    updated_at  timestamptz default now(),
-    constraint unique_card_variant_cmurl unique (card_id, variant_key)
-);
-
--- Price points (granular price observations from multiple sources)
-create table if not exists public.price_points (
-    id              uuid        not null default gen_random_uuid() primary key,
-    card_id         uuid        not null references public.cards(id) on delete cascade,
-    source          text        not null check (source in ('tcgplayer','cardmarket','ebay')),
-    variant_key     text,
-    price           numeric     not null,
-    currency        text        not null default 'USD',
-    condition       text,
-    is_graded       boolean     not null default false,
-    grade           numeric,
-    grading_company text,
-    recorded_at     timestamptz not null default now()
+    created_by uuid        references auth.users(id),
+    created_at timestamptz not null default now()
 );
 
 -- Friendships
@@ -300,59 +195,53 @@ create table if not exists public.price_points (
 --       status: 'pending' | 'accepted' | 'declined' | 'blocked'
 create table if not exists public.friendships (
     id           uuid        not null default gen_random_uuid() primary key,
-    requester_id uuid        not null references public.users(id) on delete cascade,
-    addressee_id uuid        not null references public.users(id) on delete cascade,
+    requester_id uuid        not null references public.users(id),
+    addressee_id uuid        not null references public.users(id),
     status       text        not null default 'pending'
                      check (status in ('pending','accepted','declined','blocked')),
     created_at   timestamptz not null default now(),
-    updated_at   timestamptz not null default now(),
-    constraint friendships_pair_key unique (requester_id, addressee_id),
-    constraint friendships_no_self  check (requester_id <> addressee_id)
+    updated_at   timestamptz not null default now()
 );
 
 -- Wanted cards (user wishlist)
 create table if not exists public.wanted_cards (
     id         uuid        not null default gen_random_uuid() primary key,
-    user_id    uuid        not null references public.users(id) on delete cascade,
-    card_id    uuid        not null references public.cards(id) on delete cascade,
-    created_at timestamptz not null default now(),
-    constraint wanted_cards_user_card_key unique (user_id, card_id)
+    user_id    uuid        not null references public.users(id),
+    card_id    uuid        not null references public.cards(id),
+    created_at timestamptz not null default now()
 );
 
 -- User achievements
 create table if not exists public.user_achievements (
     id             uuid        not null default gen_random_uuid() primary key,
-    user_id        uuid        not null references public.users(id),         -- no cascade
-    achievement_id uuid        not null references public.achievements(id) on delete cascade,
-    unlocked_at    timestamptz not null default timezone('utc'::text, now()),
-    constraint user_achievements_user_id_achievement_id_key unique (user_id, achievement_id)
+    user_id        uuid        not null references public.users(id),
+    achievement_id uuid        not null references public.achievements(id),
+    unlocked_at    timestamptz not null default timezone('utc'::text, now())
 );
 
 -- User-owned card variants (primary collection tracking table)
--- NOTE: card_id and variant_id are uuid FKs (cascade on delete).
+-- NOTE: card_id and variant_id are uuid FKs.
 --       variant_type is a legacy text column kept alongside variant_id.
 --       quantity_delta holds the last change increment (for activity logging).
 create table if not exists public.user_card_variants (
     id             uuid        not null default gen_random_uuid() primary key,
-    user_id        uuid        references public.users(id) on delete cascade,
-    card_id        uuid        references public.cards(id) on delete cascade,
+    user_id        uuid        references public.users(id),
+    card_id        uuid        references public.cards(id),
     variant_type   text,                -- legacy column
     created_at     timestamp   default now(),
-    variant_id     uuid        references public.variants(id) on delete cascade,
+    variant_id     uuid        references public.variants(id),
     quantity       integer     default 0,
     updated_at     timestamp   default now(),
-    quantity_delta integer,             -- last increment/decrement applied
-    constraint user_card_variants_unique unique (user_id, card_id, variant_id)
+    quantity_delta integer             -- last increment/decrement applied
 );
 
 -- User cards (legacy — quantity mirrors sum in user_card_variants for backwards compat.)
 create table if not exists public.user_cards (
     id         uuid        not null default gen_random_uuid() primary key,
-    user_id    uuid        references public.users(id),         -- no cascade on user
-    card_id    uuid        references public.cards(id) on delete cascade,
+    user_id    uuid        references public.users(id),
+    card_id    uuid        references public.cards(id),
     created_at timestamp   default now(),
-    quantity   integer     not null default 0,
-    constraint user_cards_user_id_card_id_key unique (user_id, card_id)
+    quantity   integer     not null default 0
 );
 
 -- User card activity log (audit log of quantity changes)
@@ -372,46 +261,43 @@ create table if not exists public.user_card_activity_log (
 -- NOTE: collection_goal: 'normal' | 'masterset' | 'grandmasterset'
 create table if not exists public.user_sets (
     id              uuid        not null default gen_random_uuid() primary key,
-    user_id         uuid        references public.users(id),   -- nullable
-    set_id          text        references public.sets(set_id) on delete cascade,
+    user_id         uuid        references public.users(id),
+    set_id          text        references public.sets(set_id),
     created_at      timestamp   default now(),
     collection_goal text        not null default 'normal'
-                        check (collection_goal in ('normal','masterset','grandmasterset')),
-    constraint user_sets_user_id_set_id_key unique (user_id, set_id)
+                        check (collection_goal in ('normal','masterset','grandmasterset'))
 );
 
 -- User sealed products (tracks which sealed products a user owns)
 -- NOTE: product_id is text — references set_products conceptually,
---       but no DB-level FK enforced (set_products.id is uuid).
+--       but no DB-level FK enforced.
 create table if not exists public.user_sealed_products (
     id         uuid        not null default gen_random_uuid() primary key,
     user_id    uuid        not null,
     product_id text        not null,
     quantity   integer     not null default 1 check (quantity >= 0),
     created_at timestamp   default now(),
-    updated_at timestamp   default now(),
-    constraint user_sealed_products_user_id_product_id_key unique (user_id, product_id)
+    updated_at timestamp   default now()
 );
 
 -- User graded cards (PSA/CGC/etc. graded cards owned by user)
 create table if not exists public.user_graded_cards (
     id              uuid        not null default gen_random_uuid() primary key,
-    user_id         uuid        not null references public.users(id) on delete cascade,
-    card_id         uuid        not null references public.cards(id) on delete cascade,
-    variant_id      uuid        references public.variants(id) on delete set null,
+    user_id         uuid        not null references public.users(id),
+    card_id         uuid        not null references public.cards(id),
+    variant_id      uuid        references public.variants(id),
     grading_company text        not null
                         check (grading_company in ('PSA','BECKETT','CGC','TAG','ACE')),
     grade           text        not null,
     quantity        integer     not null default 1 check (quantity >= 1),
     created_at      timestamptz not null default now(),
-    updated_at      timestamptz not null default now(),
-    constraint user_graded_cards_unique unique (user_id, card_id, variant_id, grading_company, grade)
+    updated_at      timestamptz not null default now()
 );
 
 -- User card lists (custom named card lists, e.g. "Yuka Collection")
 create table if not exists public.user_card_lists (
     id          uuid        primary key default gen_random_uuid(),
-    user_id     uuid        not null references public.users(id) on delete cascade,
+    user_id     uuid        not null references public.users(id),
     name        text        not null,
     description text,
     is_public   boolean     not null default false,
@@ -422,10 +308,9 @@ create table if not exists public.user_card_lists (
 -- User card list items (cards inside a custom list)
 create table if not exists public.user_card_list_items (
     id       uuid        primary key default gen_random_uuid(),
-    list_id  uuid        not null references public.user_card_lists(id) on delete cascade,
-    card_id  uuid        not null references public.cards(id) on delete cascade,
-    added_at timestamptz not null default now(),
-    constraint user_card_list_items_list_card_key unique (list_id, card_id)
+    list_id  uuid        not null references public.user_card_lists(id),
+    card_id  uuid        not null references public.cards(id),
+    added_at timestamptz not null default now()
 );
 
 -- Trade proposals
@@ -433,8 +318,8 @@ create table if not exists public.user_card_list_items (
 --       currency_code: ISO 4217 (limited to the supported list below).
 create table if not exists public.trade_proposals (
     id             uuid        not null default gen_random_uuid() primary key,
-    proposer_id    uuid        not null references public.users(id) on delete cascade,
-    receiver_id    uuid        not null references public.users(id) on delete cascade,
+    proposer_id    uuid        not null references public.users(id),
+    receiver_id    uuid        not null references public.users(id),
     status         text        not null default 'pending'
                        check (status in ('pending','accepted','declined','withdrawn')),
     notes          text,
@@ -443,16 +328,15 @@ create table if not exists public.trade_proposals (
     cash_offered   numeric     not null default 0 check (cash_offered >= 0),
     cash_requested numeric     not null default 0 check (cash_requested >= 0),
     currency_code  text        not null default 'EUR'
-                       check (currency_code in ('EUR','USD','GBP','NOK','SEK','DKK','CAD','AUD','JPY','CHF')),
-    constraint trade_proposals_no_self check (proposer_id <> receiver_id)
+                       check (currency_code in ('EUR','USD','GBP','NOK','SEK','DKK','CAD','AUD','JPY','CHF'))
 );
 
 -- Trade proposal items (individual cards in a trade)
 -- NOTE: direction: 'offering' (proposer sends) | 'requesting' (proposer wants)
 create table if not exists public.trade_proposal_items (
     id          uuid        not null default gen_random_uuid() primary key,
-    proposal_id uuid        not null references public.trade_proposals(id) on delete cascade,
-    card_id     uuid        not null references public.cards(id) on delete cascade,
+    proposal_id uuid        not null references public.trade_proposals(id),
+    card_id     uuid        not null references public.cards(id),
     direction   text        not null check (direction in ('offering','requesting')),
     quantity    integer     not null default 1 check (quantity >= 1)
 );
@@ -463,7 +347,7 @@ create table if not exists public.variant_suggestions (
     name        text,
     key         text,
     status      text        default 'pending',
-    created_by  uuid        references public.users(id) on delete set null,
+    created_by  uuid        references public.users(id),
     created_at  timestamp   default now(),
     card_id     text,       -- text reference (not a UUID FK)
     description text
@@ -494,7 +378,7 @@ create table if not exists public.stories (
 --       Stripe billing metadata stored for Pro subscribers.
 create table if not exists public.user_subscriptions (
     id                     uuid        not null default gen_random_uuid() primary key,
-    user_id                uuid        not null unique references public.users(id) on delete cascade,
+    user_id                uuid        not null unique references public.users(id),
     tier                   text        not null default 'free'
                                check (tier in ('free','pro')),
     billing_period         text        check (billing_period in ('monthly','annual')),
@@ -510,14 +394,10 @@ create table if not exists public.user_subscriptions (
 -- ── ROW LEVEL SECURITY ────────────────────────────────────────
 
 alter table public.achievements              enable row level security;
-alter table public.card_cm_url_overrides     enable row level security;
-alter table public.card_graded_prices        enable row level security;
-alter table public.card_price_history        enable row level security;
-alter table public.card_prices               enable row level security;
 alter table public.card_variant_availability enable row level security;
 alter table public.card_variant_images       enable row level security;
 alter table public.friendships               enable row level security;
-alter table public.price_points              enable row level security;
+alter table public.item_prices               enable row level security;
 alter table public.set_products              enable row level security;
 alter table public.sets                      enable row level security;
 alter table public.trade_proposal_items      enable row level security;
@@ -706,10 +586,6 @@ $$;
 
 -- ── TRIGGERS ──────────────────────────────────────────────────
 
-create or replace trigger handle_updated_at_card_prices
-    before update on public.card_prices
-    for each row execute function public.handle_updated_at();
-
 create or replace trigger handle_updated_at_friendships
     before update on public.friendships
     for each row execute function public.handle_updated_at();
@@ -741,38 +617,6 @@ create or replace trigger handle_updated_at_stories
 create policy "Everyone can view achievements"
     on public.achievements for select using (true);
 
--- card_cm_url_overrides
-create policy "ccuo_read_all"
-    on public.card_cm_url_overrides for select using (true);
-
--- card_graded_prices
-create policy "card_graded_prices_public_read"
-    on public.card_graded_prices for select using (true);
-create policy "card_graded_prices_admin_insert"
-    on public.card_graded_prices for insert with check (public.is_admin());
-create policy "card_graded_prices_admin_update"
-    on public.card_graded_prices for update using (public.is_admin());
-create policy "card_graded_prices_admin_delete"
-    on public.card_graded_prices for delete using (public.is_admin());
-
--- card_price_history
-create policy "card_price_history_public_read"
-    on public.card_price_history for select using (true);
-create policy "card_price_history_admin_insert"
-    on public.card_price_history for insert with check (public.is_admin());
-create policy "card_price_history_admin_delete"
-    on public.card_price_history for delete using (public.is_admin());
-
--- card_prices
-create policy "card_prices_public_read"
-    on public.card_prices for select using (true);
-create policy "card_prices_admin_insert"
-    on public.card_prices for insert with check (public.is_admin());
-create policy "card_prices_admin_update"
-    on public.card_prices for update using (public.is_admin());
-create policy "card_prices_admin_delete"
-    on public.card_prices for delete using (public.is_admin());
-
 -- card_variant_availability
 create policy "cva_read_all"
     on public.card_variant_availability for select using (true);
@@ -793,15 +637,11 @@ create policy "friendships_parties_delete"
 create policy "friendships_admin_all"
     on public.friendships for all using (public.is_admin());
 
--- price_points
-create policy "price_points_select_public"
-    on public.price_points for select to anon, authenticated using (true);
-create policy "price_points_insert_admin"
-    on public.price_points for insert to authenticated with check (public.is_admin());
-create policy "price_points_update_admin"
-    on public.price_points for update to authenticated using (public.is_admin());
-create policy "price_points_delete_admin"
-    on public.price_points for delete to authenticated using (public.is_admin());
+-- item_prices
+create policy "item_prices_public_read"
+    on public.item_prices for select using (true);
+create policy "item_prices_admin_write"
+    on public.item_prices for all using (public.is_admin());
 
 -- set_products
 create policy "set_products_public_read"
@@ -979,35 +819,6 @@ create policy "user_subscriptions_admin_all"
 
 -- ── INDEXES ───────────────────────────────────────────────────
 
--- achievements
--- (achievements_name_key is created by the unique constraint above)
-
--- card_cm_url_overrides
-create index if not exists idx_ccuo_card_id
-    on public.card_cm_url_overrides(card_id);
-
--- card_graded_prices
-create index if not exists card_graded_prices_card_id_idx
-    on public.card_graded_prices(card_id);
-create index if not exists card_graded_prices_company_idx
-    on public.card_graded_prices(grading_company);
-create index if not exists card_graded_prices_fetched_at_idx
-    on public.card_graded_prices(fetched_at desc);
-
--- card_price_history
-create index if not exists cph_card_id_recorded_idx
-    on public.card_price_history(card_id, recorded_at desc);
-create index if not exists cph_card_variant_idx
-    on public.card_price_history(card_id, variant_key, recorded_at desc);
-create index if not exists cph_source_idx
-    on public.card_price_history(source);
-
--- card_prices
-create index if not exists card_prices_card_id_idx
-    on public.card_prices(card_id);
-create index if not exists card_prices_fetched_at_idx
-    on public.card_prices(fetched_at desc);
-
 -- card_variant_availability
 create index if not exists idx_cva_card_id    on public.card_variant_availability(card_id);
 create index if not exists idx_cva_variant_id on public.card_variant_availability(variant_id);
@@ -1028,10 +839,6 @@ create index if not exists idx_cards_set_id on public.cards(set_id);
 create index if not exists cards_tcggo_id_idx
     on public.cards(tcggo_id) where tcggo_id is not null;
 
--- ebay_webhooks
-create index if not exists ebay_webhooks_created_at_idx
-    on public.ebay_webhooks(created_at desc);
-
 -- friendships
 create index if not exists friendships_requester_idx
     on public.friendships(requester_id, status);
@@ -1042,13 +849,13 @@ create index if not exists friendships_accepted_requester_idx
 create index if not exists friendships_accepted_addressee_idx
     on public.friendships(addressee_id) where status = 'accepted';
 
--- price_points
-create index if not exists idx_price_points_card_id
-    on public.price_points(card_id);
-create index if not exists idx_price_points_source
-    on public.price_points(source);
-create index if not exists idx_price_points_variant_key
-    on public.price_points(variant_key);
+-- item_prices
+create index if not exists item_prices_item_id_idx
+    on public.item_prices(item_id);
+create index if not exists item_prices_item_type_idx
+    on public.item_prices(item_type);
+create index if not exists item_prices_updated_at_idx
+    on public.item_prices(updated_at desc);
 
 -- set_products
 create index if not exists set_products_set_id_idx
@@ -1061,8 +868,6 @@ create index if not exists sets_release_date_idx
     on public.sets(release_date desc);
 create index if not exists sets_series_idx
     on public.sets(series);
-create index if not exists idx_sets_prices_last_synced_at
-    on public.sets(prices_last_synced_at);
 
 -- trade_proposal_items
 create index if not exists trade_proposal_items_proposal_idx

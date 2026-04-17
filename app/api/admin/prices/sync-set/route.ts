@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
   const { data: setRow, error: setError } = await supabaseAdmin
     .from('sets')
     .select('api_set_id')
-    .eq('id', setId)
+    .eq('set_id', setId)
     .maybeSingle()
 
   if (setError || !setRow || !setRow.api_set_id) {
