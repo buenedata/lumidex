@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { createSupabaseServerClient } from '@/lib/supabaseServer'
+import { supabaseAdmin } from '@/lib/supabase'
 import ArtistDetailClient from '@/components/ArtistDetailClient'
 import type { ArtistCard } from '@/components/ArtistDetailClient'
 
@@ -33,10 +33,10 @@ export default async function ArtistDetailPage(
     notFound()
   }
 
-  // Fetch all cards by this artist directly from Supabase (server-side)
-  const supabase = await createSupabaseServerClient()
-
-  const { data, error } = await supabase
+  // Fetch all cards by this artist using the admin client so RLS does not
+  // filter out results for unauthenticated visitors. Card catalogue data is
+  // public — no user-specific rows are involved in this query.
+  const { data, error } = await supabaseAdmin
     .from('cards')
     .select('id, name, image, set_id, number, rarity, sets(name, symbol)')
     .ilike('artist', artistName)
