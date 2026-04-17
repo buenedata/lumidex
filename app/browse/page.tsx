@@ -79,44 +79,32 @@ async function fetchArtistCardResults(artistQuery: string): Promise<CardSearchRe
 }
 
 async function fetchArtistResults(query: string): Promise<ArtistResult[]> {
-  const { data } = await supabaseAdmin
-    .from('cards')
-    .select('artist, image')
-    .ilike('artist', `%${query}%`)
-    .not('artist', 'is', null)
-    .limit(1000)
+  const { data, error } = await supabaseAdmin
+    .rpc('get_artist_card_counts', { p_search: query, p_limit: 20 })
 
-  const map = new Map<string, { images: string[]; count: number }>()
-  for (const card of data ?? []) {
-    if (!card.artist) continue
-    const entry = map.get(card.artist)
-    if (entry) {
-      entry.count++
-      if (entry.images.length < 3 && card.image) entry.images.push(card.image)
-    } else {
-      map.set(card.artist, { images: card.image ? [card.image] : [], count: 1 })
-    }
+  if (error) {
+    console.error('[browse/fetchArtistResults] RPC error:', error)
+    return []
   }
 
-  return Array.from(map.entries())
-    .map(([name, { images, count }]) => ({ name, card_count: count, sample_images: images }))
-    .sort((a, b) => b.card_count - a.card_count)
-    .slice(0, 20)
+  return (data ?? []).map((row: { name: string; card_count: number; sample_images: string[] | null }) => ({
+    name:          row.name,
+    card_count:    Number(row.card_count),
+    sample_images: row.sample_images ?? [],
+  }))
 }
 
 async function fetchDiscoveryData(): Promise<DiscoveryData> {
-  const [setsResult, artistCardsResult] = await Promise.all([
+  const [setsResult, artistResult] = await Promise.all([
     supabaseAdmin
       .from('sets')
       .select('set_id, name, series, logo_url, release_date, "setTotal"')
       .not('release_date', 'is', null)
       .order('release_date', { ascending: false })
       .limit(4),
+    // RPC uses GROUP BY — accurate counts for all artists regardless of DB size
     supabaseAdmin
-      .from('cards')
-      .select('artist, image')
-      .not('artist', 'is', null)
-      .limit(10000),
+      .rpc('get_artist_card_counts', { p_search: null, p_limit: 4 }),
   ])
 
   const recentSets: DiscoverySet[] = (setsResult.data ?? []).map((s) => ({
@@ -128,22 +116,13 @@ async function fetchDiscoveryData(): Promise<DiscoveryData> {
     total:        (s as Record<string, unknown>)['setTotal'] as number | null ?? null,
   }))
 
-  const map = new Map<string, { images: string[]; count: number }>()
-  for (const card of (artistCardsResult.data ?? [])) {
-    if (!card.artist || card.artist.trim().toUpperCase() === 'N/A') continue
-    const entry = map.get(card.artist)
-    if (entry) {
-      entry.count++
-      if (entry.images.length < 3 && card.image) entry.images.push(card.image)
-    } else {
-      map.set(card.artist, { images: card.image ? [card.image] : [], count: 1 })
-    }
-  }
-
-  const featuredArtists = Array.from(map.entries())
-    .map(([name, { images, count }]) => ({ name, card_count: count, sample_images: images }))
-    .sort((a, b) => b.card_count - a.card_count)
-    .slice(0, 4)
+  const featuredArtists: ArtistResult[] = (artistResult.data ?? []).map(
+    (row: { name: string; card_count: number; sample_images: string[] | null }) => ({
+      name:          row.name,
+      card_count:    Number(row.card_count),
+      sample_images: row.sample_images ?? [],
+    })
+  )
 
   return { featuredArtists, recentSets }
 }
