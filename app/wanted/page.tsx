@@ -17,7 +17,6 @@ export default function WantedPage() {
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState<string | null>(null)
   const [search, setSearch]         = useState('')
-  const [cardPricesUSD, setCardPricesUSD] = useState<Record<string, number>>({})
 
   // Auth guard
   useEffect(() => {
@@ -38,14 +37,6 @@ export default function WantedPage() {
       .then(data => {
         const loadedCards: PokemonCard[] = data.cards ?? []
         setCards(loadedCards)
-        // Fetch prices for all wanted cards in a single batch request
-        if (loadedCards.length > 0) {
-          const ids = loadedCards.map((c: PokemonCard) => c.id).join(',')
-          fetch(`/api/prices/batch?ids=${ids}`)
-            .then(r => r.json())
-            .then(d => setCardPricesUSD(d.prices ?? {}))
-            .catch(() => {})
-        }
       })
       .catch(() => {
         setError('Could not load your wanted list. Please try again.')
@@ -162,7 +153,6 @@ export default function WantedPage() {
             cards={filteredCards}
             userCards={userCards}
             setTotal={filteredCards.length}
-            cardPricesUSD={cardPricesUSD}
             disableGreyOut
             onWantedStatusChange={(cardId, isWanted) => {
               // Remove the card instantly when the user un-stars it

@@ -20,7 +20,6 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   let allSeries: SeriesProductGroup[] = []
   let ownedQuantities: Record<string, number> = {}
   let userId: string | null = null
-  let currency = 'USD'
   let error: string | null = null
 
   // Products will be empty until the new pricing system is implemented
@@ -34,21 +33,10 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
     if (user) {
       userId = user.id
 
-      const [profileResult, ownedResult] = await Promise.all([
-          supabaseAdmin
-            .from('users')
-            .select('preferred_currency')
-            .eq('id', user.id)
-            .maybeSingle(),
-          supabaseAdmin
-            .from('user_sealed_products')
-            .select('product_id, quantity')
-            .eq('user_id', user.id),
-        ])
-  
-        if (profileResult.data?.preferred_currency) {
-          currency = profileResult.data.preferred_currency
-        }
+      const ownedResult = await supabaseAdmin
+        .from('user_sealed_products')
+        .select('product_id, quantity')
+        .eq('user_id', user.id)
 
       // Build productId → quantity map
       for (const row of (ownedResult.data ?? [])) {
@@ -162,7 +150,6 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
           initialSeries={initialSeries}
           ownedQuantities={ownedQuantities}
           userId={userId}
-          currency={currency}
         />
       </div>
     </div>
