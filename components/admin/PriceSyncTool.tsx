@@ -98,6 +98,7 @@ function SyncSingleSetSection() {
   const [selectedSetId,   setSelectedSetId]   = useState<string | null>(null)
   const [selectedSetName, setSelectedSetName] = useState<string | null>(null)
   const [includeGraded,   setIncludeGraded]   = useState(true)
+  const [episodeIdOverride, setEpisodeIdOverride] = useState('')
   const [status,          setStatus]          = useState<SyncStatus>('idle')
   const [result,          setResult]          = useState<SingleSetResult | null>(null)
   const [errorMsg,        setErrorMsg]        = useState<string | null>(null)
@@ -117,10 +118,13 @@ function SyncSingleSetSection() {
     setErrorMsg(null)
 
     try {
+      const body: Record<string, unknown> = { setId: selectedSetId, includeGraded }
+      if (episodeIdOverride.trim()) body.episodeId = episodeIdOverride.trim()
+
       const res = await fetch('/api/admin/prices/sync-set', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ setId: selectedSetId, includeGraded }),
+        body:    JSON.stringify(body),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -148,6 +152,24 @@ function SyncSingleSetSection() {
           Select a set to sync prices for
         </label>
         <SetSelector onSetSelect={handleSetSelect} selectedSetId={selectedSetId} />
+      </div>
+
+      {/* TCGGO Episode ID override */}
+      <div>
+        <label className="block text-xs font-medium text-gray-400 mb-1">
+          TCGGO Episode ID{' '}
+          <span className="text-gray-600 font-normal">(optional — required only if this set has no episode ID stored yet)</span>
+        </label>
+        <input
+          type="text"
+          value={episodeIdOverride}
+          onChange={(e) => setEpisodeIdOverride(e.target.value)}
+          placeholder="e.g. 1, 42, 587"
+          className="w-full max-w-xs px-3 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-600 text-sm focus:outline-none focus:border-yellow-500 transition-colors"
+        />
+        <p className="mt-1 text-gray-600 text-xs">
+          If filled in, this ID is saved to the set&apos;s record so future syncs work automatically.
+        </p>
       </div>
 
       {/* Include graded checkbox */}
@@ -335,20 +357,32 @@ interface ProductsResult {
 }
 
 function SyncProductsSection() {
-  const [status,   setStatus]   = useState<SyncStatus>('idle')
-  const [result,   setResult]   = useState<ProductsResult | null>(null)
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [selectedSetId,   setSelectedSetId]   = useState<string | null>(null)
+  const [selectedSetName, setSelectedSetName] = useState<string | null>(null)
+  const [status,          setStatus]          = useState<SyncStatus>('idle')
+  const [result,          setResult]          = useState<ProductsResult | null>(null)
+  const [errorMsg,        setErrorMsg]        = useState<string | null>(null)
 
   const reset = () => { setStatus('idle'); setResult(null); setErrorMsg(null) }
 
+  const handleSetSelect = (id: string, name: string) => {
+    setSelectedSetId(id)
+    setSelectedSetName(name)
+    reset()
+  }
+
   const handleSync = async () => {
-    if (status === 'syncing') return
+    if (!selectedSetId || status === 'syncing') return
     setStatus('syncing')
     setResult(null)
     setErrorMsg(null)
 
     try {
-      const res = await fetch('/api/admin/prices/sync-products', { method: 'POST' })
+      const res = await fetch('/api/admin/prices/sync-products', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ setId: selectedSetId }),
+      })
       const data = await res.json()
       if (!res.ok) {
         setErrorMsg(data?.error ?? `Request failed (${res.status})`)
@@ -369,16 +403,27 @@ function SyncProductsSection() {
     <SectionCard>
       <SectionTitle>3 · Sync Products</SectionTitle>
 
+      {/* Set selector */}
+      <div>
+        <label className="block text-xs font-medium text-gray-400 mb-2">
+          Select a set to sync sealed product prices for
+        </label>
+        <SetSelector onSetSelect={handleSetSelect} selectedSetId={selectedSetId} />
+      </div>
+
       <p className="text-gray-400 text-xs leading-relaxed">
-        Fetches <strong className="text-white">sealed product</strong> prices from TCGGO for every
-        product in the catalogue that has a known TCGGO product ID.
-        Uses <code className="text-yellow-400">prices.cardmarket.lowest</code>.
+        Fetches <strong className="text-white">all sealed products</strong> for the selected set from
+        the <strong className="text-white">TCGGO episode endpoint</strong> and upserts each
+        product&apos;s Cardmarket <strong className="text-white">lowest</strong> price into{' '}
+        <code className="text-yellow-400">item_prices</code>.
+        Also back-fills <code className="text-yellow-400">set_products.api_product_id</code> where
+        it is missing.
       </p>
 
       {status !== 'done' && (
         <SyncButton
           onClick={handleSync}
-          disabled={isSyncing}
+          disabled={!selectedSetId || isSyncing}
           loading={isSyncing}
           label="▶ Sync Products"
         />
@@ -397,7 +442,9 @@ function SyncProductsSection() {
 
       {status === 'done' && result && (
         <div className="p-4 bg-gray-900 border border-green-800 rounded-xl text-sm space-y-3">
-          <p className="font-semibold text-green-400">✅ Product sync complete</p>
+          <p className="font-semibold text-green-400">
+            ✅ Product sync complete{selectedSetName ? ` — ${selectedSetName}` : ''}
+          </p>
           <div className="grid grid-cols-3 gap-2">
             <Stat label="Synced"  value={result.synced}  colour="text-green-400" />
             <Stat label="Skipped" value={result.skipped} colour="text-gray-400"  />

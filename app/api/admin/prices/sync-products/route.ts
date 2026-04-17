@@ -2,19 +2,22 @@
 // app/api/admin/prices/sync-products/route.ts
 //
 // POST /api/admin/prices/sync-products
-// Syncs sealed product prices from TCGGO for every set_product that has a
-// known api_product_id.
+// Syncs sealed product prices from TCGGO for every product in a given set.
 //
 // Strategy:
-//   1. Load all api_product_id values from set_products.
-//   2. Paginate through GET /pokemon/products from TCGGO.
-//   3. For each TCGGO product whose id matches one of ours, extract
-//      prices.cardmarket.lowest and upsert into item_prices.
+//   1. Accept a setId from the request body.
+//   2. Resolve the TCGGO episode ID (api_set_id) for that set.
+//   3. Paginate GET /pokemon/episodes/{episodeId}/products from TCGGO —
+//      fetching ALL products for the chosen set, not just those already
+//      known to have an api_product_id.
+//   4. Extract prices.cardmarket.lowest and upsert into item_prices.
+//   5. Back-fill set_products.api_product_id for any matching row in the
+//      same set that shares the product name (best-effort, non-blocking).
 //
 // Batches upserts in groups of UPSERT_BATCH to avoid timeouts.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
 const TCGGO_BASE_URL = 'https://cardmarket-api-tcg.p.rapidapi.com'
@@ -25,6 +28,7 @@ const UPSERT_BATCH   = 50
 
 interface TcggoProductEntry {
   id: number | string
+  name?: string | null
   prices?: {
     cardmarket?: {
       lowest?: number | null
@@ -39,42 +43,44 @@ interface TcggoProductsResponse {
 
 // ── Route handler ─────────────────────────────────────────────────────────────
 
-export async function POST() {
-  // ── 1. Load all known product IDs from Supabase ───────────────────────────
-  const { data: productRows, error: dbError } = await supabaseAdmin
-    .from('set_products')
-    .select('api_product_id')
-    .not('api_product_id', 'is', null)
+export async function POST(req: NextRequest) {
+  // ── 1. Parse & validate ───────────────────────────────────────────────────
+  let setId: string
+  try {
+    const body = await req.json()
+    setId      = body?.setId
+    if (!setId || typeof setId !== 'string') {
+      return NextResponse.json({ error: 'Missing or invalid setId' }, { status: 400 })
+    }
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
 
-  if (dbError) {
+  // ── 2. Resolve TCGGO episode ID ───────────────────────────────────────────
+  const { data: setRow, error: setError } = await supabaseAdmin
+    .from('sets')
+    .select('api_set_id')
+    .eq('set_id', setId)
+    .maybeSingle()
+
+  if (setError || !setRow || !setRow.api_set_id) {
     return NextResponse.json(
-      { error: 'Failed to fetch set_products', detail: dbError.message },
-      { status: 500 },
+      { error: 'Set not found or missing TCGGO episode ID' },
+      { status: 400 },
     )
   }
 
-  const knownIds = new Set(
-    (productRows ?? []).map((r: { api_product_id: string }) => String(r.api_product_id)),
-  )
+  const episodeId = setRow.api_set_id as string
 
-  if (knownIds.size === 0) {
-    return NextResponse.json({
-      success: true,
-      total: 0,
-      synced: 0,
-      skipped: 0,
-      failed: 0,
-      note: 'No set_products with api_product_id found',
-    })
-  }
-
-  // ── 2. Fetch all products from TCGGO (paginated) ──────────────────────────
-  const matched: Array<{ item_id: string; price: number | null }> = []
+  // ── 3. Fetch all products for this episode from TCGGO (paginated) ─────────
+  // Uses the episode-scoped endpoint so only products for the chosen set are
+  // returned — identical pagination pattern to sync-set's card fetch.
+  const allProducts: TcggoProductEntry[] = []
 
   try {
     let page = 1
     while (true) {
-      const url = `${TCGGO_BASE_URL}/pokemon/products?per_page=${PER_PAGE}&page=${page}`
+      const url = `${TCGGO_BASE_URL}/pokemon/episodes/${episodeId}/products?per_page=${PER_PAGE}&page=${page}`
 
       const res = await fetch(url, {
         headers: {
@@ -94,16 +100,7 @@ export async function POST() {
       const json     = (await res.json()) as TcggoProductsResponse
       const pageData = Array.isArray(json?.data) ? json.data : []
 
-      for (const product of pageData) {
-        const id = String(product.id)
-        if (knownIds.has(id)) {
-          matched.push({
-            item_id: id,
-            price:   product.prices?.cardmarket?.lowest ?? null,
-          })
-        }
-      }
-
+      allProducts.push(...pageData)
       if (pageData.length < PER_PAGE) break
       page++
     }
@@ -115,19 +112,30 @@ export async function POST() {
     )
   }
 
-  // ── 3. Build upsert rows ──────────────────────────────────────────────────
+  if (allProducts.length === 0) {
+    return NextResponse.json({
+      success: true,
+      total:   0,
+      synced:  0,
+      skipped: 0,
+      failed:  0,
+      note:    'TCGGO returned no products for this episode',
+    })
+  }
+
+  // ── 4. Build upsert rows ──────────────────────────────────────────────────
   const now  = new Date().toISOString()
-  const rows = matched.map(({ item_id, price }) => ({
-    item_id,
+  const rows = allProducts.map((product) => ({
+    item_id:    String(product.id),
     item_type:  'product',
     variant:    'normal',
-    price,
+    price:      product.prices?.cardmarket?.lowest ?? null,
     currency:   'EUR',
     source:     'tcggo',
     updated_at: now,
   }))
 
-  // ── 4. Batch upserts ──────────────────────────────────────────────────────
+  // ── 5. Batch upserts ──────────────────────────────────────────────────────
   let synced  = 0
   let skipped = 0
   let failed  = 0
@@ -150,7 +158,39 @@ export async function POST() {
     }
   }
 
-  // ── 5. Return summary ─────────────────────────────────────────────────────
+  // ── 6. Back-fill api_product_id on set_products rows (best-effort) ────────
+  // For any TCGGO product whose name matches a set_products row in this set
+  // that has no api_product_id yet, write it back so future syncs are faster.
+  try {
+    const productsWithNames = allProducts.filter((p) => p.name)
+    if (productsWithNames.length > 0) {
+      const { data: localProducts } = await supabaseAdmin
+        .from('set_products')
+        .select('id, name, api_product_id')
+        .eq('set_id', setId)
+        .is('api_product_id', null)
+
+      if (localProducts && localProducts.length > 0) {
+        const nameToTcggoId = new Map(
+          productsWithNames.map((p) => [String(p.name).toLowerCase().trim(), String(p.id)]),
+        )
+        for (const local of localProducts) {
+          const match = nameToTcggoId.get(String(local.name).toLowerCase().trim())
+          if (match) {
+            await supabaseAdmin
+              .from('set_products')
+              .update({ api_product_id: match })
+              .eq('id', local.id)
+          }
+        }
+      }
+    }
+  } catch (backfillErr) {
+    // Non-fatal — prices were already upserted; log and continue
+    console.warn('[sync-products] Back-fill api_product_id failed (non-fatal):', backfillErr)
+  }
+
+  // ── 7. Return summary ─────────────────────────────────────────────────────
   return NextResponse.json({
     success: true,
     total:   rows.length,

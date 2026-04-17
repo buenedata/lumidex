@@ -171,10 +171,16 @@ export async function POST(req: NextRequest) {
   // ── 1. Parse & validate ───────────────────────────────────────────────────
   let setId: string
   let includeGraded = true
+  let episodeIdOverride: string | undefined
   try {
     const body   = await req.json()
     setId        = body?.setId
     if (body?.includeGraded === false) includeGraded = false
+    // Optional override: admin can supply the TCGGO episode ID directly
+    // when it is not yet stored in the sets table.
+    if (body?.episodeId && typeof body.episodeId === 'string' && body.episodeId.trim()) {
+      episodeIdOverride = body.episodeId.trim()
+    }
     if (!setId || typeof setId !== 'string') {
       return NextResponse.json({ error: 'Missing or invalid setId' }, { status: 400 })
     }
@@ -183,20 +189,33 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 2. Resolve TCGGO episode ID ───────────────────────────────────────────
-  const { data: setRow, error: setError } = await supabaseAdmin
-    .from('sets')
-    .select('api_set_id')
-    .eq('set_id', setId)
-    .maybeSingle()
+  // If the caller supplied an explicit episodeId, use it and persist it back
+  // to sets.api_set_id so future syncs work without re-entering it.
+  let episodeId: string
 
-  if (setError || !setRow || !setRow.api_set_id) {
-    return NextResponse.json(
-      { error: 'Set not found or missing TCGGO episode ID' },
-      { status: 400 },
-    )
+  if (episodeIdOverride) {
+    episodeId = episodeIdOverride
+    // Persist the episode ID so the set is sync-ready from now on
+    await supabaseAdmin
+      .from('sets')
+      .update({ api_set_id: episodeId })
+      .eq('set_id', setId)
+  } else {
+    const { data: setRow, error: setError } = await supabaseAdmin
+      .from('sets')
+      .select('api_set_id')
+      .eq('set_id', setId)
+      .maybeSingle()
+
+    if (setError || !setRow || !setRow.api_set_id) {
+      return NextResponse.json(
+        { error: 'Set not found or missing TCGGO episode ID (supply episodeId in the request body to set it)' },
+        { status: 400 },
+      )
+    }
+
+    episodeId = setRow.api_set_id as string
   }
-
-  const episodeId = setRow.api_set_id as string
 
   // ── 3. Fetch all cards from TCGGO ─────────────────────────────────────────
   let allCards: TcggoCardEntry[]
