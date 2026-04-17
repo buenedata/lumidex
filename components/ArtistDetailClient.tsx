@@ -26,13 +26,11 @@ interface ArtistDetailClientProps {
 // ── Single card tile ──────────────────────────────────────────────────────────
 
 function CardTile({ card, collectionQty }: { card: ArtistCard; collectionQty: number }) {
-  // Mirror the fallback chain in getCardImageWithFallback:
-  // 1. cards.image (R2 webp / direct URL stored in DB)
-  // 2. Legacy R2 key derived from set_id + number (for cards uploaded before the image column was backfilled)
-  // 3. Card-back placeholder
+  // Mirror getCardImageWithFallback exactly — use || (truthiness) not ??
+  // so that both null AND empty-string image values fall through to the legacy R2 URL.
   const imgSrc = card.image
-    ?? (card.set_id && card.number ? getCardImageUrl(card.set_id, card.number) : null)
-    ?? '/pokemon_card_backside.png'
+    || (card.set_id && card.number ? getCardImageUrl(card.set_id, card.number) : null)
+    || '/pokemon_card_backside.png'
   const setName     = card.sets?.name ?? null
   const setSymbol   = card.sets?.symbol ?? null
   const setComplete = card.sets?.setComplete ?? null
