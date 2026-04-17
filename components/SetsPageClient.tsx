@@ -52,8 +52,7 @@ const KNOWN_SERIES_ORDER: Record<string, number> = {
   'Scarlet & Violet':          220,
 }
 
-export default function SetsPageClient({ sets, favoritedSetIds, userId, seriesWithProducts = [] }: SetsPageClientProps) {
-  const seriesWithProductsSet = useMemo(() => new Set(seriesWithProducts), [seriesWithProducts])
+export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPageClientProps) {
   const [favoritedIds, setFavoritedIds] = useState<Set<string>>(
     () => new Set(favoritedSetIds)
   )
@@ -344,7 +343,6 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId, seriesWi
 
       {/* ── Series sections ────────────────────────────────────────────── */}
       {Array.from(groupedSets.entries()).map(([series, seriesSets]) => {
-        const hasProducts = seriesWithProductsSet.has(series)
         // Use the logo of the first set in the series (newest) for the Products card background
         const seriesLogoUrl = seriesSets[0]?.logo_url ?? null
 
@@ -375,9 +373,8 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId, seriesWi
                 />
               ))}
 
-              {/* Products entry card — only shown when this series has sealed products */}
-              {hasProducts && (
-                <Link
+              {/* Products entry card — always shown as last tile in each series */}
+              <Link
                   href={`/products?series=${encodeURIComponent(series)}`}
                   className={cn(
                     'group relative flex flex-col rounded-xl overflow-hidden h-full min-h-[220px]',
@@ -438,8 +435,7 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId, seriesWi
                       View all →
                     </span>
                   </div>
-                </Link>
-              )}
+              </Link>
             </div>
           </section>
         )

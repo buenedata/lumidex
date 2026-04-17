@@ -6,8 +6,22 @@ export const metadata = {
 }
 
 interface FAQItem {
-  question: string
+  question: React.ReactNode
   answer: React.ReactNode
+}
+
+/** Reusable inline Pro badge — server-safe (no client import needed). */
+function InlineProBadge() {
+  return (
+    <span
+      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-bold
+        bg-[rgba(109,95,255,0.15)] text-[#a78bfa] border border-[rgba(109,95,255,0.3)]
+        shadow-[0_0_8px_rgba(109,95,255,0.2)] align-middle ml-1"
+      title="Lumidex Pro feature"
+    >
+      💎 Pro
+    </span>
+  )
 }
 
 const FAQ_SECTIONS: { section: string; items: FAQItem[] }[] = [
@@ -21,8 +35,74 @@ const FAQ_SECTIONS: { section: string; items: FAQItem[] }[] = [
       },
       {
         question: 'Is Lumidex free to use?',
-        answer:
-          'Yes — Lumidex is free right now, but we will have two memberships in the future. One paid and one free. More information about this will come at a later stage.',
+        answer: (
+          <div className="flex flex-col gap-4">
+            <div>
+              <p className="font-semibold text-primary mb-1.5">Free tier — always free</p>
+              <p className="mb-1">Yes, Lumidex has a fully featured free tier. No credit card required. Free includes:</p>
+              <ul className="list-disc list-inside space-y-1 mt-2 pl-1">
+                <li>Unlimited card collection tracking across all sets and variants</li>
+                <li>All three Collection Goals (Normal Set, Masterset, Grandmaster Set)</li>
+                <li>Binder Calculator</li>
+                <li>Today&rsquo;s card prices from CardMarket &amp; TCGPlayer</li>
+                <li>7-day price history per card variant</li>
+                <li>Today&rsquo;s total portfolio value</li>
+                <li>Wanted list + up to 2 custom named lists</li>
+                <li>Public profile, friends system, and trade proposals</li>
+                <li>All 36 achievements</li>
+                <li>Browse all sets, cards, and artists</li>
+              </ul>
+            </div>
+            <div>
+              <p className="font-semibold text-primary mb-1.5">
+                Lumidex Pro — <span className="font-normal text-secondary">€4.99/month or €39.99/year</span>
+              </p>
+              <p className="mb-1">
+                Pro is for the investment-minded collector who wants the full picture. See the{' '}
+                <Link href="/upgrade" className="text-accent hover:underline">upgrade page</Link>
+                {' '}for a full breakdown, or read the <em>&ldquo;What features are included in Lumidex Pro?&rdquo;</em> entry below.
+              </p>
+            </div>
+          </div>
+        ),
+      },
+      {
+        question: 'What features are included in Lumidex Pro?',
+        answer: (
+          <div className="flex flex-col gap-3">
+            <p>
+              Lumidex Pro is a paid subscription (
+              <strong>€4.99/month</strong> or <strong>€39.99/year</strong> — save 33%).
+              It unlocks everything you need to track your collection like an investor:
+            </p>
+            <ul className="space-y-2 mt-1">
+              {[
+                { label: '14/30/90/365-day price history charts', note: 'Free tier gets 7-day history' },
+                { label: 'Portfolio value over time', note: 'See how your collection has grown or dipped' },
+                { label: 'Price alerts', note: 'Get notified when a card crosses your target price (up to 10 active alerts)' },
+                { label: 'Graded cards tracking (PSA, BGS, CGC, TAG, ACE)', note: null },
+                { label: 'Sealed products tracking', note: 'Booster boxes, ETBs, tins, and more' },
+                { label: 'Unlimited custom lists', note: 'Free tier allows 2' },
+                { label: 'Collection export (CSV / JSON)', note: 'Includes card names, sets, variants, quantities, and prices' },
+                { label: 'Advanced collection analytics', note: 'Top valuable cards, rarity breakdowns, value by set, best/worst performers' },
+                { label: 'Pro profile badge', note: 'Glowing 💎 badge on your public profile + early access to new features' },
+                { label: 'Priority price sync', note: 'Pro users get more frequent price refreshes' },
+              ].map(({ label, note }) => (
+                <li key={label} className="flex items-start gap-2">
+                  <span className="text-[#34d399] flex-shrink-0 mt-0.5">✓</span>
+                  <span>
+                    <span className="text-primary font-medium">{label}</span>
+                    {note && <span className="text-secondary"> — {note}</span>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-secondary text-xs pt-1">
+              Cancel any time · Secure payment by Stripe · VAT included ·{' '}
+              <Link href="/upgrade" className="text-accent hover:underline">Upgrade now →</Link>
+            </p>
+          </div>
+        ),
       },
       {
         question: 'Which card games does Lumidex support?',
@@ -37,28 +117,64 @@ const FAQ_SECTIONS: { section: string; items: FAQItem[] }[] = [
       {
         question: 'How do I add cards to my collection?',
         answer: (
+          <ol className="flex flex-col gap-2 list-none m-0 p-0">
+            <li className="flex items-start gap-2">
+              <span className="text-accent font-bold shrink-0">1.</span>
+              <span>Browse to any set from the <Link href="/sets" className="text-accent hover:underline">Sets</Link> page.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-accent font-bold shrink-0">2.</span>
+              <span>Click on a card to open its detail panel.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-accent font-bold shrink-0">3.</span>
+              <span>Select your variant — Normal, Reverse Holo, Cosmos Holo, and more.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-accent font-bold shrink-0">4.</span>
+              <span>Left-click a variant dot on the set page to add a copy, or use the <strong>+&thinsp;/&thinsp;−</strong> buttons inside the card detail to set an exact quantity. Right-click a dot to decrease.</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <span className="text-accent font-bold shrink-0">5.</span>
+              <span>Watch your progress bar fill up as you complete the set!</span>
+            </li>
+          </ol>
+        ),
+      },
+      {
+        question: (
           <>
-            Browse to any set under{' '}
-            <Link href="/sets" className="text-accent hover:underline">Sets</Link>
-            {' '}or search for a card via the top search bar. Left click a variant box under the
-            card image to increase it's quantity. Right click to decrease. You can also click a 
-            card to open its detail modal, then use the + / − buttons to set how many copies you own. 
-            You can track individual variants (Normal, Reverse Holo, Cosmos Holo, etc.) separately.
+            Can I track graded cards (PSA, BGS, CGC)?
+            <InlineProBadge />
+          </>
+        ),
+        answer: (
+          <>
+            Yes — graded card tracking is a{' '}
+            <Link href="/upgrade" className="text-accent hover:underline font-medium">Lumidex Pro</Link>
+            {' '}feature. With Pro, open any card modal, scroll to the bottom of the Card tab, and use the{' '}
+            <strong>&ldquo;Add graded copy&rdquo;</strong> button to log a graded card with its grade and grading company.
+            Supported graders: <strong>PSA, BGS (Beckett), CGC, TAG, and ACE</strong>. Graded card values use dedicated
+            graded-sale price data where available and are tracked separately from your raw card collection.
           </>
         ),
       },
       {
-        question: 'Can I track graded cards (PSA, BGS, CGC)?',
-        answer:
-          'Yes. Open a card modal, scroll to the bottom of the Card tab, and use the "Add graded copy" button to log a graded card with its grade and grading company.',
-      },
-      {
-        question: 'How do I track sealed products?',
+        question: (
+          <>
+            How do I track sealed products?
+            <InlineProBadge />
+          </>
+        ),
         answer: (
           <>
-            Navigate to the{' '}
+            Sealed products tracking is a{' '}
+            <Link href="/upgrade" className="text-accent hover:underline font-medium">Lumidex Pro</Link>
+            {' '}feature. With Pro, navigate to the{' '}
             <Link href="/sets" className="text-accent hover:underline">Sets</Link>
-            {' '}page and open any set. From there, go to the <strong>Products</strong> tab to find booster boxes, ETBs, tins, and other sealed items for that set — then use the + / − buttons to track how many you own.
+            {' '}page and open any set. From there, go to the <strong>Products</strong> tab to find booster boxes,
+            ETBs, tins, and other sealed items for that set — then use the + / − buttons to track how many you own.
+            Sealed product values are included in your total portfolio value.
           </>
         ),
       },
@@ -102,8 +218,27 @@ const FAQ_SECTIONS: { section: string; items: FAQItem[] }[] = [
       },
       {
         question: 'How is my collection value calculated?',
-        answer:
-          'Your collection value is the sum of market prices for every card and sealed product you own, using your preferred currency. Graded card prices use dedicated graded-sale data where available.',
+        answer: (
+          <>
+            Your collection value is the sum of market prices for every card and sealed product you own, using your
+            preferred currency. Graded card prices use dedicated graded-sale data where available.{' '}
+            <strong>Free users see today&rsquo;s snapshot value.</strong>{' '}
+            <Link href="/upgrade" className="text-accent hover:underline font-medium">Lumidex Pro</Link>
+            {' '}unlocks the full portfolio value history chart so you can see how your collection&rsquo;s worth has
+            changed over time.
+          </>
+        ),
+      },
+      {
+        question: 'How much price history can I see?',
+        answer: (
+          <>
+            <strong>Free users</strong> see a 7-day price history chart for every card variant — enough to spot short-term
+            trends. <Link href="/upgrade" className="text-accent hover:underline font-medium">Lumidex Pro</Link>
+            {' '}extends this to <strong>14-day, 30-day, 90-day, and 1-year</strong> history, giving you the full picture
+            of a card&rsquo;s long-term price movement.
+          </>
+        ),
       },
     ],
   },
@@ -251,8 +386,8 @@ export default function FAQPage() {
             </h2>
 
             <div className="flex flex-col divide-y divide-subtle border border-subtle rounded-2xl overflow-hidden">
-              {section.items.map((item) => (
-                <div key={item.question} className="px-5 py-5 bg-[color:var(--color-bg-surface)]">
+              {section.items.map((item, idx) => (
+                <div key={idx} className="px-5 py-5 bg-[color:var(--color-bg-surface)]">
                   <p className="text-sm font-semibold text-primary mb-2">{item.question}</p>
                   <div className="text-sm text-secondary leading-relaxed">{item.answer}</div>
                 </div>

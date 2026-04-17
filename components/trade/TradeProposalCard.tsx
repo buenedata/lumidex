@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
@@ -19,6 +19,7 @@ interface TPCard {
   name: string | null
   number: string | null
   image: string | null
+  tcggo_id?: string | null
   sets?: { name: string | null; logo_url: string | null } | Array<{ name: string | null; logo_url: string | null }>
 }
 
@@ -85,6 +86,26 @@ const STATUS_LABELS: Record<string, string> = {
 // ── Detailed card tile ────────────────────────────────────────────────────────
 function CardDetailTile({ item }: { item: TPItem }) {
   const card = item.cards
+
+  // undefined = loading, null = no price available
+  const [cardPrice, setCardPrice] = useState<{ amount: number; currency: string } | null | undefined>(undefined)
+
+  useEffect(() => {
+    if (!card?.tcggo_id) { setCardPrice(null); return }
+    let cancelled = false
+    fetch(`/api/prices/card-variants/${card.tcggo_id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (cancelled || !d) { setCardPrice(null); return }
+        const v = d.variants as Record<string, number | null>
+        // Prefer normal, then reverse_holo, then any available variant
+        const amount = v.normal ?? v.reverse_holo ?? Object.values(v).find(x => x != null) ?? null
+        setCardPrice(amount != null ? { amount, currency: d.currency ?? 'EUR' } : null)
+      })
+      .catch(() => { if (!cancelled) setCardPrice(null) })
+    return () => { cancelled = true }
+  }, [card?.tcggo_id])
+
   if (!card) return null
   const setInfo = (Array.isArray(card.sets) ? card.sets[0] : card.sets) as { name: string | null; logo_url: string | null } | null
 
@@ -125,8 +146,18 @@ function CardDetailTile({ item }: { item: TPItem }) {
         {card.number ? ` · #${card.number}` : ''}
       </p>
 
-      {/* Price */}
-      <span className="text-xs text-gray-400 italic">Prices coming soon</span>
+      {/* Market price */}
+      {cardPrice === undefined ? (
+        <span className="text-[10px] text-muted">…</span>
+      ) : cardPrice !== null ? (
+        <span className="text-xs font-semibold text-price">
+          {new Intl.NumberFormat(cardPrice.currency === 'EUR' ? 'de-DE' : 'en-US', {
+            style: 'currency',
+            currency: cardPrice.currency,
+            maximumFractionDigits: 2,
+          }).format(cardPrice.amount)}
+        </span>
+      ) : null}
     </div>
   )
 }

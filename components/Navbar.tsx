@@ -17,6 +17,14 @@ interface NotifProposal {
   offeringCount: number
 }
 
+interface NotifFriend {
+  id: string   // friendship_id
+  type: 'received' | 'accepted' | 'declined'
+  otherUser: { id: string; display_name: string | null; username: string | null; avatar_url: string | null }
+  created_at: string
+  updated_at?: string
+}
+
 function relTime(iso: string): string {
   const mins  = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000)
   if (mins < 2)   return 'just now'
@@ -35,8 +43,71 @@ export default function Navbar() {
 
   const [searchQuery,    setSearchQuery]    = useState('')
   const [proposals,      setProposals]      = useState<NotifProposal[]>([])
+  const [friendNotifs,   setFriendNotifs]   = useState<NotifFriend[]>([])
+  const [seenFriendIds,  setSeenFriendIds]  = useState<Set<string>>(new Set())
   const [showNotif,      setShowNotif]      = useState(false)
   const notifRef = useRef<HTMLDivElement>(null)
+
+  // Load dismissed friend notification IDs from localStorage
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('lumidex_friend_notif_seen')
+      if (raw) setSeenFriendIds(new Set(JSON.parse(raw) as string[]))
+    } catch {}
+  }, [])
+
+  // Poll for friend notifications
+  useEffect(() => {
+    if (!user) return
+    function loadFriends() {
+      fetch('/api/friendships')
+        .then(r => r.json())
+        .then(d => {
+          const notifs: NotifFriend[] = []
+
+          // Pending incoming → "X sent you a friend request"
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          for (const f of (d.pending_incoming ?? []) as any[]) {
+            notifs.push({
+              id: f.friendship_id,
+              type: 'received',
+              otherUser: { id: f.user_id, display_name: f.display_name, username: f.username, avatar_url: f.avatar_url },
+              created_at: f.created_at,
+            })
+          }
+
+          // Accepted outgoing → "X accepted your friend request"
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          for (const f of (d.accepted_outgoing ?? []) as any[]) {
+            notifs.push({
+              id: f.friendship_id,
+              type: 'accepted',
+              otherUser: { id: f.user_id, display_name: f.display_name, username: f.username, avatar_url: f.avatar_url },
+              created_at: f.created_at,
+              updated_at: f.updated_at,
+            })
+          }
+
+          // Declined outgoing → "X declined your friend request"
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          for (const f of (d.declined_outgoing ?? []) as any[]) {
+            notifs.push({
+              id: f.friendship_id,
+              type: 'declined',
+              otherUser: { id: f.user_id, display_name: f.display_name, username: f.username, avatar_url: f.avatar_url },
+              created_at: f.created_at,
+              updated_at: f.updated_at,
+            })
+          }
+
+          setFriendNotifs(notifs)
+        })
+        .catch(() => {})
+    }
+    loadFriends()
+    const fid = setInterval(loadFriends, 60_000)
+    return () => clearInterval(fid)
+  }, [user])
 
   // Poll for pending trade proposals
   useEffect(() => {
@@ -74,6 +145,23 @@ export default function Navbar() {
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [showNotif])
+
+  // Friend notifications that are still "unread":
+  //   - 'received' ones always show until the user acts (they vanish from the API when actioned)
+  //   - 'accepted' / 'declined' show until explicitly dismissed via localStorage
+  const visibleFriendNotifs = friendNotifs.filter(
+    n => n.type === 'received' || !seenFriendIds.has(n.id)
+  )
+  const totalNotifCount = proposals.length + visibleFriendNotifs.length
+
+  function dismissFriend(id: string) {
+    setSeenFriendIds(prev => {
+      const next = new Set(prev)
+      next.add(id)
+      try { localStorage.setItem('lumidex_friend_notif_seen', JSON.stringify(Array.from(next))) } catch {}
+      return next
+    })
+  }
 
   const handleSignOut = async () => {
     await signOut()
@@ -159,18 +247,18 @@ export default function Navbar() {
               <button
                 onClick={() => setShowNotif(v => !v)}
                 className={`relative p-2 rounded-lg transition-all ${
-                  proposals.length > 0
+                  totalNotifCount > 0
                     ? 'text-amber-400 hover:bg-elevated'
                     : 'text-muted hover:text-secondary hover:bg-elevated'
                 }`}
-                title={proposals.length > 0 ? `${proposals.length} pending trade offer${proposals.length !== 1 ? 's' : ''}` : 'Notifications'}
+                title={totalNotifCount > 0 ? `${totalNotifCount} notification${totalNotifCount !== 1 ? 's' : ''}` : 'Notifications'}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                 </svg>
-                {proposals.length > 0 && (
+                {totalNotifCount > 0 && (
                   <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none px-0.5">
-                    {proposals.length > 9 ? '9+' : proposals.length}
+                    {totalNotifCount > 9 ? '9+' : totalNotifCount}
                   </span>
                 )}
               </button>
@@ -181,21 +269,102 @@ export default function Navbar() {
                   {/* Header */}
                   <div className="px-4 py-3 border-b border-subtle flex items-center justify-between">
                     <p className="text-sm font-semibold text-primary">Notifications</p>
-                    {proposals.length > 0 && (
+                    {totalNotifCount > 0 && (
                       <span className="pill text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-400">
-                        {proposals.length} pending
+                        {totalNotifCount} pending
                       </span>
                     )}
                   </div>
 
                   {/* Body */}
-                  {proposals.length === 0 ? (
+                  {totalNotifCount === 0 ? (
                     <div className="px-4 py-8 text-center">
                       <p className="text-2xl mb-2">🔔</p>
-                      <p className="text-sm text-muted">No pending trade offers</p>
+                      <p className="text-sm text-muted">No new notifications</p>
                     </div>
                   ) : (
-                    <div className="divide-y divide-subtle max-h-72 overflow-y-auto">
+                    <div className="divide-y divide-subtle max-h-80 overflow-y-auto">
+
+                      {/* ── Friend notifications ── */}
+                      {visibleFriendNotifs.map(n => {
+                        const name = n.otherUser.display_name ?? n.otherUser.username ?? 'Trainer'
+                        const timeStr = relTime(n.updated_at ?? n.created_at)
+
+                        const label =
+                          n.type === 'received' ? `${name} sent you a friend request` :
+                          n.type === 'accepted' ? `${name} accepted your friend request` :
+                                                  `${name} declined your friend request`
+
+                        const iconBg =
+                          n.type === 'received' ? 'bg-blue-500/20 border-blue-500/30 text-blue-400' :
+                          n.type === 'accepted' ? 'bg-green-500/20 border-green-500/30 text-green-400' :
+                                                  'bg-red-500/20   border-red-500/30   text-red-400'
+
+                        const icon =
+                          n.type === 'received' ? (
+                            // Person / add-friend icon
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                            </svg>
+                          ) : n.type === 'accepted' ? (
+                            // Checkmark icon
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          ) : (
+                            // X icon
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          )
+
+                        return (
+                          <div key={n.id} className="flex items-center gap-3 px-4 py-3 hover:bg-surface transition-colors group">
+                            {/* Avatar or icon badge */}
+                            <div className="relative shrink-0">
+                              <div className="w-9 h-9 rounded-full overflow-hidden bg-surface border border-subtle flex items-center justify-center">
+                                {n.otherUser.avatar_url ? (
+                                  <Image src={n.otherUser.avatar_url} alt={name} width={36} height={36} className="object-cover w-full h-full" unoptimized />
+                                ) : (
+                                  <span className="text-sm font-bold text-accent">{name[0].toUpperCase()}</span>
+                                )}
+                              </div>
+                              {/* Type badge overlaid on avatar */}
+                              <span className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border flex items-center justify-center ${iconBg}`}>
+                                {icon}
+                              </span>
+                            </div>
+
+                            {/* Text — clicking navigates to the other user's profile */}
+                            <Link
+                              href={`/profile/${n.otherUser.id}`}
+                              onClick={() => {
+                                setShowNotif(false)
+                                if (n.type !== 'received') dismissFriend(n.id)
+                              }}
+                              className="flex-1 min-w-0"
+                            >
+                              <p className="text-sm font-medium text-primary leading-tight">{label}</p>
+                              <p className="text-xs text-muted leading-tight">{timeStr}</p>
+                            </Link>
+
+                            {/* Dismiss button for accepted / declined (not for received — those need action) */}
+                            {n.type !== 'received' && (
+                              <button
+                                onClick={() => dismissFriend(n.id)}
+                                className="shrink-0 p-1 rounded text-muted hover:text-primary hover:bg-elevated transition-colors"
+                                title="Dismiss"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })}
+
+                      {/* ── Trade proposal notifications ── */}
                       {proposals.map(p => {
                         const name = p.otherUser?.display_name ?? p.otherUser?.username ?? 'Trainer'
                         return (
@@ -235,13 +404,20 @@ export default function Navbar() {
                   )}
 
                   {/* Footer */}
-                  <div className="px-4 py-2.5 border-t border-subtle">
+                  <div className="px-4 py-2.5 border-t border-subtle flex items-center justify-between">
+                    <Link
+                      href={`/profile/${user.id}`}
+                      onClick={() => setShowNotif(false)}
+                      className="text-xs text-accent hover:text-accent-light transition-colors font-medium"
+                    >
+                      Friend requests →
+                    </Link>
                     <Link
                       href="/wanted-board"
                       onClick={() => setShowNotif(false)}
                       className="text-xs text-accent hover:text-accent-light transition-colors font-medium"
                     >
-                      View all trade offers →
+                      Trade offers →
                     </Link>
                   </div>
                 </div>

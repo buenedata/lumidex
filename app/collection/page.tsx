@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { SetProgress } from '@/types'
 import { cn } from '@/lib/utils'
+import { fmtCardPrice } from '@/lib/currency'
 
 export default function CollectionPage() {
   const { user, isLoading: authLoading, profile } = useAuthStore()
@@ -23,7 +24,8 @@ export default function CollectionPage() {
   } = useCollectionStore()
   const router = useRouter()
 
-  const [searchTerm, setSearchTerm] = useState('')
+  const [searchTerm, setSearchTerm]       = useState('')
+  const [collectionValue, setCollectionValue] = useState<string | null>(null)
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -40,6 +42,36 @@ export default function CollectionPage() {
     if (userSets.length === 0) fetchUserSets()
     if (userCardCountBySet.size === 0) fetchUserCards()
   }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch collection value from set-stats once we know which sets the user has.
+  // Uses userSets (store state) directly so this effect can be declared before
+  // the derived userPokemonSets variable below.
+  useEffect(() => {
+    const setIds = userSets.map(us => us.set_id)
+    if (setIds.length === 0) return
+    let cancelled = false
+
+    Promise.all(
+      setIds.map(setId =>
+        fetch(`/api/prices/set-stats/${setId}`)
+          .then(r => (r.ok ? r.json() : null))
+          .catch(() => null),
+      ),
+    ).then(results => {
+      if (cancelled) return
+      let total   = 0
+      let hasData = false
+      for (const data of results) {
+        if (data?.setValue != null) { total += data.setValue; hasData = true }
+      }
+      if (hasData) {
+        const cur = (profile as any)?.preferred_currency ?? 'USD'
+        setCollectionValue(fmtCardPrice({ eur: total, usd: null }, cur))
+      }
+    })
+
+    return () => { cancelled = true }
+  }, [userSets.length, profile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Derive set progress from the store ──────────────────────────────────
   const buildProgress = (setId: string): SetProgress => {
@@ -151,9 +183,11 @@ export default function CollectionPage() {
                 <span className="text-xs text-muted uppercase tracking-wider">Cards Owned</span>
                 <span className="text-2xl font-bold text-primary">{totalOwnedCards.toLocaleString()}</span>
               </div>
-              <div className="rounded-lg bg-white/5 border border-white/10 p-4 text-center col-span-2 md:col-span-1">
-                <p className="text-sm font-semibold text-white">Collection Value</p>
-                <p className="text-xs text-gray-400 mt-1">Coming soon with the new pricing system</p>
+              <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1 col-span-2 md:col-span-1">
+                <span className="text-xs text-muted uppercase tracking-wider">Collection Value</span>
+                <span className="text-2xl font-bold text-price">
+                  {collectionValue ?? '—'}
+                </span>
               </div>
             </div>
 

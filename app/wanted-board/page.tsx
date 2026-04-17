@@ -215,18 +215,26 @@ export default function WantedBoardPage() {
       .finally(() => setLoading(false))
   }, [user])
 
-  // Fetch trade proposals
+  // Fetch trade proposals — declined/rejected are never shown on the board
   useEffect(() => {
     if (!user) return
     setPropLoading(true)
     fetch('/api/trade-proposals')
       .then(r => r.json())
-      .then(d => setProposals(d.proposals ?? []))
+      .then(d => {
+        const all: TradeProposal[] = d.proposals ?? []
+        setProposals(all.filter(p => (p.status as string) !== 'declined' && (p.status as string) !== 'rejected'))
+      })
       .catch(() => {})
       .finally(() => setPropLoading(false))
   }, [user])
 
   const handleStatusChange = useCallback((id: string, newStatus: string) => {
+    // Remove proposals that have been declined/rejected/withdrawn so they vanish immediately
+    if (newStatus === 'declined' || newStatus === 'rejected' || newStatus === 'withdrawn') {
+      setProposals(prev => prev.filter(p => p.id !== id))
+      return
+    }
     setProposals(prev =>
       prev.map(p => p.id === id ? { ...p, status: newStatus as TradeProposal['status'] } : p)
     )

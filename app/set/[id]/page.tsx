@@ -6,6 +6,7 @@ import { batchFetchVariantStructure } from '@/lib/variantServer'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import SetPageCards from '@/components/SetPageCards'
+import CollectionOnboardingModal from '@/components/onboarding/CollectionOnboardingModal'
 
 // Opt out of static pre-rendering: this route reads auth cookies at request time.
 export const dynamic = 'force-dynamic'
@@ -252,6 +253,9 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
           return `${total ?? '?'}`
         })()}
       />
+
+      {/* ── New-user onboarding — shown once via localStorage ── */}
+      <CollectionOnboardingModal />
     </div>
   )
 }

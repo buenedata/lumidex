@@ -1,7 +1,10 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import type { PokemonSet, SetProgress } from '@/types'
+import { useAuthStore } from '@/lib/store'
+import { fmtCardPrice } from '@/lib/currency'
 
 interface CollectionSpotlightProps {
   sets: PokemonSet[]
@@ -16,6 +19,45 @@ export default function CollectionSpotlight({
   completedSets,
   totalCardsToComplete,
 }: CollectionSpotlightProps) {
+  const { profile } = useAuthStore()
+  const currency = (profile as any)?.preferred_currency ?? 'USD'
+
+  const [mostExpensiveEur,    setMostExpensiveEur]    = useState<number | null>(null)
+  const [collectionValueEur,  setCollectionValueEur]  = useState<number | null>(null)
+
+  // Fetch set-stats for every tracked set in parallel and aggregate into
+  // collection-level "Most Expensive" and "Collection Value" figures.
+  useEffect(() => {
+    if (sets.length === 0) return
+    let cancelled = false
+
+    Promise.all(
+      sets.map(set =>
+        fetch(`/api/prices/set-stats/${set.id}`)
+          .then(r => (r.ok ? r.json() : null))
+          .catch(() => null),
+      ),
+    ).then(results => {
+      if (cancelled) return
+      let totalValue = 0
+      let maxPrice   = 0
+      let hasData    = false
+
+      for (const data of results) {
+        if (!data) continue
+        if (data.setValue    != null) { totalValue += data.setValue;    hasData = true }
+        if ((data.mostExpensive ?? 0) > maxPrice) { maxPrice = data.mostExpensive; hasData = true }
+      }
+
+      if (hasData) {
+        setCollectionValueEur(totalValue > 0 ? totalValue : null)
+        setMostExpensiveEur(maxPrice   > 0 ? maxPrice   : null)
+      }
+    })
+
+    return () => { cancelled = true }
+  }, [sets.length]) // re-run when the number of tracked sets changes
+
   if (sets.length === 0) return null
 
   // Find the set with the highest completion percentage
@@ -39,6 +81,16 @@ export default function CollectionSpotlight({
   const radius       = 22
   const circumference = 2 * Math.PI * radius
   const dashOffset   = circumference - (progress.percentage / 100) * circumference
+
+  const mostExpensiveFormatted =
+    mostExpensiveEur != null
+      ? fmtCardPrice({ eur: mostExpensiveEur, usd: null }, currency)
+      : null
+
+  const collectionValueFormatted =
+    collectionValueEur != null
+      ? fmtCardPrice({ eur: collectionValueEur, usd: null }, currency)
+      : null
 
   return (
     <div className="relative overflow-hidden rounded-2xl bg-elevated border border-subtle p-5 lg:p-6">
@@ -161,8 +213,12 @@ export default function CollectionSpotlight({
               <span className="text-sm leading-none" role="img" aria-hidden>💎</span>
               <p className="text-[10px] text-muted uppercase tracking-wider font-medium truncate leading-none">Most Expensive</p>
             </div>
-            <p className="text-sm font-bold text-primary truncate leading-tight">—</p>
-            <p className="text-xs text-muted truncate leading-tight">Pricing coming soon</p>
+            <p className="text-sm font-bold text-primary truncate leading-tight">
+              {mostExpensiveFormatted ?? '—'}
+            </p>
+            <p className="text-xs text-muted truncate leading-tight">
+              {mostExpensiveEur == null ? 'Loading…' : 'highest across sets'}
+            </p>
           </div>
           <div className="rounded-xl bg-surface border border-subtle p-3 flex flex-col gap-1.5 min-w-0">
             <div className="flex items-center gap-1.5">
@@ -189,8 +245,12 @@ export default function CollectionSpotlight({
               <span className="text-sm leading-none" role="img" aria-hidden>💰</span>
               <p className="text-[10px] text-muted uppercase tracking-wider font-medium truncate leading-none">Collection Value</p>
             </div>
-            <p className="text-sm font-bold text-primary truncate leading-tight">—</p>
-            <p className="text-xs text-muted truncate leading-tight">Pricing coming soon</p>
+            <p className="text-sm font-bold text-price truncate leading-tight">
+              {collectionValueFormatted ?? '—'}
+            </p>
+            <p className="text-xs text-muted truncate leading-tight">
+              {collectionValueEur == null ? 'Loading…' : 'across tracked sets'}
+            </p>
           </div>
         </div>
 

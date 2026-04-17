@@ -25,6 +25,7 @@ import { ProBadge } from '@/components/upgrade/ProBadge'
 import { User, Achievement, PokemonSet, SetProgress } from '@/types'
 import type { FriendEntry } from '@/components/profile/FriendsList'
 import { cn } from '@/lib/utils'
+import { fmtCardPrice } from '@/lib/currency'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -73,6 +74,7 @@ export default function ProfilePage() {
   })
   const [profileUserIsPro, setProfileUserIsPro] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [portfolioValue, setPortfolioValue] = useState<string | null>(null)
 
   // Local mutable URLs (may change after an upload without re-fetching the whole profile)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
@@ -197,6 +199,27 @@ export default function ProfilePage() {
         .eq('user_id', userId)
 
       const totalCards = cardsData?.reduce((sum, row) => sum + (row.quantity ?? 0), 0) || 0
+
+      // Fetch portfolio value — aggregate set-stats for every set the user has started.
+      if ((setsInfo ?? []).length > 0) {
+        Promise.all(
+          (setsInfo ?? []).map(set =>
+            fetch(`/api/prices/set-stats/${set.id}`)
+              .then(r => (r.ok ? r.json() : null))
+              .catch(() => null),
+          ),
+        ).then(results => {
+          let total   = 0
+          let hasData = false
+          for (const data of results) {
+            if (data?.setValue != null) { total += data.setValue; hasData = true }
+          }
+          if (hasData) {
+            const cur = userData?.preferred_currency ?? 'USD'
+            setPortfolioValue(fmtCardPrice({ eur: total, usd: null }, cur))
+          }
+        })
+      }
 
       // completedSets — derived from the already-fetched setsInfo + cardCounts (no extra queries)
       const completedSets = (setsInfo ?? []).filter(set => {
@@ -634,9 +657,11 @@ export default function ProfilePage() {
                 <span className="text-xs text-muted uppercase tracking-wider">Sets Started</span>
                 <span className="text-2xl font-bold text-primary">{userSets.length}</span>
               </div>
-              <div className="rounded-lg bg-white/5 border border-white/10 p-4 text-center">
-                <p className="text-sm font-semibold text-white">Portfolio Value</p>
-                <p className="text-xs text-gray-400 mt-1">Coming soon with the new pricing system</p>
+              <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
+                <span className="text-xs text-muted uppercase tracking-wider">Portfolio Value</span>
+                <span className="text-2xl font-bold text-price">
+                  {portfolioValue ?? '—'}
+                </span>
               </div>
               <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
                 <span className="text-xs text-muted uppercase tracking-wider">Friends</span>

@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
   // ── Full list: all friendships where I'm either party ─────────────────────────
   const { data: rows, error } = await supabaseAdmin
     .from('friendships')
-    .select('id, requester_id, addressee_id, status, created_at')
+    .select('id, requester_id, addressee_id, status, created_at, updated_at')
     .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
     .order('created_at', { ascending: false })
 
@@ -61,7 +61,13 @@ export async function GET(request: NextRequest) {
   }
 
   if (!rows || rows.length === 0) {
-    return NextResponse.json({ accepted: [], pending_incoming: [], pending_outgoing: [] })
+    return NextResponse.json({
+      accepted: [],
+      pending_incoming: [],
+      pending_outgoing: [],
+      accepted_outgoing: [],
+      declined_outgoing: [],
+    })
   }
 
   // Collect all "other" user IDs to batch-load their profiles
@@ -76,13 +82,16 @@ export async function GET(request: NextRequest) {
 
   const profileMap = new Map(profiles?.map(p => [p.id, p]) ?? [])
 
-  const accepted: unknown[]         = []
-  const pending_incoming: unknown[] = []
-  const pending_outgoing: unknown[] = []
+  const accepted: unknown[]          = []
+  const pending_incoming: unknown[]  = []
+  const pending_outgoing: unknown[]  = []
+  const accepted_outgoing: unknown[] = []
+  const declined_outgoing: unknown[] = []
 
   for (const row of rows) {
-    const otherId  = row.requester_id === user.id ? row.addressee_id : row.requester_id
-    const profile  = profileMap.get(otherId) ?? { id: otherId, username: null, display_name: null, avatar_url: null }
+    const isRequester = row.requester_id === user.id
+    const otherId     = isRequester ? row.addressee_id : row.requester_id
+    const profile     = profileMap.get(otherId) ?? { id: otherId, username: null, display_name: null, avatar_url: null }
 
     const entry = {
       friendship_id: row.id,
@@ -91,10 +100,15 @@ export async function GET(request: NextRequest) {
       display_name:  (profile as { display_name: string | null }).display_name,
       avatar_url:    (profile as { avatar_url: string | null }).avatar_url,
       created_at:    row.created_at,
+      updated_at:    row.updated_at,
     }
 
     if (row.status === 'accepted') {
       accepted.push(entry)
+      // Also track outgoing-accepted separately for notification bell
+      if (isRequester) {
+        accepted_outgoing.push(entry)
+      }
     } else if (row.status === 'pending') {
       if (row.addressee_id === user.id) {
         // They sent to me
@@ -103,10 +117,13 @@ export async function GET(request: NextRequest) {
         // I sent to them
         pending_outgoing.push({ ...entry, friendship_id: row.id })
       }
+    } else if (row.status === 'declined' && isRequester) {
+      // My outgoing request was declined → notification bell
+      declined_outgoing.push(entry)
     }
   }
 
-  return NextResponse.json({ accepted, pending_incoming, pending_outgoing })
+  return NextResponse.json({ accepted, pending_incoming, pending_outgoing, accepted_outgoing, declined_outgoing })
 }
 
 /**

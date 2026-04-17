@@ -47,7 +47,51 @@ export async function GET(_request: NextRequest) {
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
 
-  return NextResponse.json({ lists: data ?? [] })
+  const lists = data ?? []
+
+  if (lists.length === 0) {
+    return NextResponse.json({ lists: [] })
+  }
+
+  // Fetch card counts + preview images for all lists in one query
+  const listIds = lists.map(l => l.id)
+  const { data: items, error: itemsError } = await supabaseAdmin
+    .from('user_card_list_items')
+    .select('list_id, card_id, cards(image)')
+    .in('list_id', listIds)
+    .order('added_at', { ascending: true })
+
+  if (itemsError) {
+    console.error('[user-lists GET] items error:', itemsError)
+    // Return lists without counts rather than an error
+    return NextResponse.json({
+      lists: lists.map(l => ({ ...l, card_count: 0, preview_images: [] })),
+    })
+  }
+
+  // Group items by list_id
+  const itemsByList = new Map<string, { card_id: string; image: string | null }[]>()
+  for (const item of (items ?? [])) {
+    const existing = itemsByList.get(item.list_id) ?? []
+    const cardsRow = item.cards as unknown
+    const image: string | null =
+      Array.isArray(cardsRow)
+        ? (cardsRow[0]?.image ?? null)
+        : ((cardsRow as { image: string | null } | null)?.image ?? null)
+    existing.push({ card_id: item.card_id, image })
+    itemsByList.set(item.list_id, existing)
+  }
+
+  const enriched = lists.map(l => {
+    const listItems = itemsByList.get(l.id) ?? []
+    return {
+      ...l,
+      card_count: listItems.length,
+      preview_images: listItems.slice(0, 4).map(i => i.image),
+    }
+  })
+
+  return NextResponse.json({ lists: enriched })
 }
 
 // ─── POST /api/user-lists ──────────────────────────────────────────────────────

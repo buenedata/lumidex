@@ -37,7 +37,7 @@ export async function GET(_request: NextRequest) {
       cash_offered, cash_requested, currency_code,
       trade_proposal_items (
         id, direction, quantity,
-        cards ( id, set_id, name, number, image, sets!set_id(name, logo_url) )
+        cards ( id, set_id, name, number, image, tcggo_id, sets!set_id(name, logo_url) )
       )
     `)
     .or(`proposer_id.eq.${user.id},receiver_id.eq.${user.id}`)

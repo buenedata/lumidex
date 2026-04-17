@@ -10,6 +10,7 @@ export interface ArtistCard {
   name:    string
   image:   string | null
   set_id:  string | null
+  sets:    { name: string }[] | null
   number:  string | null
   rarity:  string | null
 }
@@ -59,8 +60,8 @@ function CardTile({ card }: { card: ArtistCard }) {
           {card.name}
         </p>
 
-        {card.set_id && (
-          <p className="text-xs text-muted truncate">{card.set_id}{card.number ? ` · ${card.number}` : ''}</p>
+        {(card.sets?.[0]?.name ?? card.set_id) && (
+          <p className="text-xs text-muted truncate">{card.sets?.[0]?.name ?? card.set_id}{card.number ? ` · ${card.number}` : ''}</p>
         )}
 
         {card.rarity && (
