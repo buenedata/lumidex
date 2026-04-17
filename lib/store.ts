@@ -221,11 +221,15 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
     // total quantities per card. The legacy user_cards table can diverge
     // from user_card_variants when variants are removed without going
     // through the legacy update path, so we no longer rely on it here.
+    // Add an explicit limit well above any realistic collection size to bypass
+    // Supabase/PostgREST's default 1 000-row cap. Without this, users with
+    // > 1 000 variant rows (e.g. 2 698 rows) get a truncated card map.
     const { data, error } = await supabase
       .from('user_card_variants')
       .select('card_id, quantity')
       .eq('user_id', user.id)
       .gt('quantity', 0)
+      .limit(10000)
 
     // Fetch per-set owned card counts via the RPC (one row per set,
     // far cheaper than joining every variant row in JS).

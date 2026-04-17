@@ -192,18 +192,19 @@ export default function ProfilePage() {
         setUserAchievements(achievements)
       }
 
-      // Calculate stats — read from user_cards (legacy table) which is kept in sync
-      // by updateCardQuantity (the primary write path). This matches the dashboard store
-      // which is also built from updateCardQuantity incremental updates.
-      // user_card_variants only tracks variant-level writes (newer path) and misses
-      // cards added via the legacy path, causing it to under-count.
-      const { data: cardsData } = await supabase
-        .from('user_cards')
-        .select('quantity')
+      // Calculate stats — use server-side SUM via PostgREST aggregate so we never
+      // hit the default 1 000-row response cap. user_card_variants has one row per
+      // (card_id, variant_id) so summing quantity gives exactly what the user expects:
+      //   • each variant of a card counts separately (3 variants → +3)
+      //   • duplicate copies count (quantity = 2 → +2)
+      const { data: totalData } = await supabase
+        .from('user_card_variants')
+        .select('total:quantity.sum()')
         .eq('user_id', userId)
         .gt('quantity', 0)
+        .single()
 
-      const totalCards = cardsData?.reduce((sum, row) => sum + (row.quantity ?? 0), 0) ?? 0
+      const totalCards = (totalData as any)?.total ?? 0
 
       // Fetch portfolio value — aggregate set-stats for every set the user has started.
       if ((setsInfo ?? []).length > 0) {
