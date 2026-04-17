@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/Input'
 import { SetProgress } from '@/types'
 import { cn } from '@/lib/utils'
 import { fmtCardPrice } from '@/lib/currency'
+import AnalyticsSection from '@/components/analytics/AnalyticsSection'
 
 export default function CollectionPage() {
   const { user, isLoading: authLoading, profile } = useAuthStore()
@@ -258,6 +259,9 @@ export default function CollectionPage() {
             ))}
           </div>
         )}
+
+        {/* ── Pro Analytics Section ─────────────────────────────────── */}
+        {userPokemonSets.length > 0 && <AnalyticsSection />}
       </div>
     </div>
   )
