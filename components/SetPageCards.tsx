@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { ChevronUpDownIcon, ArrowUpIcon, ArrowDownIcon } from '@heroicons/react/20/solid'
 import { cn } from '@/lib/utils'
+import { fmtCardPrice } from '@/lib/currency'
 import CardGrid from '@/components/CardGrid'
 import CollectionGoalSelector from '@/components/CollectionGoalSelector'
 import BinderCalculatorModal from '@/components/BinderCalculatorModal'
@@ -251,13 +252,13 @@ export default function SetPageCards({
                 {
                   label: 'Most Expensive',
                   value: statMostExpensive != null
-                    ? `€${statMostExpensive.toFixed(2)}`
+                    ? fmtCardPrice({ eur: statMostExpensive, usd: null }, effectiveCurrency)
                     : '—',
                 },
                 {
                   label: 'Set Value',
                   value: statSetValue != null
-                    ? `€${statSetValue.toFixed(2)}`
+                    ? fmtCardPrice({ eur: statSetValue, usd: null }, effectiveCurrency)
                     : '—',
                 },
               ].map(({ label, value }) => (
