@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useCollectionStore } from '@/lib/store'
+import { getCardImageUrl } from '@/lib/imageUpload'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -11,7 +12,8 @@ export interface ArtistCard {
   name:    string
   image:   string | null
   set_id:  string | null
-  sets:    { name: string; symbol: string | null }[] | null
+  /** Supabase returns the joined set as a single object (many-to-one FK), never an array. */
+  sets:    { name: string; symbol: string | null; setComplete: number | null } | null
   number:  string | null
   rarity:  string | null
 }
@@ -24,12 +26,21 @@ interface ArtistDetailClientProps {
 // ── Single card tile ──────────────────────────────────────────────────────────
 
 function CardTile({ card, collectionQty }: { card: ArtistCard; collectionQty: number }) {
-  const imgSrc    = card.image ?? '/pokemon_card_backside.png'
-  const setName   = card.sets?.[0]?.name ?? null
-  const setSymbol = card.sets?.[0]?.symbol ?? null
+  // Mirror the fallback chain in getCardImageWithFallback:
+  // 1. cards.image (R2 webp / direct URL stored in DB)
+  // 2. Legacy R2 key derived from set_id + number (for cards uploaded before the image column was backfilled)
+  // 3. Card-back placeholder
+  const imgSrc = card.image
+    ?? (card.set_id && card.number ? getCardImageUrl(card.set_id, card.number) : null)
+    ?? '/pokemon_card_backside.png'
+  const setName     = card.sets?.name ?? null
+  const setSymbol   = card.sets?.symbol ?? null
+  const setComplete = card.sets?.setComplete ?? null
 
-  // Format card number as "#24/101" — the `number` field already contains e.g. "24/101"
-  const numberDisplay = card.number ? `#${card.number}` : null
+  // Format card number as "#024/102" — number field contains e.g. "024", setComplete from set join
+  const numberDisplay = card.number
+    ? `#${card.number}${setComplete ? `/${setComplete}` : ''}`
+    : null
 
   return (
     <div className="group relative flex flex-col rounded-xl overflow-hidden bg-elevated border border-subtle hover:border-accent/40 transition-all duration-200 hover:shadow-lg hover:shadow-accent/10">
