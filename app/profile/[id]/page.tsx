@@ -192,19 +192,15 @@ export default function ProfilePage() {
         setUserAchievements(achievements)
       }
 
-      // Calculate stats — use server-side SUM via PostgREST aggregate so we never
-      // hit the default 1 000-row response cap. user_card_variants has one row per
-      // (card_id, variant_id) so summing quantity gives exactly what the user expects:
-      //   • each variant of a card counts separately (3 variants → +3)
-      //   • duplicate copies count (quantity = 2 → +2)
-      const { data: totalData } = await supabase
+      // Count distinct (card, variant) pairs owned — each variant type is counted once
+      // regardless of how many duplicate copies the user holds.
+      // Uses PostgREST count=exact (HEAD request) which bypasses the 1 000-row cap.
+      const { count: _variantCount } = await supabase
         .from('user_card_variants')
-        .select('total:quantity.sum()')
+        .select('*', { count: 'exact', head: true })
         .eq('user_id', userId)
         .gt('quantity', 0)
-        .single()
-
-      const totalCards = (totalData as any)?.total ?? 0
+      const totalCards: number = _variantCount ?? 0
 
       // Fetch portfolio value — aggregate set-stats for every set the user has started.
       if ((setsInfo ?? []).length > 0) {

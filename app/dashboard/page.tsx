@@ -24,6 +24,7 @@ export default function DashboardPage() {
     userCards,
     pokemonSets,
     userCardCountBySet,
+    totalCardVariantCount,
     fetchPokemonSets,
   } = useCollectionStore()
 
@@ -47,9 +48,9 @@ export default function DashboardPage() {
     userSetIds.has(set.id)
   )
 
-  // Total copies owned (counts duplicates/variants)
+  // Total physical copies owned (each variant × each duplicate) — used for "Cards Owned" stat
   const totalCards  = Array.from(userCards.values()).reduce((s, uc) => s + uc.quantity, 0)
-  // Distinct card entries owned (one entry per card+variant combo, ignoring quantity)
+  // Distinct card IDs owned (one per card design, collapsing variants) — used for "Unique Cards" stat
   const uniqueCards = userCards.size
   const setsTracked = userPokemonSets.length
   const completedSets = userPokemonSets.filter(set => {
@@ -114,7 +115,7 @@ export default function DashboardPage() {
 
         {/* ── Hero Banner ─────────────────────────────────────────────── */}
         <DashboardHero
-          totalCards={totalCards}
+          totalCards={totalCardVariantCount}
           setsTracked={setsTracked}
           completedSets={completedSets}
         />

@@ -66,6 +66,12 @@ interface CollectionState {
   userCards: Map<string, UserCard>
   /** Number of distinct owned cards per set — populated by fetchUserCards via RPC. */
   userCardCountBySet: Map<string, number>
+  /**
+   * Total count of distinct (card_id, variant_id) rows owned with quantity > 0.
+   * Each variant type is counted once regardless of how many duplicate copies exist.
+   * Used for the "Cards Collected" display on the dashboard hero.
+   */
+  totalCardVariantCount: number
   pokemonSets: Map<string, PokemonSet>
   pokemonCards: Map<string, PokemonCard[]>
   /** True while a fetchPokemonSets request is in-flight — prevents duplicate concurrent calls. */
@@ -94,6 +100,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
   userSets: [],
   userCards: new Map(),
   userCardCountBySet: new Map(),
+  totalCardVariantCount: 0,
   pokemonSets: new Map(),
   pokemonCards: new Map(),
   isFetchingSets: false,
@@ -270,7 +277,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
         console.error('Error fetching user card counts by set:', setCountError)
       }
 
-      set({ userCards: cardMap, userCardCountBySet: countBySet })
+      set({ userCards: cardMap, userCardCountBySet: countBySet, totalCardVariantCount: data.length })
     }
   },
 
