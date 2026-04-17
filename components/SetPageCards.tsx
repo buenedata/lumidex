@@ -89,6 +89,9 @@ export default function SetPageCards({
   const [hasExtraVariants, setHasExtraVariants] = useState(false)
   // Tracks whether the batch variant fetch is in flight.
   const [variantsBatchLoading, setVariantsBatchLoading] = useState(false)
+  // Set-level price stats — fetched once from /api/prices/set-stats/[setId]
+  const [statMostExpensive, setStatMostExpensive] = useState<number | null>(null)
+  const [statSetValue,      setStatSetValue]       = useState<number | null>(null)
   // Only flip the shimmer visible if loading takes > 250ms — prevents a flash on fast/cached loads.
   const [showVariantShimmer, setShowVariantShimmer] = useState(false)
   useEffect(() => {
@@ -99,6 +102,22 @@ export default function SetPageCards({
     const t = setTimeout(() => setShowVariantShimmer(true), 250)
     return () => clearTimeout(t)
   }, [variantsBatchLoading])
+
+  // Fetch set-level pricing stats once when the set page mounts.
+  // Only runs when statSeries is defined (i.e. we are on the set detail page, not browse).
+  useEffect(() => {
+    if (!setId || statSeries === undefined) return
+    let cancelled = false
+    fetch(`/api/prices/set-stats/${setId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: { mostExpensive: number | null; setValue: number | null } | null) => {
+        if (cancelled || !data) return
+        setStatMostExpensive(data.mostExpensive ?? null)
+        setStatSetValue(data.setValue ?? null)
+      })
+      .catch(() => { /* non-fatal — stats stay as '—' */ })
+    return () => { cancelled = true }
+  }, [setId]) // eslint-disable-line react-hooks/exhaustive-deps
   // Goal-aware Have/Need counts emitted by CardGrid after the batch variant load.
   // null until first emission — tab badges fall back to the basic Zustand counts.
   const [goalHave, setGoalHave] = useState<number | null>(null)
@@ -226,11 +245,21 @@ export default function SetPageCards({
           <div className="max-w-screen-2xl mx-auto px-6 py-4">
             <div className="flex items-center gap-8 flex-wrap">
               {[
-                { label: 'Series',   value: statSeries   ?? '—' },
-                { label: 'Released', value: statReleased ?? '—' },
-                { label: 'Cards',    value: statCards    ?? '—' },
-                { label: 'Most Expensive', value: '—' },
-                { label: 'Set Value',      value: '—' },
+                { label: 'Series',         value: statSeries   ?? '—' },
+                { label: 'Released',       value: statReleased ?? '—' },
+                { label: 'Cards',          value: statCards    ?? '—' },
+                {
+                  label: 'Most Expensive',
+                  value: statMostExpensive != null
+                    ? `€${statMostExpensive.toFixed(2)}`
+                    : '—',
+                },
+                {
+                  label: 'Set Value',
+                  value: statSetValue != null
+                    ? `€${statSetValue.toFixed(2)}`
+                    : '—',
+                },
               ].map(({ label, value }) => (
                 <div key={label} className="flex flex-col gap-0.5">
                   <span className="text-xs text-muted uppercase tracking-wider">{label}</span>

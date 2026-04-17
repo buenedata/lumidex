@@ -128,6 +128,8 @@ export interface PokemonCard {
   artist?: string | null; // Illustrator credit, e.g. "GIDORA" (optional — not all routes fetch it)
   /** FK → variants.id — which variant is added when the card tile is double-clicked */
   default_variant_id?: string | null;
+  /** TCGGO numeric card ID — used as item_id in the item_prices table for price lookups. */
+  tcggo_id?: number | null;
   created_at: string;
   // Legacy compatibility fields (deprecated after migration)
   image_small?: string | null;

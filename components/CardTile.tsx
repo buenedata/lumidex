@@ -3,7 +3,7 @@
 import { memo } from 'react'
 import Link from 'next/link'
 import { PokemonCard, QuickAddVariant } from '@/types'
-import { formatPrice } from '@/lib/currency'
+import { useItemPrice } from '@/hooks/useItemPrice'
 
 // ── Shared constants (mirrors CardGrid) ────────────────────────────────────
 const COLOR_MAP = {
@@ -71,6 +71,15 @@ function CardTileInner({
   onVariantContextMenu,
   onVariantGrayClick,
 }: CardTileProps) {
+  // Fetch CardMarket EUR price via item_prices — only when tcggo_id is present.
+  // The hook returns { price: null, loading: false } when itemId is null/undefined,
+  // so cards without a tcggo_id never trigger a network request.
+  const { price: cmPrice, loading: cmLoading } = useItemPrice(
+    card.tcggo_id != null ? String(card.tcggo_id) : null,
+    'single',
+    'normal',
+  )
+
   const typeGlowClass   = getTypeGlowClass(card.type)
   // Full grayscale for fully unowned cards only — partially owned cards skip this
   // and instead get the diagonal overlay (rendered below the image).
@@ -180,11 +189,12 @@ function CardTileInner({
         {/* Row 2: Number · Price */}
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-secondary tabular-nums">#{card.number}</span>
-          <span className="text-sm font-semibold text-price tabular-nums">
-            {cardPricesUSD?.[card.id] != null
-              ? formatPrice(cardPricesUSD[card.id], effectiveCurrency)
-              : ''}
-          </span>
+          {/* EUR price badge — only shown when tcggo_id is present and price has loaded */}
+          {card.tcggo_id != null && !cmLoading && (
+            <span className="text-xs font-medium text-secondary tabular-nums">
+              {cmPrice !== null ? `€${cmPrice.toFixed(2)}` : '—'}
+            </span>
+          )}
         </div>
         {/* Row 3: Set name (browse/search only — cards from multiple sets) */}
         {card.set_name && (

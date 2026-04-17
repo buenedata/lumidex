@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { PokemonCard, UserCard, Variant, VariantWithQuantity, QuickAddVariant, VARIANT_COLOR_CLASSES, CollectionGoal, PriceHistoryPoint, FriendCardOwner, UserGradedCard } from '@/types'
 import { useCollectionStore, useAuthStore } from '@/lib/store'
 import { useProGate } from '@/hooks/useProGate'
+import { useItemPrice } from '@/hooks/useItemPrice'
 import Modal from '@/components/ui/Modal'
 import VariantSuggestionModal from '@/components/VariantSuggestionModal'
 import AddGradedCardModal from '@/components/AddGradedCardModal'
@@ -1385,6 +1386,15 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       ? hoveredVariant.variant_image_url
       : null
 
+  // CardMarket EUR price for the currently open card modal.
+  // itemId is null when no card is selected or the card has no tcggo_id —
+  // the hook returns { price: null, loading: false } in both cases.
+  const { price: modalCmPrice, loading: modalCmLoading } = useItemPrice(
+    selectedCard?.tcggo_id != null ? String(selectedCard.tcggo_id) : null,
+    'single',
+    'normal',
+  )
+
   return (
     <>
       <div className="flex flex-wrap gap-4">
@@ -1589,9 +1599,35 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
               {/* ── Price Tab ─── */}
               {modalTab === 'price' && (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <p className="text-lg font-semibold text-white">Prices Coming Soon</p>
-                  <p className="text-sm text-gray-400 mt-2">We&apos;re rebuilding the pricing system with live TCGGO data.</p>
+                <div className="py-2">
+                  {selectedCard?.tcggo_id != null ? (
+                    <div className="space-y-3">
+                      {/* Source header */}
+                      <h3 className="text-xs font-semibold text-muted uppercase tracking-wider px-1">
+                        CardMarket
+                      </h3>
+
+                      {/* Normal variant price row */}
+                      <div className="bg-elevated rounded-lg border border-subtle px-4 py-3 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {/* Green dot = normal variant */}
+                          <div className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0" />
+                          <span className="text-sm text-secondary">Normal</span>
+                        </div>
+                        <span className="text-base font-semibold text-primary tabular-nums">
+                          {modalCmLoading
+                            ? '...'
+                            : modalCmPrice !== null
+                              ? `€${modalCmPrice.toFixed(2)}`
+                              : '—'}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-16 text-center">
+                      <p className="text-sm text-gray-400">No pricing data available for this card.</p>
+                    </div>
+                  )}
                 </div>
               )}
 

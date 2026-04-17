@@ -64,6 +64,8 @@ export interface DbCard {
   default_variant_id: string | null
   /** pokemontcg.io / RapidAPI card ID e.g. "sv1-1". Used for price matching. */
   api_id: string | null
+  /** TCGGO numeric card ID — used as item_id in the item_prices table. */
+  tcggo_id: number | null
   created_at: string
 }
 
@@ -164,7 +166,7 @@ export const getCardsBySet = unstable_cache(
     // Supabase FK join: source:source_card_id(image) fetches the linked row's image
     const { data, error } = await supabase
       .from('cards')
-      .select('id, set_id, name, number, rarity, type, image, source_card_id, artist, default_variant_id, api_id, created_at, source:source_card_id(image)')
+      .select('id, set_id, name, number, rarity, type, image, source_card_id, artist, default_variant_id, api_id, tcggo_id, created_at, source:source_card_id(image)')
       .eq('set_id', setId)
       .order('number', { ascending: true })
 
@@ -197,7 +199,7 @@ export async function searchCards(query: string, limit: number = 50): Promise<Db
   
   const { data, error } = await supabase
     .from('cards')
-    .select('id, set_id, name, number, rarity, type, image, own_image, source_card_id, artist, default_variant_id, api_id, created_at')
+    .select('id, set_id, name, number, rarity, type, image, own_image, source_card_id, artist, default_variant_id, api_id, tcggo_id, created_at')
     .ilike('name', `%${query}%`)
     .order('name')
     .limit(limit)
