@@ -73,7 +73,7 @@ async function fetchArtistCardResults(artistQuery: string): Promise<CardSearchRe
     .select('id, name, number, rarity, type, supertype, image, set_id, sets!inner(name, series, release_date, logo_url)')
     .ilike('artist', `%${artistQuery}%`)
     .order('name')
-    .limit(500)
+    .limit(2000)
 
   return toCardResults(data ?? [])
 }
@@ -116,7 +116,6 @@ async function fetchDiscoveryData(): Promise<DiscoveryData> {
       .from('cards')
       .select('artist, image')
       .not('artist', 'is', null)
-      .not('image', 'is', null)
       .limit(2000),
   ])
 
