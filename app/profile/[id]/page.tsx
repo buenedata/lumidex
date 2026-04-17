@@ -192,16 +192,18 @@ export default function ProfilePage() {
         setUserAchievements(achievements)
       }
 
-      // Calculate stats — count distinct card IDs owned (quantity > 0) so that
-      // "Cards Collected" represents unique cards, matching the dashboard's
-      // "Unique Cards" metric (store.userCards.size) rather than total copies.
+      // Calculate stats — read from user_cards (legacy table) which is kept in sync
+      // by updateCardQuantity (the primary write path). This matches the dashboard store
+      // which is also built from updateCardQuantity incremental updates.
+      // user_card_variants only tracks variant-level writes (newer path) and misses
+      // cards added via the legacy path, causing it to under-count.
       const { data: cardsData } = await supabase
-        .from('user_card_variants')
-        .select('card_id, quantity')
+        .from('user_cards')
+        .select('quantity')
         .eq('user_id', userId)
         .gt('quantity', 0)
 
-      const totalCards = new Set(cardsData?.map(r => r.card_id) ?? []).size
+      const totalCards = cardsData?.reduce((sum, row) => sum + (row.quantity ?? 0), 0) ?? 0
 
       // Fetch portfolio value — aggregate set-stats for every set the user has started.
       if ((setsInfo ?? []).length > 0) {
