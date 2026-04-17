@@ -16,6 +16,7 @@
 
 import { useState, useEffect } from 'react'
 import { useProGate } from '@/hooks/useProGate'
+import { useAuthStore } from '@/lib/store'
 import { ProBadge } from '@/components/upgrade/ProBadge'
 import PortfolioValueChart from './PortfolioValueChart'
 import CollectionAnalytics from './CollectionAnalytics'
@@ -73,6 +74,8 @@ function SectionSkeleton() {
 
 export default function AnalyticsSection() {
   const { isPro, isLoading: proLoading } = useProGate()
+  const { profile } = useAuthStore()
+  const currency: string = (profile as any)?.preferred_currency ?? 'USD'
 
   const [range, setRange]                     = useState<RangeOption>('30d')
   const [portfolioData, setPortfolioData]     = useState<PortfolioHistoryPoint[]>([])
@@ -139,6 +142,7 @@ export default function AnalyticsSection() {
             range={range}
             onRangeChange={r => setRange(r as RangeOption)}
             isLoading={portfolioLoading}
+            currency={currency}
           />
         )}
       </div>

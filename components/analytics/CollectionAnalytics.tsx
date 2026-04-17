@@ -9,6 +9,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect } from 'react'
+import { useAuthStore } from '@/lib/store'
 import {
   Tabs,
   TabsList,
@@ -145,6 +146,9 @@ function PerformersSkeleton() {
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function CollectionAnalytics() {
+  const { profile } = useAuthStore()
+  const currency: string = (profile as any)?.preferred_currency ?? 'USD'
+
   const [data, setData]       = useState<CollectionAnalyticsData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
@@ -212,7 +216,7 @@ export default function CollectionAnalytics() {
       <TabsContent value="top-cards" className="pt-3">
         {isLoading
           ? <TabContentSkeleton />
-          : <TopValuableCards cards={data?.top_cards ?? []} />
+          : <TopValuableCards cards={data?.top_cards ?? []} currency={currency} />
         }
       </TabsContent>
 
@@ -226,7 +230,7 @@ export default function CollectionAnalytics() {
       <TabsContent value="by-set" className="pt-3">
         {isLoading
           ? <TabContentSkeleton />
-          : <ValueBySet data={data?.value_by_set ?? []} />
+          : <ValueBySet data={data?.value_by_set ?? []} currency={currency} />
         }
       </TabsContent>
 

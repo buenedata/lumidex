@@ -7,16 +7,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { TopCard } from './types'
+import { fmtCardPrice } from '@/lib/currency'
 
 interface TopValuableCardsProps {
   cards: TopCard[]
+  currency: string
 }
 
-function fmtEur(value: number): string {
-  return `€${value.toFixed(2)}`
-}
-
-export default function TopValuableCards({ cards }: TopValuableCardsProps) {
+export default function TopValuableCards({ cards, currency }: TopValuableCardsProps) {
   if (cards.length === 0) {
     return (
       <div className="flex items-center justify-center py-14 text-gray-500 text-sm">
@@ -72,7 +70,7 @@ export default function TopValuableCards({ cards }: TopValuableCardsProps) {
           {/* Value */}
           <div className="text-right shrink-0">
             <p className="text-sm font-bold text-violet-400 tabular-nums">
-              {fmtEur(card.value_eur)}
+              {fmtCardPrice({ eur: card.value_eur, usd: null }, currency) ?? '—'}
             </p>
             {card.quantity > 1 && (
               <p className="text-[10px] text-gray-500 mt-0.5">

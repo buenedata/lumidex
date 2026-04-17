@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
+import { fmtCardPrice } from '@/lib/currency'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface TPUser {
@@ -84,7 +85,7 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 // ── Detailed card tile ────────────────────────────────────────────────────────
-function CardDetailTile({ item }: { item: TPItem }) {
+function CardDetailTile({ item, currency }: { item: TPItem; currency: string }) {
   const card = item.cards
 
   // undefined = loading, null = no price available
@@ -151,11 +152,9 @@ function CardDetailTile({ item }: { item: TPItem }) {
         <span className="text-[10px] text-muted">…</span>
       ) : cardPrice !== null ? (
         <span className="text-xs font-semibold text-price">
-          {new Intl.NumberFormat(cardPrice.currency === 'EUR' ? 'de-DE' : 'en-US', {
-            style: 'currency',
-            currency: cardPrice.currency,
-            maximumFractionDigits: 2,
-          }).format(cardPrice.amount)}
+          {cardPrice.currency === 'USD'
+            ? (fmtCardPrice({ eur: null, usd: cardPrice.amount }, currency) ?? cardPrice.amount.toFixed(2))
+            : (fmtCardPrice({ eur: cardPrice.amount, usd: null }, currency) ?? cardPrice.amount.toFixed(2))}
         </span>
       ) : null}
     </div>
@@ -169,12 +168,14 @@ function CardSidePanel({
   items,
   cashAmount,
   currencyCode,
+  userCurrency,
 }: {
   label: string
   labelClass: string
   items: TPItem[]
   cashAmount: number
   currencyCode: string
+  userCurrency: string
 }) {
   return (
     <div className="px-5 py-4 flex flex-col gap-3">
@@ -188,6 +189,7 @@ function CardSidePanel({
             <CardDetailTile
               key={item.id}
               item={item}
+              currency={userCurrency}
             />
           ))}
         </div>
@@ -294,6 +296,7 @@ export default function TradeProposalCard({ proposal, onStatusChange }: TradePro
           items={myOfferItems}
           cashAmount={myCashOffer}
           currencyCode={proposal.currency_code}
+          userCurrency={userCurrency}
         />
         <CardSidePanel
           label={`${otherName} Offers`}
@@ -301,6 +304,7 @@ export default function TradeProposalCard({ proposal, onStatusChange }: TradePro
           items={theirItems}
           cashAmount={theirCashOffer}
           currencyCode={proposal.currency_code}
+          userCurrency={userCurrency}
         />
       </div>
 

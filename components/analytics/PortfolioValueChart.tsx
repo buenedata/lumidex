@@ -18,6 +18,7 @@ import {
   Tooltip,
 } from 'recharts'
 import type { PortfolioHistoryPoint } from './types'
+import { fmtCardPrice } from '@/lib/currency'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,7 @@ interface PortfolioValueChartProps {
   range: '7d' | '30d' | '90d' | '1y'
   onRangeChange: (r: string) => void
   isLoading?: boolean
+  currency: string
 }
 
 const RANGES: { label: string; value: '7d' | '30d' | '90d' | '1y' }[] = [
@@ -36,10 +38,6 @@ const RANGES: { label: string; value: '7d' | '30d' | '90d' | '1y' }[] = [
 ]
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-
-function fmtEur(value: number): string {
-  return `€${value.toFixed(2)}`
-}
 
 function formatDateLabel(isoDate: string): string {
   // isoDate is "YYYY-MM-DD"
@@ -58,14 +56,15 @@ interface CustomTooltipProps {
   active?: boolean
   payload?: TooltipEntry[]
   label?: string
+  currency: string
 }
 
-function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
+function CustomTooltip({ active, payload, label, currency }: CustomTooltipProps) {
   if (!active || !payload?.length) return null
   return (
     <div className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 shadow-lg text-xs">
       <p className="text-gray-400 mb-1">{label}</p>
-      <p className="font-semibold text-violet-400">{fmtEur(payload[0].value)}</p>
+      <p className="font-semibold text-violet-400">{fmtCardPrice({ eur: payload[0].value, usd: null }, currency) ?? '—'}</p>
     </div>
   )
 }
@@ -98,6 +97,7 @@ export default function PortfolioValueChart({
   range,
   onRangeChange,
   isLoading,
+  currency,
 }: PortfolioValueChartProps) {
   if (isLoading) return <LoadingSkeleton />
 
@@ -124,10 +124,10 @@ export default function PortfolioValueChart({
         <div>
           {data.length > 0 ? (
             <>
-              <p className="text-2xl font-bold text-white">{fmtEur(currentValue)}</p>
+              <p className="text-2xl font-bold text-white">{fmtCardPrice({ eur: currentValue, usd: null }, currency) ?? '—'}</p>
               {data.length >= 2 && (
                 <p className={`text-sm mt-0.5 font-medium ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                  {isPositive ? '+' : ''}{fmtEur(delta)}&nbsp;
+                  {isPositive ? '+' : ''}{fmtCardPrice({ eur: delta, usd: null }, currency) ?? '—'}&nbsp;
                   ({isPositive ? '+' : ''}{deltaPercent.toFixed(1)}%) this period
                 </p>
               )}
@@ -178,10 +178,17 @@ export default function PortfolioValueChart({
               tick={{ fill: '#9ca3af', fontSize: 11 }}
               axisLine={false}
               tickLine={false}
-              tickFormatter={(v: number) => `€${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v.toFixed(0)}`}
+              tickFormatter={(v: number) => {
+                const fmt = fmtCardPrice({ eur: v, usd: null }, currency) ?? ''
+                if (v >= 1000) {
+                  const sym = fmt.replace(/[\d.,\s]/g, '').trim() || '€'
+                  return `${sym}${(v / 1000).toFixed(1)}k`
+                }
+                return fmt
+              }}
               width={56}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip currency={currency} />} />
             <Line
               type="monotone"
               dataKey="value"
