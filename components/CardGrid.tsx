@@ -7,13 +7,17 @@ import { PokemonCard, UserCard, Variant, VariantWithQuantity, QuickAddVariant, V
 import { useCollectionStore, useAuthStore } from '@/lib/store'
 import { fmtCardPrice } from '@/lib/currency'
 import { useProGate } from '@/hooks/useProGate'
-import { useItemPrice } from '@/hooks/useItemPrice'
+import dynamic from 'next/dynamic'
 import Modal from '@/components/ui/Modal'
 import VariantSuggestionModal from '@/components/VariantSuggestionModal'
 import AddGradedCardModal from '@/components/AddGradedCardModal'
 import { UpgradeModal } from '@/components/upgrade/UpgradeModal'
 import { updateVariant, deleteVariant, removeVariantFromCard } from '@/app/admin/variants/actions'
 import AddToListDropdown from '@/components/lists/AddToListDropdown'
+import type { PriceChartRange } from '@/components/PriceChart'
+
+// PriceChart uses recharts (no SSR) — loaded client-side only to avoid hydration issues
+const PriceChart = dynamic(() => import('@/components/PriceChart'), { ssr: false })
 
 type ModalTab = 'card' | 'price' | 'friends'
 
@@ -403,6 +407,55 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const autoOpenedRef = useRef(false)
   // Used to distinguish single-click (open modal) from double-click (add default variant)
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── Modal price state ────────────────────────────────────────────────────
+  // Current prices for all variants of the selected card (from item_prices via batch endpoint)
+  const [modalVariantPrices,        setModalVariantPrices]        = useState<Record<string, number | null> | null>(null)
+  const [modalVariantPricesLoading, setModalVariantPricesLoading] = useState(false)
+  const [modalPriceCurrency,        setModalPriceCurrency]        = useState('EUR')
+  // Graded prices (Pro-only section below the chart)
+  const [modalGradedPrices, setModalGradedPrices] = useState<Record<string, number | null> | null>(null)
+  // Price history points for the chart tab
+  const [modalPriceHistory,         setModalPriceHistory]         = useState<PriceHistoryPoint[]>([])
+  const [modalPriceHistoryLoading,  setModalPriceHistoryLoading]  = useState(false)
+  const [modalPriceRange,           setModalPriceRange]           = useState<PriceChartRange>('7d')
+
+  // Fetch variant prices + price history when a card opens or the chart range changes
+  useEffect(() => {
+    if (!selectedCard) {
+      setModalVariantPrices(null)
+      setModalPriceHistory([])
+      return
+    }
+
+    // Batch-fetch current prices for all variants (uses tcggo_id as item_id in item_prices)
+    if (selectedCard.tcggo_id != null) {
+      setModalVariantPricesLoading(true)
+      fetch(`/api/prices/card-variants/${encodeURIComponent(String(selectedCard.tcggo_id))}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data) {
+            setModalVariantPrices(data.variants ?? {})
+            setModalGradedPrices(data.graded ?? {})
+            setModalPriceCurrency(data.currency ?? 'EUR')
+          }
+        })
+        .catch(() => { /* silent — price display falls back to '—' */ })
+        .finally(() => setModalVariantPricesLoading(false))
+    } else {
+      setModalVariantPrices({})
+      setModalVariantPricesLoading(false)
+    }
+
+    // Fetch price history for the chart
+    setModalPriceHistoryLoading(true)
+    fetch(`/api/prices/history/${encodeURIComponent(selectedCard.id)}?range=${modalPriceRange}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setModalPriceHistory(data.history ?? []) })
+      .catch(() => { /* silent */ })
+      .finally(() => setModalPriceHistoryLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCard?.id, modalPriceRange])
 
   // Admin: close edit popup when clicking outside it
   useEffect(() => {
@@ -1387,15 +1440,6 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       ? hoveredVariant.variant_image_url
       : null
 
-  // CardMarket EUR price for the currently open card modal.
-  // itemId is null when no card is selected or the card has no tcggo_id —
-  // the hook returns { price: null, loading: false } in both cases.
-  const { price: modalCmPrice, loading: modalCmLoading } = useItemPrice(
-    selectedCard?.tcggo_id != null ? String(selectedCard.tcggo_id) : null,
-    'single',
-    'normal',
-  )
-
   return (
     <>
       <div className="flex flex-wrap gap-4">
@@ -1600,40 +1644,154 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
               {/* ── Price Tab ─── */}
               {modalTab === 'price' && (
-                <div className="py-2">
-                  <div className="space-y-3">
-                    {/* Source header */}
+                <div className="py-2 space-y-5">
+
+                  {/* ── Current prices per variant ─────────────────────── */}
+                  <div className="space-y-2">
                     <h3 className="text-xs font-semibold text-muted uppercase tracking-wider px-1">
-                      CardMarket
+                      CardMarket · Current prices
                     </h3>
 
-                    {/* Normal variant price row — always rendered.
-                        Shows '...' while fetching, formatted price on success, '—' when no data.
-                        Root cause fix: previously gated on tcggo_id != null, but tcggo_id is an
-                        optional field that may be undefined (not fetched), causing the section to
-                        never render. Now always shown with graceful fallbacks. */}
-                    <div className="bg-elevated rounded-lg border border-subtle px-4 py-3 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {/* Green dot = normal variant */}
-                        <div className="w-2.5 h-2.5 rounded-full bg-green-500 shrink-0" />
-                        <span className="text-sm text-secondary">Normal</span>
+                    {selectedCard?.tcggo_id == null ? (
+                      <p className="text-xs text-muted text-center py-4">
+                        No pricing data linked to this card yet.
+                      </p>
+                    ) : modalVariantPricesLoading ? (
+                      <div className="space-y-2">
+                        {[1, 2, 3].map(i => (
+                          <div key={i} className="h-11 bg-elevated rounded-lg border border-subtle animate-pulse" />
+                        ))}
                       </div>
-                      <span className="text-base font-semibold text-primary tabular-nums">
-                        {selectedCard?.tcggo_id == null
-                          ? '—'
-                          : modalCmLoading
-                            ? '...'
-                            : modalCmPrice !== null
-                              ? (fmtCardPrice({ eur: modalCmPrice, usd: null }, effectiveCurrency) ?? '—')
-                              : '—'}
-                      </span>
-                    </div>
-
-                    {/* Note when card has no pricing link */}
-                    {selectedCard?.tcggo_id == null && (
-                      <p className="text-xs text-muted text-center">No pricing data linked to this card yet.</p>
+                    ) : modalVariantPrices && Object.keys(modalVariantPrices).length > 0 ? (
+                      Object.entries(modalVariantPrices).map(([variantKey, price]) => {
+                        const dotColor =
+                          variantKey === 'normal'  ? 'bg-green-500'  :
+                          variantKey === 'reverse' ? 'bg-blue-500'   :
+                          variantKey === 'holo'    ? 'bg-purple-500' : 'bg-zinc-500'
+                        const label =
+                          variantKey === 'normal'  ? 'Normal'       :
+                          variantKey === 'reverse' ? 'Reverse Holo' :
+                          variantKey === 'holo'    ? 'Holo Rare'    :
+                          variantKey.charAt(0).toUpperCase() + variantKey.slice(1)
+                        return (
+                          <div key={variantKey} className="bg-elevated rounded-lg border border-subtle px-4 py-3 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${dotColor}`} />
+                              <span className="text-sm text-secondary">{label}</span>
+                            </div>
+                            <span className="text-base font-semibold text-primary tabular-nums">
+                              {price != null
+                                ? (fmtCardPrice({ eur: price, usd: null }, effectiveCurrency) ?? '—')
+                                : '—'}
+                            </span>
+                          </div>
+                        )
+                      })
+                    ) : (
+                      <p className="text-xs text-muted text-center py-4">
+                        No prices synced yet. Run a price sync from the admin panel.
+                      </p>
                     )}
                   </div>
+
+                  {/* ── Price history chart ─────────────────────────────── */}
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-semibold text-muted uppercase tracking-wider px-1">
+                      Price history
+                    </h3>
+                    <PriceChart
+                      history={modalPriceHistory}
+                      currency={modalPriceCurrency}
+                      isLoading={modalPriceHistoryLoading}
+                      range={modalPriceRange}
+                      onRangeChange={(r) => setModalPriceRange(r)}
+                      isPro={isPro}
+                      priceSource="cardmarket"
+                    />
+                  </div>
+
+                  {/* ── Graded prices (Pro only) ────────────────────────── */}
+                  {selectedCard?.tcggo_id != null && (() => {
+                    const GRADE_ROWS = [
+                      { key: 'psa10',         label: 'PSA 10',          company: 'PSA' },
+                      { key: 'psa9',          label: 'PSA 9',           company: 'PSA' },
+                      { key: 'psa8',          label: 'PSA 8',           company: 'PSA' },
+                      { key: 'bgs10pristine', label: 'BGS 10 Pristine', company: 'BGS' },
+                      { key: 'bgs10',         label: 'BGS 10',          company: 'BGS' },
+                      { key: 'bgs9',          label: 'BGS 9',           company: 'BGS' },
+                      { key: 'bgs8',          label: 'BGS 8',           company: 'BGS' },
+                      { key: 'cgc10',         label: 'CGC 10',          company: 'CGC' },
+                      { key: 'cgc9',          label: 'CGC 9',           company: 'CGC' },
+                      { key: 'cgc8',          label: 'CGC 8',           company: 'CGC' },
+                    ]
+                    // Placeholder prices shown behind the blur (non-revealing)
+                    const PLACEHOLDER = [65, 28, 14, 120, 80, 35, 18, 45, 22, 10]
+
+                    return (
+                      <div className="space-y-2">
+                        <h3 className="text-xs font-semibold text-muted uppercase tracking-wider px-1">
+                          Graded prices
+                        </h3>
+
+                        <div className="relative">
+                          {/* Grade rows — blurred for free users */}
+                          <div className={!isPro ? 'blur-sm pointer-events-none select-none' : undefined}>
+                            <div className="space-y-1.5">
+                              {GRADE_ROWS.map(({ key, label, company }, i) => {
+                                const price = isPro
+                                  ? (modalGradedPrices?.[key] ?? null)
+                                  : PLACEHOLDER[i]
+
+                                const companyColor =
+                                  company === 'PSA' ? 'text-blue-400'   :
+                                  company === 'BGS' ? 'text-purple-400' : 'text-green-400'
+
+                                return (
+                                  <div
+                                    key={key}
+                                    className="bg-elevated rounded-lg border border-subtle px-4 py-2.5 flex items-center justify-between"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className={`text-[10px] font-bold uppercase tracking-wide ${companyColor} w-7 shrink-0`}>
+                                        {company}
+                                      </span>
+                                      <span className="text-sm text-secondary">{label}</span>
+                                    </div>
+                                    <span className="text-sm font-semibold text-primary tabular-nums">
+                                      {price != null
+                                        ? (fmtCardPrice({ eur: price, usd: null }, effectiveCurrency) ?? '—')
+                                        : '—'}
+                                    </span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+
+                          {/* Upgrade overlay — only shown for free users */}
+                          {!isPro && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 rounded-xl bg-base/40 backdrop-blur-[2px]">
+                              <div className="flex flex-col items-center gap-2 text-center px-4">
+                                <span className="text-2xl">🔒</span>
+                                <p className="text-sm font-semibold text-primary">
+                                  Graded prices require Pro
+                                </p>
+                                <p className="text-xs text-muted max-w-[220px]">
+                                  See PSA, BGS and CGC market prices for this card.
+                                </p>
+                                <button
+                                  onClick={() => setShowUpgradeModal(true)}
+                                  className="mt-1 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-accent hover:bg-accent/90 text-white text-xs font-semibold transition-colors shadow-[0_0_12px_rgba(109,95,255,0.35)]"
+                                >
+                                  💎 Upgrade to Pro
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
 
@@ -1725,6 +1883,21 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                               {variant.description || 'Found in Booster Packs'}
                             </div>
                           </div>
+
+                          {/* CardMarket price for this variant — shown when the card has a tcggo_id */}
+                          {selectedCard?.tcggo_id != null && (
+                            <span className="text-xs tabular-nums text-price shrink-0 min-w-[52px] text-right leading-tight">
+                              {modalVariantPricesLoading
+                                ? <span className="opacity-40">…</span>
+                                : (() => {
+                                    const p = modalVariantPrices?.[variant.key]
+                                    return p != null
+                                      ? (fmtCardPrice({ eur: p, usd: null }, effectiveCurrency) ?? '—')
+                                      : '—'
+                                  })()
+                              }
+                            </span>
+                          )}
 
                           {/* Quantity Controls */}
                           <div className="w-28 flex items-center justify-center gap-1.5 shrink-0">
