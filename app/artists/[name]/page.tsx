@@ -38,7 +38,7 @@ export default async function ArtistDetailPage(
 
   const { data, error } = await supabase
     .from('cards')
-    .select('id, name, image, set_id, number, rarity, sets(name)')
+    .select('id, name, image, set_id, number, rarity, sets(name, symbol)')
     .ilike('artist', artistName)
     .order('set_id',  { ascending: true })
     .order('number',  { ascending: true })

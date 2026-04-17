@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useCollectionStore } from '@/lib/store'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -10,7 +11,7 @@ export interface ArtistCard {
   name:    string
   image:   string | null
   set_id:  string | null
-  sets:    { name: string }[] | null
+  sets:    { name: string; symbol: string | null }[] | null
   number:  string | null
   rarity:  string | null
 }
@@ -20,26 +21,29 @@ interface ArtistDetailClientProps {
   initialCards: ArtistCard[]
 }
 
-// ── Rarity badge colours ───────────────────────────────────────────────────────
-
-function rarityColour(rarity: string | null): string {
-  if (!rarity) return 'bg-gray-700 text-gray-300'
-  const r = rarity.toLowerCase()
-  if (r.includes('secret'))        return 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
-  if (r.includes('ultra'))         return 'bg-orange-500/20 text-orange-300 border border-orange-500/30'
-  if (r.includes('rare') && r.includes('holo')) return 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
-  if (r.includes('rare'))          return 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-  if (r.includes('uncommon'))      return 'bg-green-500/20 text-green-300 border border-green-500/30'
-  return 'bg-gray-700/60 text-gray-400'
-}
-
 // ── Single card tile ──────────────────────────────────────────────────────────
 
-function CardTile({ card }: { card: ArtistCard }) {
-  const imgSrc = card.image ?? '/pokemon_card_backside.png'
+function CardTile({ card, collectionQty }: { card: ArtistCard; collectionQty: number }) {
+  const imgSrc    = card.image ?? '/pokemon_card_backside.png'
+  const setName   = card.sets?.[0]?.name ?? null
+  const setSymbol = card.sets?.[0]?.symbol ?? null
+
+  // Format card number as "#24/101" — the `number` field already contains e.g. "24/101"
+  const numberDisplay = card.number ? `#${card.number}` : null
 
   return (
-    <div className="group flex flex-col rounded-xl overflow-hidden bg-elevated border border-subtle hover:border-accent/40 transition-all duration-200 hover:shadow-lg hover:shadow-accent/10">
+    <div className="group relative flex flex-col rounded-xl overflow-hidden bg-elevated border border-subtle hover:border-accent/40 transition-all duration-200 hover:shadow-lg hover:shadow-accent/10">
+      {/* Collection quantity badge — top-right corner of the card image */}
+      <div className="absolute top-1.5 right-1.5 z-10">
+        {collectionQty > 0 ? (
+          <span className="flex items-center justify-center min-w-[20px] h-5 px-1 rounded text-[11px] font-bold text-white bg-purple-500 shadow-sm tabular-nums">
+            {collectionQty}
+          </span>
+        ) : (
+          <span className="flex items-center justify-center w-5 h-5 rounded border border-gray-600/50 bg-gray-800/30" />
+        )}
+      </div>
+
       {/* Card image */}
       <div className="relative aspect-[2.5/3.5] bg-surface overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -56,18 +60,30 @@ function CardTile({ card }: { card: ArtistCard }) {
 
       {/* Card info */}
       <div className="px-3 py-2.5 flex flex-col gap-1">
+        {/* Pokémon name */}
         <p className="text-sm font-semibold text-primary leading-tight line-clamp-2 group-hover:text-accent transition-colors">
           {card.name}
         </p>
 
-        {(card.sets?.[0]?.name ?? card.set_id) && (
-          <p className="text-xs text-muted truncate">{card.sets?.[0]?.name ?? card.set_id}{card.number ? ` · ${card.number}` : ''}</p>
+        {/* Card number with # prefix */}
+        {numberDisplay && (
+          <p className="text-xs text-muted">{numberDisplay}</p>
         )}
 
-        {card.rarity && (
-          <span className={`self-start mt-0.5 text-[10px] font-medium px-1.5 py-0.5 rounded-full ${rarityColour(card.rarity)}`}>
-            {card.rarity}
-          </span>
+        {/* Set symbol + set name */}
+        {setName && (
+          <div className="flex items-center gap-1 min-w-0">
+            {setSymbol && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={setSymbol}
+                alt=""
+                className="w-4 h-4 object-contain shrink-0 opacity-75"
+                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+              />
+            )}
+            <span className="text-xs text-muted truncate">{setName}</span>
+          </div>
         )}
       </div>
     </div>
@@ -79,6 +95,10 @@ function CardTile({ card }: { card: ArtistCard }) {
 export default function ArtistDetailClient({ artistName, initialCards }: ArtistDetailClientProps) {
   const [bio, setBio]           = useState<string | null>(null)
   const [bioLoading, setBioLoading] = useState(true)
+
+  // Collection store — fetches and caches the user's owned quantities
+  const { userCards, fetchUserCards } = useCollectionStore()
+  useEffect(() => { fetchUserCards() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch AI/placeholder bio ──────────────────────────────────────────────
   useEffect(() => {
@@ -191,7 +211,11 @@ export default function ArtistDetailClient({ artistName, initialCards }: ArtistD
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3">
             {initialCards.map(card => (
-              <CardTile key={card.id} card={card} />
+              <CardTile
+                key={card.id}
+                card={card}
+                collectionQty={userCards.get(card.id)?.quantity ?? 0}
+              />
             ))}
           </div>
         )}
