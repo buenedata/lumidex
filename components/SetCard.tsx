@@ -23,7 +23,7 @@ function SetCard({ set, progress, onRemove, isFavorited, onFavorite }: SetCardPr
   return (
     <div className="flex flex-col h-full">
       <Link
-        href={`/set/${set.id}`}
+        href={`/set/${encodeURIComponent(set.id)}`}
         className={cn(
           'group relative flex flex-col flex-1 rounded-xl overflow-hidden',
           'bg-surface border border-subtle',

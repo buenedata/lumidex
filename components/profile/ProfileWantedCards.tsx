@@ -147,7 +147,7 @@ export default function ProfileWantedCards({ userId, isOwnProfile, displayName }
               <div key={card.id} className="group relative shrink-0">
                 {/* Card thumbnail */}
                 <Link
-                  href={card.set_id ? `/set/${card.set_id}` : '#'}
+                  href={card.set_id ? `/set/${encodeURIComponent(card.set_id)}` : '#'}
                   title={`${card.name ?? ''} · ${card.set_name ?? ''} #${card.number ?? '?'}`}
                   className="block"
                 >

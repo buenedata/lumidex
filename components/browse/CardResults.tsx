@@ -100,7 +100,7 @@ export default function CardResults({ cards, query, artistName }: CardResultsPro
              * matching the card's Pokémon type — exactly as on the set detail page.
              */}
             {/* aspect-[5/7] = 2.5:3.5 — the exact Pokémon card image ratio */}
-            <Link href={`/set/${card.set.id}?card=${card.id}`} className="block">
+            <Link href={`/set/${encodeURIComponent(card.set.id)}?card=${card.id}`} className="block">
               <div
                 className={cn(
                   'relative w-full aspect-[5/7] rounded-lg overflow-hidden border border-subtle',
@@ -152,7 +152,7 @@ export default function CardResults({ cards, query, artistName }: CardResultsPro
 
             {/* Card info below the image */}
             <div className="mt-1.5 px-0.5 space-y-0.5 min-w-0">
-              <Link href={`/set/${card.set.id}?card=${card.id}`}>
+              <Link href={`/set/${encodeURIComponent(card.set.id)}?card=${card.id}`}>
                 <p className="text-xs font-medium text-primary truncate leading-tight hover:text-accent transition-colors">
                   {card.name}
                 </p>
@@ -160,7 +160,7 @@ export default function CardResults({ cards, query, artistName }: CardResultsPro
 
               {/* Set name with tiny logo — links to the set page */}
               <Link
-                href={`/set/${card.set.id}`}
+                href={`/set/${encodeURIComponent(card.set.id)}`}
                 className="text-xs text-muted truncate leading-tight flex items-center gap-1 hover:text-accent transition-colors"
               >
                 {card.set.logo_url && (

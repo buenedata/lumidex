@@ -208,7 +208,7 @@ function CardTileInner({
         {/* Row 4: Set name (browse/search only — cards from multiple sets) */}
         {card.set_name && (
           <Link
-            href={`/set/${card.set_id}`}
+            href={`/set/${encodeURIComponent(card.set_id)}`}
             className="flex items-center gap-1 mt-0.5 hover:text-accent transition-colors"
             onClick={(e) => e.stopPropagation()}
           >

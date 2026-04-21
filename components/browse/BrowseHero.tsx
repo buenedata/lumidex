@@ -77,7 +77,7 @@ export default function BrowseHero({ mode, committedQuery, allProducts }: Browse
   // ── Typeahead selection callbacks ───────────────────────────────────────────
 
   const handleSelectCard = useCallback((card: CardSearchResult) => {
-    router.push(`/set/${card.set.id}?card=${card.id}`)
+    router.push(`/set/${encodeURIComponent(card.set.id)}?card=${card.id}`)
     setTypeaheadVisible(false)
   }, [router])
 

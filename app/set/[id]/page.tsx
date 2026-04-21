@@ -73,8 +73,15 @@ async function getAuthAndPrefs(setId: string): Promise<AuthPrefs> {
 
 // ── Server Component ──────────────────────────────────────────────────────────
 export default async function SetPage({ params, searchParams }: SetPageProps) {
-  const { id } = await params
+  const { id: rawId } = await params
   const { card: initialCardId } = await searchParams
+
+  // Decode the URL path segment so that special characters in set IDs
+  // (e.g. the '+' in 'sm2+') survive the full browser → Vercel edge →
+  // Next.js pipeline intact.  Links encode '+' as '%2B'; Next.js passes
+  // the decoded value back via params, so decodeURIComponent is a safe
+  // no-op for IDs that contain no special characters.
+  const id = decodeURIComponent(rawId)
 
   // ── Phase 1: ALL independent fetches in parallel ──────────────────────────
   //
@@ -267,7 +274,8 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
 // same request cycle — no extra DB round-trip.
 //
 export async function generateMetadata({ params }: SetPageProps) {
-  const { id } = await params
+  const { id: rawId } = await params
+  const id = decodeURIComponent(rawId)
 
   try {
     const set = await getSetById(id) as unknown as PokemonSet | null

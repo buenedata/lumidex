@@ -109,7 +109,7 @@ export default function BrowseDiscovery({ data, onSearch, onArtistSelect }: Brow
             {data.recentSets.map(set => (
               <Link
                 key={set.id}
-                href={`/set/${set.id}`}
+                href={`/set/${encodeURIComponent(set.id)}`}
                 className="group flex flex-col items-center bg-elevated border border-subtle rounded-2xl p-5 hover:border-accent/40 transition-all hover:shadow-md hover:shadow-accent/10"
               >
                 {set.logo_url

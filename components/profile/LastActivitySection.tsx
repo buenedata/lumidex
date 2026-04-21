@@ -136,7 +136,7 @@ function CardTile({ item }: { item: Extract<ActivityItem, { type: 'card' }> }) {
 
   return (
     <Link
-      href={`/set/${item.set_id}`}
+      href={`/set/${encodeURIComponent(item.set_id)}`}
       className="group flex-none w-28 flex flex-col items-center gap-1.5 focus:outline-none"
     >
       {/* Card thumbnail */}
@@ -189,7 +189,7 @@ function ProductTile({ item }: { item: Extract<ActivityItem, { type: 'sealed_pro
 
   return (
     <Link
-      href={`/set/${item.set_id}`}
+      href={`/set/${encodeURIComponent(item.set_id)}`}
       className="group flex-none w-28 flex flex-col items-center gap-1.5 focus:outline-none"
     >
       {/* Product thumbnail */}

@@ -73,7 +73,7 @@ function FriendAvatar({ user, size = 10 }: { user: WBUser; size?: number }) {
 function CardThumb({ card }: { card: WBCard }) {
   return (
     <Link
-      href={`/set/${card.set_id}`}
+      href={`/set/${encodeURIComponent(card.set_id)}`}
       title={`${card.name ?? ''} · ${card.set_name ?? ''} #${card.number ?? '?'}`}
       className="group relative shrink-0"
       onClick={e => e.stopPropagation()}

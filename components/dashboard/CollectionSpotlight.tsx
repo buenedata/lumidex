@@ -226,7 +226,7 @@ export default function CollectionSpotlight({
 
           {/* CTA */}
           <Link
-            href={`/set/${set.id}`}
+            href={`/set/${encodeURIComponent(set.id)}`}
             className="inline-flex items-center justify-center gap-1.5 w-full py-2.5 rounded-xl bg-accent/15 border border-accent/30 text-accent text-sm font-semibold hover:bg-accent/25 transition-colors duration-150"
           >
             Continue collecting

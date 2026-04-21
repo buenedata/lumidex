@@ -2257,7 +2257,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                           {relatedCards.slice(0, 3).map((rc) => (
                             <a
                               key={rc.id}
-                              href={rc.set_id ? `/set/${rc.set_id}?card=${rc.id}` : '#'}
+                              href={rc.set_id ? `/set/${encodeURIComponent(rc.set_id)}?card=${rc.id}` : '#'}
                               className="group block bg-elevated rounded-lg overflow-hidden border border-subtle hover:border-accent/50 transition-all duration-150"
                               title={`${rc.setName ?? 'Unknown Set'} — #${rc.number ?? '?'}`}
                             >
