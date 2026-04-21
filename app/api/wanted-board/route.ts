@@ -41,25 +41,36 @@ export interface WantedBoardMatch {
 }
 
 export async function GET(_request: NextRequest) {
-  const serverClient = await createSupabaseServerClient()
+  let serverClient
+  try {
+    serverClient = await createSupabaseServerClient()
+  } catch (initErr) {
+    const msg = initErr instanceof Error ? initErr.message : String(initErr)
+    console.error('[wanted-board] createSupabaseServerClient threw:', msg)
+    return NextResponse.json({ error: 'Unauthorized', _debug: { step: 'client-init', message: msg } }, { status: 401 })
+  }
+
   const { data: { user }, error: authError } = await serverClient.auth.getUser()
 
   if (authError || !user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    console.error('[wanted-board] Auth failed — authError:', authError?.message ?? null, '| user present:', !!user)
+    return NextResponse.json(
+      { error: 'Unauthorized', _debug: { step: 'auth', authError: authError?.message ?? null, hasUser: !!user } },
+      { status: 401 },
+    )
   }
 
   const me = user.id
 
   try {
     // ── 1. Accepted friend IDs ───────────────────────────────────────────────
-    // Query the friendships table directly instead of the accepted_friends view
-    // to avoid a runtime error if that view hasn't been created in the database.
     const { data: friendRows, error: friendsError } = await supabaseAdmin
       .from('friendships')
       .select('requester_id, addressee_id')
       .or(`requester_id.eq.${me},addressee_id.eq.${me}`)
       .eq('status', 'accepted')
 
+    console.log('[wanted-board DIAG] step=1-friendships friendCount=', (friendRows ?? []).length, 'error=', friendsError?.message ?? null)
     if (friendsError) throw friendsError
 
     const friendIds = (friendRows ?? []).map(f =>
@@ -221,7 +232,19 @@ export async function GET(_request: NextRequest) {
     return response
 
   } catch (err) {
-    console.error('[wanted-board] Error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const e = err as Record<string, unknown>
+    console.error('[wanted-board] CAUGHT ERROR — code:', e?.code, '| message:', e?.message, '| details:', e?.details, '| hint:', e?.hint)
+    return NextResponse.json(
+      {
+        error: 'Internal server error',
+        _debug: {
+          code:    e?.code    ?? null,
+          message: e?.message ?? null,
+          details: e?.details ?? null,
+          hint:    e?.hint    ?? null,
+        },
+      },
+      { status: 500 },
+    )
   }
 }

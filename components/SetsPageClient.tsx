@@ -58,7 +58,7 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
   )
   const [searchQuery, setSearchQuery] = useState('')
   const [activeSeries, setActiveSeries] = useState<string>('All')
-  const [isFavoritesOpen, setIsFavoritesOpen] = useState(true)
+  const [isFavoritesOpen, setIsFavoritesOpen] = useState(false)
   const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'ja'>(() => {
     if (typeof window === 'undefined') return 'en'
     return (localStorage.getItem('lumidex_sets_lang') as 'en' | 'ja') ?? 'en'
@@ -274,7 +274,7 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
         </div>
 
         {/* Series pill buttons */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap justify-center">
           <button
             onClick={() => setActiveSeries('All')}
             className={cn(

@@ -83,6 +83,7 @@ export default function ProfilePage() {
   const [userAchievements, setUserAchievements] = useState<Achievement[]>([])
   const [allAchievements, setAllAchievements]   = useState<Achievement[]>([])
   const [setsCollapsed, setSetsCollapsed]       = useState(false)
+  const [expandedLockedCategories, setExpandedLockedCategories] = useState<Set<string>>(new Set())
   const [stats, setStats] = useState({
     totalCards: 0,
     completedSets: 0,
@@ -724,36 +725,58 @@ export default function ProfilePage() {
               </div>
 
               {allAchievements.length > 0 ? (
-                <div className="space-y-6">
+                <div className="space-y-4">
                   {ACHIEVEMENT_CATEGORIES.map(category => {
                     const categoryAll = allAchievements.filter(a => category.names.includes(a.name))
                     if (categoryAll.length === 0) return null
-                    const earnedIds   = new Set(userAchievements.map(a => a.id))
-                    const earnedCount = categoryAll.filter(a => earnedIds.has(a.id)).length
+                    const earnedIds  = new Set(userAchievements.map(a => a.id))
+                    const earned     = categoryAll.filter(a => earnedIds.has(a.id))
+                    const locked     = categoryAll.filter(a => !earnedIds.has(a.id))
+                    const earnedCount = earned.length
+                    const showLocked  = expandedLockedCategories.has(category.label)
+                    const visible     = showLocked ? categoryAll : earned
                     return (
                       <div key={category.label}>
-                        <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-3 flex items-center gap-2">
+                        <h3 className="text-[10px] font-semibold text-muted uppercase tracking-wide mb-2 flex items-center gap-2">
                           {category.label}
-                          <span className="text-[11px] font-bold text-accent">
+                          <span className="text-[10px] font-bold text-accent">
                             {earnedCount}/{categoryAll.length}
                           </span>
                         </h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
-                          {categoryAll.map(achievement => (
-                            <AchievementBadge
-                              key={achievement.id}
-                              achievement={achievement}
-                              unlocked={earnedIds.has(achievement.id)}
-                            />
-                          ))}
-                        </div>
+                        {visible.length > 0 ? (
+                          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-2">
+                            {visible.map(achievement => (
+                              <AchievementBadge
+                                key={achievement.id}
+                                achievement={achievement}
+                                unlocked={earnedIds.has(achievement.id)}
+                              />
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted italic">None earned yet</p>
+                        )}
+                        {locked.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setExpandedLockedCategories(prev => {
+                              const next = new Set(prev)
+                              if (next.has(category.label)) next.delete(category.label)
+                              else next.add(category.label)
+                              return next
+                            })}
+                            className="mt-1.5 text-[11px] text-muted hover:text-primary transition-colors"
+                          >
+                            {showLocked ? 'Hide locked' : `Show locked (${locked.length})`}
+                          </button>
+                        )}
                       </div>
                     )
                   })}
                 </div>
               ) : userAchievements.length > 0 ? (
                 // Fallback while allAchievements loads — show earned only
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+                <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-2">
                   {userAchievements.map(achievement => (
                     <AchievementBadge
                       key={achievement.id}

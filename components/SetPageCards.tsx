@@ -186,18 +186,31 @@ export default function SetPageCards({
 
   // Tabs — Duplicates only shown when user actually has duplicates
   const tabs = useMemo<{ label: string; value: FilterTab; count?: number; dimCount?: boolean }[]>(() => {
+    // When a search query is active the tab badges must reflect only the visible
+    // (filtered) cards, not the full set.  goalHave/goalNeed are full-set counts
+    // emitted by CardGrid (which receives allCards = unfiltered list), so we
+    // bypass them and use the already-search-scoped haveCount/needCount instead.
+    const isSearchActive = !!searchQuery.trim()
+    const displayHave = isAuthenticated
+      ? (isSearchActive ? haveCount : (goalHave ?? haveCount))
+      : undefined
+    const displayNeed = isAuthenticated
+      ? (isSearchActive ? needCount : (goalNeed ?? needCount))
+      : undefined
+
     const list: { label: string; value: FilterTab; count?: number; dimCount?: boolean }[] = [
       { label: 'Show All',   value: 'all' },
       // Use goal-aware counts once CardGrid emits them; fall back to the basic
       // Zustand-aggregate counts until the batch variant fetch completes.
-      { label: 'Have',       value: 'owned',   count: isAuthenticated ? (goalHave ?? haveCount) : undefined },
-      { label: 'Need',       value: 'missing', count: isAuthenticated ? (goalNeed ?? needCount) : undefined, dimCount: true },
+      // When a search is active, always use the search-scoped counts.
+      { label: 'Have',       value: 'owned',   count: displayHave },
+      { label: 'Need',       value: 'missing', count: displayNeed, dimCount: true },
     ]
     if (isAuthenticated && hasDuplicates) {
       list.push({ label: 'Duplicates', value: 'duplicates', count: duplicatesCount })
     }
     return list
-  }, [isAuthenticated, haveCount, needCount, goalHave, goalNeed, duplicatesCount, hasDuplicates])
+  }, [isAuthenticated, haveCount, needCount, goalHave, goalNeed, duplicatesCount, hasDuplicates, searchQuery])
 
   // Make sure activeFilter stays valid if Duplicates tab disappears
   const safeFilter: FilterTab =
