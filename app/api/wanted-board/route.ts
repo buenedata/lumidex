@@ -119,34 +119,48 @@ export async function GET(_request: NextRequest) {
       .filter((id): id is string => id != null)
 
     // ── 4. "They want cards I own" ───────────────────────────────────────────
+    // IMPORTANT: do NOT add .in('card_id', myCardIds) here — if the user owns
+    // many cards, that IN list blows past the URL length limit and PostgREST
+    // returns HTTP 400 "Bad Request". Instead, fetch all friend wanted-lists
+    // and intersect with myCardIds in memory.
     _step = 'step4-they-want'
     const theyWantRows: { user_id: string; card_id: string }[] = []
     if (myCardIds.length > 0) {
+      const myCardIdSet = new Set(myCardIds)
       const { data, error } = await supabaseAdmin
         .from('wanted_cards')
         .select('user_id, card_id')
-        .in('user_id', friendIds)
-        .in('card_id', myCardIds)
+        .in('user_id', friendIds)      // friendIds is small (≤ ~50) — safe for URL
 
       if (error) throw error
-      theyWantRows.push(...(data ?? []) as { user_id: string; card_id: string }[])
+
+      // Intersect server results with myCardIds in memory
+      for (const row of (data ?? []) as { user_id: string; card_id: string }[]) {
+        if (row.card_id != null && myCardIdSet.has(row.card_id)) {
+          theyWantRows.push(row)
+        }
+      }
     }
 
     // ── 5. "I want cards they own" — use user_card_variants ──────────────────
+    // Same URL-length concern: do NOT add .in('card_id', myWantedIds) when the
+    // wanted list may be large. Fetch all friends' owned cards and intersect in memory.
     _step = 'step5-i-want'
     const iWantRows: { user_id: string; card_id: string }[] = []
     if (myWantedIds.length > 0) {
+      const myWantedIdSet = new Set(myWantedIds)
       const { data, error } = await supabaseAdmin
         .from('user_card_variants')
         .select('user_id, card_id')
-        .in('user_id', friendIds)
-        .in('card_id', myWantedIds)
+        .in('user_id', friendIds)      // friendIds is small — safe for URL
         .gt('quantity', 0)
 
       if (error) throw error
-      // De-duplicate per (user_id, card_id) — a friend may have multiple variants
+
+      // Intersect server results with myWantedIds in memory; de-dupe per (user, card)
       const seen = new Set<string>()
       for (const row of (data ?? []) as { user_id: string; card_id: string }[]) {
+        if (row.card_id == null || !myWantedIdSet.has(row.card_id)) continue
         const key = `${row.user_id}:${row.card_id}`
         if (!seen.has(key)) { seen.add(key); iWantRows.push(row) }
       }
