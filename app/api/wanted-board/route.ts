@@ -62,15 +62,16 @@ export async function GET(_request: NextRequest) {
 
   const me = user.id
 
+  let _step = 'start'
   try {
     // ── 1. Accepted friend IDs ───────────────────────────────────────────────
+    _step = 'step1-friendships'
     const { data: friendRows, error: friendsError } = await supabaseAdmin
       .from('friendships')
       .select('requester_id, addressee_id')
       .or(`requester_id.eq.${me},addressee_id.eq.${me}`)
       .eq('status', 'accepted')
 
-    console.log('[wanted-board DIAG] step=1-friendships friendCount=', (friendRows ?? []).length, 'error=', friendsError?.message ?? null)
     if (friendsError) throw friendsError
 
     const friendIds = (friendRows ?? []).map(f =>
@@ -83,6 +84,7 @@ export async function GET(_request: NextRequest) {
     }
 
     // ── 2. My owned card IDs (quantity > 0) — use user_card_variants ─────────
+    _step = 'step2-my-variants'
     const { data: myVariantRows, error: myCardsError } = await supabaseAdmin
       .from('user_card_variants')
       .select('card_id')
@@ -94,6 +96,7 @@ export async function GET(_request: NextRequest) {
     const myCardIds = [...new Set((myVariantRows ?? []).map(c => c.card_id as string))]
 
     // ── 3. My wanted card IDs ────────────────────────────────────────────────
+    _step = 'step3-my-wanted'
     const { data: myWantedRows, error: myWantedError } = await supabaseAdmin
       .from('wanted_cards')
       .select('card_id')
@@ -103,6 +106,7 @@ export async function GET(_request: NextRequest) {
     const myWantedIds = (myWantedRows ?? []).map(w => w.card_id as string)
 
     // ── 4. "They want cards I own" ───────────────────────────────────────────
+    _step = 'step4-they-want'
     const theyWantRows: { user_id: string; card_id: string }[] = []
     if (myCardIds.length > 0) {
       const { data, error } = await supabaseAdmin
@@ -116,6 +120,7 @@ export async function GET(_request: NextRequest) {
     }
 
     // ── 5. "I want cards they own" — use user_card_variants ──────────────────
+    _step = 'step5-i-want'
     const iWantRows: { user_id: string; card_id: string }[] = []
     if (myWantedIds.length > 0) {
       const { data, error } = await supabaseAdmin
@@ -144,6 +149,7 @@ export async function GET(_request: NextRequest) {
     }
 
     // ── 6. Fetch full card data for all matched card IDs ─────────────────────
+    _step = 'step6-cards'
     const allCardIds = new Set([
       ...theyWantRows.map(r => r.card_id),
       ...iWantRows.map(r => r.card_id),
@@ -173,6 +179,7 @@ export async function GET(_request: NextRequest) {
     }
 
     // ── 7. Fetch friend profile data ─────────────────────────────────────────
+    _step = 'step7-users'
     const { data: userRows, error: usersError } = await supabaseAdmin
       .from('users')
       .select('id, display_name, username, avatar_url')
@@ -233,11 +240,12 @@ export async function GET(_request: NextRequest) {
 
   } catch (err) {
     const e = err as Record<string, unknown>
-    console.error('[wanted-board] CAUGHT ERROR — code:', e?.code, '| message:', e?.message, '| details:', e?.details, '| hint:', e?.hint)
+    console.error('[wanted-board] CAUGHT ERROR at', _step, '— code:', e?.code, '| message:', e?.message, '| details:', e?.details, '| hint:', e?.hint)
     return NextResponse.json(
       {
         error: 'Internal server error',
         _debug: {
+          step:    _step,
           code:    e?.code    ?? null,
           message: e?.message ?? null,
           details: e?.details ?? null,
