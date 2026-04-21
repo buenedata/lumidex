@@ -54,6 +54,20 @@ function userToSettings(u: ProfileUser): SettingsValues {
   }
 }
 
+// ── Achievement categories ────────────────────────────────────────────────────
+// Maps achievement names (as stored in DB) to display category labels.
+const ACHIEVEMENT_CATEGORIES: { label: string; names: string[] }[] = [
+  { label: 'Collection Size', names: ['First Steps', 'Century Club', 'Enthusiast', 'Diamond Collector', 'Elite Collector', 'Master Vault', 'Legendary Hoard', 'Card Emperor'] },
+  { label: 'Unique Cards',    names: ['Card Hunter', 'Dedicated Collector', 'Thousand Faces', 'Card Archivist'] },
+  { label: 'Sets Tracked',    names: ['Collector', 'Set Explorer', 'Set Hoarder', 'Set Chronicler', 'Set Archivist'] },
+  { label: 'Set Completion',  names: ['Completionist', 'Master Collector', 'Legend', 'Set Perfectionist', 'Living Pokédex'] },
+  { label: 'Duplicates',      names: ['Double Trouble', 'Trade Ready'] },
+  { label: 'Wanted List',     names: ['Wishful Thinking', 'On the Hunt', 'Obsessive Collector'] },
+  { label: 'Sealed Products', names: ['Sealed Ambitions', 'Box Hoarder', 'Sealed Vault'] },
+  { label: 'Social',          names: ['Friend Finder', 'Social Butterfly', 'Network Builder', 'Community Pillar'] },
+  { label: 'Profile',         names: ['Picture Perfect', 'Identity'] },
+]
+
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function ProfilePage() {
@@ -67,6 +81,8 @@ export default function ProfilePage() {
   const [profileSets, setProfileSets]         = useState<PokemonSet[]>([])
   const [setProgressMap, setSetProgressMap]   = useState<Record<string, SetProgress>>({})
   const [userAchievements, setUserAchievements] = useState<Achievement[]>([])
+  const [allAchievements, setAllAchievements]   = useState<Achievement[]>([])
+  const [setsCollapsed, setSetsCollapsed]       = useState(false)
   const [stats, setStats] = useState({
     totalCards: 0,
     completedSets: 0,
@@ -190,6 +206,14 @@ export default function ProfilePage() {
           .filter(Boolean)
           .flat() as Achievement[]
         setUserAchievements(achievements)
+      }
+
+      // Load all achievements for earned-vs-unearned grouped display
+      const { data: allAchievementsData } = await supabase
+        .from('achievements')
+        .select('id, name, description, icon')
+      if (allAchievementsData) {
+        setAllAchievements(allAchievementsData as Achievement[])
       }
 
       // Count distinct (card, variant) pairs owned — each variant type is counted once
@@ -451,38 +475,6 @@ export default function ProfilePage() {
             variant="hero"
           />
 
-          {/* Gear / settings button (own profile only) */}
-          {isOwnProfile && (
-            <button
-              type="button"
-              onClick={() => setShowSettingsModal(true)}
-              className={cn(
-                'absolute top-3 right-3 z-10',
-                'w-8 h-8 rounded-lg flex items-center justify-center',
-                'bg-black/40 hover:bg-black/60 backdrop-blur-sm',
-                'text-white/80 hover:text-white transition-all duration-150',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50'
-              )}
-              aria-label="Open profile settings"
-              title="Profile Settings"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-              </svg>
-            </button>
-          )}
-
           {/* Avatar + user info */}
           <div className="relative z-10 px-6 pb-6 -mt-10 md:-mt-12 flex flex-col md:flex-row items-center md:items-end gap-4">
             <AvatarUpload
@@ -549,11 +541,9 @@ export default function ProfilePage() {
                   <span className="text-muted text-xs">Member since {joinDate}</span>
                 )}
               </div>
-            </div>
 
-            {/* Social / marketplace icons — right side of hero */}
-            {!isPrivate && (
-              () => {
+              {/* Social links — below bio / location row */}
+              {!isPrivate && (() => {
                 const cm = profileUser.social_cardmarket?.trim() ?? ''
                 const ig = profileUser.social_instagram?.trim() ?? ''
                 const fb = profileUser.social_facebook?.trim() ?? ''
@@ -565,61 +555,89 @@ export default function ProfilePage() {
                 const hasSocial = !!(cm || ig || fb)
                 if (!hasSocial) return null
                 return (
-                  <div className="shrink-0 pb-1 flex flex-col items-center md:items-end gap-2">
-                    <p className="text-[10px] text-muted uppercase tracking-wider hidden md:block">Socials</p>
-                    <div className="flex items-center gap-2">
-                      {cm && (
-                        <a
-                          href={cm}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="Cardmarket Profile"
-                          className="w-8 h-8 rounded-lg bg-surface border border-subtle flex items-center justify-center text-muted hover:text-accent hover:border-accent/40 transition-colors"
-                        >
-                          {/* Simple shopping-cart icon standing in for Cardmarket */}
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-                              d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-                          </svg>
-                        </a>
-                      )}
-                      {igHref && (
-                        <a
-                          href={igHref}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="Instagram"
-                          className="w-8 h-8 rounded-lg bg-surface border border-subtle flex items-center justify-center text-muted hover:text-[#E1306C] hover:border-[#E1306C]/40 transition-colors"
-                        >
-                          {/* Camera icon */}
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-                              d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-                              d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
-                        </a>
-                      )}
-                      {fb && (
-                        <a
-                          href={fb.startsWith('http') ? fb : `https://facebook.com/${fb}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          title="Facebook"
-                          className="w-8 h-8 rounded-lg bg-surface border border-subtle flex items-center justify-center text-muted hover:text-[#1877F2] hover:border-[#1877F2]/40 transition-colors"
-                        >
-                          {/* Person icon */}
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
-                              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                        </a>
-                      )}
-                    </div>
+                  <div className="flex items-center gap-2 mt-3 justify-center md:justify-start">
+                    {cm && (
+                      <a
+                        href={cm}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Cardmarket Profile"
+                        className="w-8 h-8 rounded-lg bg-surface border border-subtle flex items-center justify-center text-muted hover:text-accent hover:border-accent/40 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                            d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                      </a>
+                    )}
+                    {igHref && (
+                      <a
+                        href={igHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Instagram"
+                        className="w-8 h-8 rounded-lg bg-surface border border-subtle flex items-center justify-center text-muted hover:text-[#E1306C] hover:border-[#E1306C]/40 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                            d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                            d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                      </a>
+                    )}
+                    {fb && (
+                      <a
+                        href={fb.startsWith('http') ? fb : `https://facebook.com/${fb}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="Facebook"
+                        className="w-8 h-8 rounded-lg bg-surface border border-subtle flex items-center justify-center text-muted hover:text-[#1877F2] hover:border-[#1877F2]/40 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8}
+                            d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      </a>
+                    )}
                   </div>
                 )
-              }
-            )()}
+              })()}
+            </div>
+
+            {/* Settings button — bottom-right of hero info row (own profile only) */}
+            {isOwnProfile && (
+              <div className="shrink-0 pb-1 flex flex-col items-center md:items-end gap-1">
+                <button
+                  type="button"
+                  onClick={() => setShowSettingsModal(true)}
+                  className={cn(
+                    'w-9 h-9 rounded-xl flex items-center justify-center',
+                    'bg-surface border border-subtle',
+                    'text-muted hover:text-primary hover:border-accent/40 transition-all duration-150',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50'
+                  )}
+                  aria-label="Open profile settings"
+                  title="Profile Settings"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                </button>
+                <span className="text-[10px] text-muted hidden md:block">Settings</span>
+              </div>
+            )}
 
             {/* Friend button — only shown when viewing another user's profile */}
             {!isOwnProfile && currentUser && !friendsLoading && (
@@ -691,14 +709,50 @@ export default function ProfilePage() {
 
             {/* ── Achievements Section ──────────────────────────────────────────── */}
             <section className="mb-8">
-              <h2
-                className="text-xl font-bold text-primary mb-4"
-                style={{ fontFamily: 'var(--font-space-grotesk)' }}
-              >
-                Achievements
-              </h2>
+              <div className="flex items-center gap-3 mb-4">
+                <h2
+                  className="text-xl font-bold text-primary"
+                  style={{ fontFamily: 'var(--font-space-grotesk)' }}
+                >
+                  Achievements
+                </h2>
+                {userAchievements.length > 0 && (
+                  <span className="pill px-2 py-0.5 rounded-full text-xs font-bold bg-accent-dim text-accent border border-[rgba(109,95,255,0.3)]">
+                    {userAchievements.length} earned
+                  </span>
+                )}
+              </div>
 
-              {userAchievements.length > 0 ? (
+              {allAchievements.length > 0 ? (
+                <div className="space-y-6">
+                  {ACHIEVEMENT_CATEGORIES.map(category => {
+                    const categoryAll = allAchievements.filter(a => category.names.includes(a.name))
+                    if (categoryAll.length === 0) return null
+                    const earnedIds   = new Set(userAchievements.map(a => a.id))
+                    const earnedCount = categoryAll.filter(a => earnedIds.has(a.id)).length
+                    return (
+                      <div key={category.label}>
+                        <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-3 flex items-center gap-2">
+                          {category.label}
+                          <span className="text-[11px] font-bold text-accent">
+                            {earnedCount}/{categoryAll.length}
+                          </span>
+                        </h3>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+                          {categoryAll.map(achievement => (
+                            <AchievementBadge
+                              key={achievement.id}
+                              achievement={achievement}
+                              unlocked={earnedIds.has(achievement.id)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : userAchievements.length > 0 ? (
+                // Fallback while allAchievements loads — show earned only
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
                   {userAchievements.map(achievement => (
                     <AchievementBadge
@@ -772,52 +826,76 @@ export default function ProfilePage() {
 
             {/* ── Collection / Sets Section ──────────────────────────────────────── */}
             <section>
-              <h2
-                className="text-xl font-bold text-primary mb-4"
-                style={{ fontFamily: 'var(--font-space-grotesk)' }}
-              >
-                {isOwnProfile ? 'Your Sets' : `${displayName}'s Sets`}
-              </h2>
-
-              {displaySets.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                  {displaySets.map(set => (
-                    <SetCard
-                      key={set.id}
-                      set={set}
-                      progress={setProgressMap[set.id]}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="bg-surface border border-subtle rounded-xl p-12 flex flex-col items-center gap-4 text-center">
-                  <div className="w-14 h-14 rounded-2xl bg-accent-dim flex items-center justify-center text-2xl">
-                    📦
-                  </div>
-                  <div>
-                    <h3
-                      className="text-lg font-semibold text-primary mb-1"
-                      style={{ fontFamily: 'var(--font-space-grotesk)' }}
+              <div className="flex items-center justify-between mb-4">
+                <h2
+                  className="text-xl font-bold text-primary"
+                  style={{ fontFamily: 'var(--font-space-grotesk)' }}
+                >
+                  {isOwnProfile ? 'Your Sets' : `${displayName}'s Sets`}
+                </h2>
+                {displaySets.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSetsCollapsed(c => !c)}
+                    className="flex items-center gap-1.5 text-xs text-muted hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-elevated"
+                    aria-label={setsCollapsed ? 'Expand sets' : 'Collapse sets'}
+                  >
+                    {setsCollapsed ? 'Show' : 'Hide'}
+                    <svg
+                      className={cn('w-3.5 h-3.5 transition-transform duration-200', setsCollapsed ? '' : 'rotate-180')}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
                     >
-                      {isOwnProfile ? 'No collection yet' : 'No sets started yet'}
-                    </h3>
-                    <p className="text-secondary text-sm">
-                      {isOwnProfile
-                        ? 'Start by browsing sets and tracking your cards'
-                        : `${displayName} hasn't added any sets yet`}
-                    </p>
-                  </div>
-                  {isOwnProfile && (
-                    <div className="flex gap-3">
-                      <Button variant="primary" onClick={() => router.push('/sets')}>
-                        Browse Sets
-                      </Button>
-                      <Button variant="secondary" onClick={() => router.push('/dashboard')}>
-                        View Dashboard
-                      </Button>
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              {!setsCollapsed && (
+                <>
+                  {displaySets.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                      {displaySets.map(set => (
+                        <SetCard
+                          key={set.id}
+                          set={set}
+                          progress={setProgressMap[set.id]}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="bg-surface border border-subtle rounded-xl p-12 flex flex-col items-center gap-4 text-center">
+                      <div className="w-14 h-14 rounded-2xl bg-accent-dim flex items-center justify-center text-2xl">
+                        📦
+                      </div>
+                      <div>
+                        <h3
+                          className="text-lg font-semibold text-primary mb-1"
+                          style={{ fontFamily: 'var(--font-space-grotesk)' }}
+                        >
+                          {isOwnProfile ? 'No collection yet' : 'No sets started yet'}
+                        </h3>
+                        <p className="text-secondary text-sm">
+                          {isOwnProfile
+                            ? 'Start by browsing sets and tracking your cards'
+                            : `${displayName} hasn't added any sets yet`}
+                        </p>
+                      </div>
+                      {isOwnProfile && (
+                        <div className="flex gap-3">
+                          <Button variant="primary" onClick={() => router.push('/sets')}>
+                            Browse Sets
+                          </Button>
+                          <Button variant="secondary" onClick={() => router.push('/dashboard')}>
+                            View Dashboard
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
+                </>
               )}
             </section>
           </>

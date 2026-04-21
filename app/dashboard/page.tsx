@@ -49,9 +49,11 @@ export default function DashboardPage() {
   )
 
   // Total physical copies owned (each variant × each duplicate) — used for "Cards Owned" stat
+  // and for the Hero card count pill.
   const totalCards  = Array.from(userCards.values()).reduce((s, uc) => s + uc.quantity, 0)
-  // Distinct card IDs owned (one per card design, collapsing variants) — used for "Unique Cards" stat
-  const uniqueCards = userCards.size
+  // Distinct (card_id, variant_id) pairs with quantity > 0 — used for "Unique Cards" stat.
+  // This equals totalCardVariantCount which is set to data.length in fetchUserCards.
+  const uniqueCards = totalCardVariantCount
   const setsTracked = userPokemonSets.length
   const completedSets = userPokemonSets.filter(set => {
     const owned = userCardCountBySet.get(set.id) ?? 0
@@ -115,7 +117,7 @@ export default function DashboardPage() {
 
         {/* ── Hero Banner ─────────────────────────────────────────────── */}
         <DashboardHero
-          totalCards={totalCardVariantCount}
+          totalCards={totalCards}
           setsTracked={setsTracked}
           completedSets={completedSets}
         />

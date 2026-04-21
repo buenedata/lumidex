@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Variant, VariantSuggestion } from '@/types'
+import { Variant, VariantSuggestion, MissingCardReport } from '@/types'
 import { createVariant, deleteVariant, updateVariant, approveVariantSuggestion, rejectVariantSuggestion } from '@/app/admin/variants/actions'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -20,13 +20,15 @@ interface VariantSuggestionWithUser extends VariantSuggestion {
 interface VariantManagerProps {
   initialVariants: Variant[]
   initialSuggestions: VariantSuggestionWithUser[]
+  initialMissingCardReports?: MissingCardReport[]
   onVariantsChange?: (variants: Variant[]) => void
   onSuggestionsChange?: (suggestions: VariantSuggestionWithUser[]) => void
 }
 
-export function VariantManager({ initialVariants, initialSuggestions, onVariantsChange, onSuggestionsChange }: VariantManagerProps) {
+export function VariantManager({ initialVariants, initialSuggestions, initialMissingCardReports = [], onVariantsChange, onSuggestionsChange }: VariantManagerProps) {
   const [variants, setVariants] = useState(initialVariants)
   const [suggestions, setSuggestions] = useState(initialSuggestions)
+  const [missingCardReports, setMissingCardReports] = useState<MissingCardReport[]>(initialMissingCardReports)
   const [isPending, startTransition] = useTransition()
   const [loadingStates, setLoadingStates] = useState<Record<string, boolean>>({})
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null)
@@ -43,7 +45,7 @@ export function VariantManager({ initialVariants, initialSuggestions, onVariants
 
   // Card selection state
   const [selectedCard, setSelectedCard] = useState<SearchCard | null>(null)
-  const [currentView, setCurrentView] = useState<'search' | 'legacy' | 'suggestions' | 'set-bulk'>('search')
+  const [currentView, setCurrentView] = useState<'search' | 'legacy' | 'suggestions' | 'set-bulk' | 'missing-cards'>('search')
 
   // Form state for creating new variants (legacy mode)
   const [createForm, setCreateForm] = useState({
@@ -241,6 +243,32 @@ export function VariantManager({ initialVariants, initialSuggestions, onVariants
     })
   }
 
+  const handleMissingCardAction = async (reportId: string, status: 'resolved' | 'dismissed') => {
+    setLoading(`missing-${reportId}`, true)
+
+    startTransition(async () => {
+      try {
+        const response = await fetch('/api/missing-card-suggestions', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: reportId, status }),
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to update report')
+        }
+
+        const label = status === 'resolved' ? 'resolved' : 'dismissed'
+        showMessage('success', `Report ${label} successfully`)
+        setMissingCardReports(prev => prev.filter(r => r.id !== reportId))
+      } catch (error: any) {
+        showMessage('error', error.message || 'Failed to update report')
+      } finally {
+        setLoading(`missing-${reportId}`, false)
+      }
+    })
+  }
+
   const GLOBAL_KEY = '__global__'
 
   const getVariantsByCard = () => {
@@ -283,6 +311,10 @@ export function VariantManager({ initialVariants, initialSuggestions, onVariants
         <div className="bg-gray-800 rounded-lg px-4 py-2">
           <div className="text-2xl font-bold text-yellow-400">{suggestions.length}</div>
           <div className="text-sm text-gray-400">Pending Suggestions</div>
+        </div>
+        <div className="bg-gray-800 rounded-lg px-4 py-2">
+          <div className="text-2xl font-bold text-orange-400">{missingCardReports.length}</div>
+          <div className="text-sm text-gray-400">Missing Card Reports</div>
         </div>
       </div>
 
@@ -338,6 +370,16 @@ export function VariantManager({ initialVariants, initialSuggestions, onVariants
             }`}
           >
             📦 By Set
+          </button>
+          <button
+            onClick={() => setCurrentView('missing-cards')}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              currentView === 'missing-cards'
+                ? 'bg-purple-600 text-white'
+                : 'text-gray-300 hover:text-white hover:bg-gray-600'
+            }`}
+          >
+            🃏 Missing Cards ({missingCardReports.length})
           </button>
         </div>
       </div>
@@ -490,6 +532,74 @@ export function VariantManager({ initialVariants, initialSuggestions, onVariants
             onVariantsChange?.(updatedVariants)
           }}
         />
+      )}
+
+      {/* Missing Card Reports View */}
+      {currentView === 'missing-cards' && (
+        <div className="bg-gray-800 rounded-lg p-6">
+          <h2 className="text-2xl font-bold text-white mb-6">
+            Missing Card Reports ({missingCardReports.length})
+          </h2>
+
+          {missingCardReports.length === 0 ? (
+            <div className="text-gray-400 text-center py-12">
+              <div className="text-4xl mb-4">✅</div>
+              <h3 className="text-lg font-medium mb-2">No pending reports</h3>
+              <p>No missing card reports to review right now.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {missingCardReports.map((report) => (
+                <div key={report.id} className="bg-gray-700 rounded-lg p-4">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center flex-wrap gap-2 mb-2">
+                        <h3 className="text-lg font-semibold text-white">{report.card_name}</h3>
+                        {report.card_number && (
+                          <span className="text-sm text-gray-400">#{report.card_number}</span>
+                        )}
+                        {report.variant && (
+                          <span className="px-2 py-0.5 rounded text-xs bg-gray-600 text-gray-300">
+                            {report.variant}
+                          </span>
+                        )}
+                      </div>
+                      {report.set_name && (
+                        <p className="text-gray-300 text-sm mb-1">
+                          Set: <span className="text-white">{report.set_name}</span>
+                        </p>
+                      )}
+                      <div className="text-sm text-gray-400">
+                        Reported by:{' '}
+                        {report.users?.username || report.users?.email || 'Anonymous'}
+                        <span className="mx-2">•</span>
+                        {new Date(report.created_at).toLocaleDateString()}
+                      </div>
+                    </div>
+
+                    <div className="flex space-x-2 ml-4 shrink-0">
+                      <Button
+                        onClick={() => handleMissingCardAction(report.id, 'resolved')}
+                        disabled={loadingStates[`missing-${report.id}`] || isPending}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        {loadingStates[`missing-${report.id}`] ? '…' : 'Resolve'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => handleMissingCardAction(report.id, 'dismissed')}
+                        disabled={loadingStates[`missing-${report.id}`] || isPending}
+                        className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                      >
+                        {loadingStates[`missing-${report.id}`] ? '…' : 'Dismiss'}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Suggestions View */}

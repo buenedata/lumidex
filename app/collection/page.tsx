@@ -25,8 +25,9 @@ export default function CollectionPage() {
   } = useCollectionStore()
   const router = useRouter()
 
-  const [searchTerm, setSearchTerm]       = useState('')
+  const [searchTerm, setSearchTerm]         = useState('')
   const [collectionValue, setCollectionValue] = useState<string | null>(null)
+  const [mySetsOpen, setMySetsOpen]         = useState(true)
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -248,15 +249,49 @@ export default function CollectionPage() {
             </Button>
           </div>
         ) : (
-          /* ── Collection Grid ───────────────────────────────────────── */
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
-            {filteredSets.map(set => (
-              <SetCard
-                key={set.id}
-                set={set}
-                progress={buildProgress(set.id)}
-              />
-            ))}
+          /* ── My Sets Section ───────────────────────────────────────── */
+          <div>
+            {/* Section header with collapse toggle */}
+            <button
+              onClick={() => setMySetsOpen(prev => !prev)}
+              className="flex items-center gap-2 mb-4 group select-none"
+              aria-expanded={mySetsOpen}
+              aria-controls="my-sets-grid"
+            >
+              <h2
+                className="text-sm font-semibold uppercase tracking-widest text-muted group-hover:text-primary transition-colors"
+                style={{ fontFamily: 'var(--font-space-grotesk)' }}
+              >
+                My Sets
+              </h2>
+              <svg
+                className={cn(
+                  'w-4 h-4 text-muted group-hover:text-primary transition-all duration-200',
+                  mySetsOpen ? 'rotate-0' : '-rotate-90'
+                )}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {/* Collapsible grid */}
+            {mySetsOpen && (
+              <div
+                id="my-sets-grid"
+                className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5"
+              >
+                {filteredSets.map(set => (
+                  <SetCard
+                    key={set.id}
+                    set={set}
+                    progress={buildProgress(set.id)}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 

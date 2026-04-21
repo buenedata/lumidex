@@ -58,6 +58,7 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
   )
   const [searchQuery, setSearchQuery] = useState('')
   const [activeSeries, setActiveSeries] = useState<string>('All')
+  const [isFavoritesOpen, setIsFavoritesOpen] = useState(true)
   const [selectedLanguage, setSelectedLanguage] = useState<'en' | 'ja'>(() => {
     if (typeof window === 'undefined') return 'en'
     return (localStorage.getItem('lumidex_sets_lang') as 'en' | 'ja') ?? 'en'
@@ -277,7 +278,7 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
           <button
             onClick={() => setActiveSeries('All')}
             className={cn(
-              'pill px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-150',
+              'pill px-3 py-1.5 rounded-full text-sm font-medium text-center transition-all duration-150',
               activeSeries === 'All'
                 ? 'bg-accent text-white shadow-sm'
                 : 'bg-surface border border-subtle text-secondary hover:border-accent/50 hover:text-primary'
@@ -290,7 +291,7 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
               key={series}
               onClick={() => setActiveSeries(series)}
               className={cn(
-                'pill px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-150',
+                'pill px-3 py-1.5 rounded-full text-sm font-medium text-center transition-all duration-150',
                 activeSeries === series
                   ? 'bg-accent text-white shadow-sm'
                   : 'bg-surface border border-subtle text-secondary hover:border-accent/50 hover:text-primary'
@@ -317,27 +318,50 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
       {filteredFavorites.length > 0 && (
         <section className="mb-10">
           <div className="flex items-center gap-2 mb-4">
-            <h2
-              className="text-lg font-semibold"
-              style={{ fontFamily: 'var(--font-space-grotesk)' }}
+            <button
+              onClick={() => setIsFavoritesOpen(prev => !prev)}
+              className="flex items-center gap-2 group focus:outline-none"
+              aria-expanded={isFavoritesOpen}
+              aria-controls="favorites-grid"
             >
-              ⭐ Favorites
-            </h2>
+              <h2
+                className="text-lg font-semibold"
+                style={{ fontFamily: 'var(--font-space-grotesk)' }}
+              >
+                ⭐ Favorites
+              </h2>
+              <svg
+                className={cn(
+                  'w-4 h-4 text-muted transition-transform duration-200',
+                  isFavoritesOpen ? 'rotate-0' : '-rotate-90'
+                )}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
             <span className="pill text-xs text-muted bg-elevated px-2 py-0.5 rounded-full">
               {filteredFavorites.length}
             </span>
           </div>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
-            {filteredFavorites.map(set => (
-              <SetCard
-                key={set.id}
-                set={set}
-                progress={getProgress(set)}
-                isFavorited={favoritedIds.has(set.id)}
-                onFavorite={() => toggleFavorite(set.id)}
-              />
-            ))}
-          </div>
+          {isFavoritesOpen && (
+            <div
+              id="favorites-grid"
+              className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4"
+            >
+              {filteredFavorites.map(set => (
+                <SetCard
+                  key={set.id}
+                  set={set}
+                  progress={getProgress(set)}
+                  isFavorited={favoritedIds.has(set.id)}
+                  onFavorite={() => toggleFavorite(set.id)}
+                />
+              ))}
+            </div>
+          )}
         </section>
       )}
 

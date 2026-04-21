@@ -7,6 +7,7 @@ import { fmtCardPrice } from '@/lib/currency'
 import CardGrid from '@/components/CardGrid'
 import CollectionGoalSelector from '@/components/CollectionGoalSelector'
 import BinderCalculatorModal from '@/components/BinderCalculatorModal'
+import MissingCardModal from '@/components/MissingCardModal'
 import { useCollectionStore, useAuthStore } from '@/lib/store'
 import { PokemonCard, CollectionGoal, QuickAddVariant } from '@/types'
 
@@ -83,8 +84,9 @@ export default function SetPageCards({
   const [sortBy, setSortBy]                 = useState<SortBy>(setId ? 'number' : 'date')
   const [sortDirection, setSortDirection]   = useState<SortDirection>(setId ? 'asc' : 'desc')
   const [collectionGoal, setCollectionGoal] = useState<CollectionGoal>(initialGoal)
-  const [legendVariants, setLegendVariants]     = useState<QuickAddVariant[]>([])
-  const [binderModalOpen, setBinderModalOpen]   = useState(false)
+  const [legendVariants, setLegendVariants]             = useState<QuickAddVariant[]>([])
+  const [binderModalOpen, setBinderModalOpen]           = useState(false)
+  const [missingCardModalOpen, setMissingCardModalOpen] = useState(false)
   // Set to true once the batch variant fetch detects any card-specific variants.
   // Combined with hasPromos to determine Grandmaster Set selector visibility.
   const [hasExtraVariants, setHasExtraVariants] = useState(false)
@@ -158,18 +160,26 @@ export default function SetPageCards({
   )
 
   // ── Tab counts ───────────────────────────────────────────────────────────
+  // ── Tab-badge counts — scoped to filteredCards so they reflect the current search ──
   const haveCount = useMemo(() =>
-    cards.filter(c => (storeUserCards.get(c.id)?.quantity ?? 0) > 0).length,
-    [cards, storeUserCards])
+    filteredCards.filter(c => (storeUserCards.get(c.id)?.quantity ?? 0) > 0).length,
+    [filteredCards, storeUserCards])
 
   const needCount = useMemo(() =>
-    cards.filter(c => (storeUserCards.get(c.id)?.quantity ?? 0) === 0).length,
-    [cards, storeUserCards])
+    filteredCards.filter(c => (storeUserCards.get(c.id)?.quantity ?? 0) === 0).length,
+    [filteredCards, storeUserCards])
 
   // Total extra copies across all cards and variant types.
   // e.g. one card with Normal×2 + Reverse×2  →  duplicatesCount = 2
   const duplicatesCount = useMemo(() =>
-    cards.reduce((sum, c) => sum + (storeUserCards.get(c.id)?.duplicateCount ?? 0), 0),
+    filteredCards.reduce((sum, c) => sum + (storeUserCards.get(c.id)?.duplicateCount ?? 0), 0),
+    [filteredCards, storeUserCards])
+
+  // Full-set owned count — used as the progress-bar fallback before CardGrid emits
+  // goalHave/goalVariantOwned.  Intentionally NOT scoped to filteredCards so the
+  // progress bar always reflects overall set completion regardless of active search.
+  const fullSetHaveCount = useMemo(() =>
+    cards.filter(c => (storeUserCards.get(c.id)?.quantity ?? 0) > 0).length,
     [cards, storeUserCards])
 
   const hasDuplicates = duplicatesCount > 0
@@ -225,10 +235,10 @@ export default function SetPageCards({
   const progressOwned = useMemo(() => {
     // Masterset + Grandmaster: count owned variant slots emitted by CardGrid.
     if (collectionGoal === 'masterset' || collectionGoal === 'grandmasterset')
-      return goalVariantOwned ?? haveCount
+      return goalVariantOwned ?? fullSetHaveCount
     // Normal: one unique card per slot — goal-aware unique-card count.
-    return goalHave ?? haveCount
-  }, [collectionGoal, goalHave, goalVariantOwned, haveCount])
+    return goalHave ?? fullSetHaveCount
+  }, [collectionGoal, goalHave, goalVariantOwned, fullSetHaveCount])
 
   const progressPct = progressTotal > 0 ? Math.round((progressOwned / progressTotal) * 100) : 0
 
@@ -335,23 +345,47 @@ export default function SetPageCards({
             </div>
           ) : null}
 
-          {/* Binder Guide button — aligned to the right via ml-auto */}
-          <div className="flex flex-col gap-1.5 ml-auto">
-            <span className="text-xs text-muted uppercase tracking-wider select-none">
-              Binder
-            </span>
-            <button
-              onClick={() => setBinderModalOpen(true)}
-              title="See how many binder pages you need to store this set"
-              className={cn(
-                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium',
-                'border border-subtle bg-surface text-secondary',
-                'hover:border-accent/50 hover:text-primary transition-all duration-150 cursor-pointer'
-              )}
-            >
-              <span className="text-base leading-none" aria-hidden>🗂️</span>
-              <span>Binder Guide</span>
-            </button>
+          {/* Missing a Card? + Binder Guide — aligned to the right via ml-auto */}
+          <div className="flex items-end gap-3 ml-auto">
+
+            {/* Missing a Card? button */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs text-muted uppercase tracking-wider select-none">
+                Report
+              </span>
+              <button
+                onClick={() => setMissingCardModalOpen(true)}
+                title="Report a card that is missing from the database"
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium',
+                  'border border-subtle bg-surface text-secondary',
+                  'hover:border-accent/50 hover:text-primary transition-all duration-150 cursor-pointer'
+                )}
+              >
+                <span className="text-base leading-none" aria-hidden>🔍</span>
+                <span>Missing a Card?</span>
+              </button>
+            </div>
+
+            {/* Binder Guide button */}
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs text-muted uppercase tracking-wider select-none">
+                Binder
+              </span>
+              <button
+                onClick={() => setBinderModalOpen(true)}
+                title="See how many binder pages you need to store this set"
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium',
+                  'border border-subtle bg-surface text-secondary',
+                  'hover:border-accent/50 hover:text-primary transition-all duration-150 cursor-pointer'
+                )}
+              >
+                <span className="text-base leading-none" aria-hidden>🗂️</span>
+                <span>Binder Guide</span>
+              </button>
+            </div>
+
           </div>
         </div>
       </div>
@@ -528,6 +562,13 @@ export default function SetPageCards({
         setName={setName}
         currentGoal={collectionGoal}
         hasPromos={hasPromos || hasExtraVariants}
+      />
+
+      {/* ── Missing Card Modal ────────────────────────────────── */}
+      <MissingCardModal
+        isOpen={missingCardModalOpen}
+        setName={setName}
+        onClose={() => setMissingCardModalOpen(false)}
       />
     </div>
   )

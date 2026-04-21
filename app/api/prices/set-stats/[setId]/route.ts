@@ -6,12 +6,12 @@ import { supabaseAdmin } from '@/lib/supabase'
  *
  * Returns aggregated pricing statistics for all cards in a set:
  *  - mostExpensive: the highest single-card EUR price in the set
+ *  - mostExpensiveCard: card details (name, number, image, setName) for the priciest card
  *  - setValue: the sum of all known EUR normal-variant prices
  *  - currency: always 'EUR'
  *
  * Uses item_prices with item_type='single' and variant='normal'.
- * Cards without a tcggo_id or without a price row are silently excluded
- * (they don't contribute to setValue and can't be mostExpensive).
+ * Cards without a tcggo_id or without a price row are silently excluded.
  */
 export async function GET(
   _req: NextRequest,
@@ -19,25 +19,39 @@ export async function GET(
 ) {
   const { setId } = await params
 
-  // ── Step 1: collect all tcggo_ids for cards in this set ──────────────────
-  const { data: cardRows, error: cardError } = await supabaseAdmin
-    .from('cards')
-    .select('tcggo_id')
-    .eq('set_id', setId)
-    .not('tcggo_id', 'is', null)
+  // ── Step 1: collect card details + set name in parallel ──────────────────
+  const [
+    { data: cardRows, error: cardError },
+    { data: setRow },
+  ] = await Promise.all([
+    supabaseAdmin
+      .from('cards')
+      .select('id, name, number, image, tcggo_id')
+      .eq('set_id', setId)
+      .not('tcggo_id', 'is', null),
+    supabaseAdmin
+      .from('sets')
+      .select('name')
+      .eq('id', setId)
+      .single(),
+  ])
 
   if (cardError) {
     console.error('[set-stats] card fetch error:', cardError)
     return NextResponse.json({ error: cardError.message }, { status: 500 })
   }
 
-  // tcggo_id is stored as integer in cards but as text (item_id) in item_prices
-  const tcggoIds: string[] = (cardRows ?? [])
-    .map((r: { tcggo_id: number | null }) => (r.tcggo_id != null ? String(r.tcggo_id) : null))
-    .filter((id): id is string => id !== null)
+  // Build a lookup map: tcggo_id string → card row (for O(1) resolution later)
+  interface CardRow { id: string; name: string | null; number: string | null; image: string | null; tcggo_id: number | null }
+  const cardByTcggoId = new Map<string, CardRow>()
+  ;(cardRows ?? []).forEach((r: CardRow) => {
+    if (r.tcggo_id != null) cardByTcggoId.set(String(r.tcggo_id), r)
+  })
+
+  const tcggoIds = Array.from(cardByTcggoId.keys())
 
   if (tcggoIds.length === 0) {
-    return NextResponse.json({ mostExpensive: null, setValue: null, currency: 'EUR' })
+    return NextResponse.json({ mostExpensive: null, mostExpensiveCard: null, setValue: null, currency: 'EUR' })
   }
 
   // ── Step 2: fetch prices from item_prices ─────────────────────────────────
@@ -54,18 +68,38 @@ export async function GET(
     return NextResponse.json({ error: priceError.message }, { status: 500 })
   }
 
-  const prices: number[] = (priceRows ?? []).map((r: { price: number }) => r.price)
+  interface PriceRow { item_id: string; price: number }
+  const rows: PriceRow[] = priceRows ?? []
 
-  if (prices.length === 0) {
-    return NextResponse.json({ mostExpensive: null, setValue: null, currency: 'EUR' })
+  if (rows.length === 0) {
+    return NextResponse.json({ mostExpensive: null, mostExpensiveCard: null, setValue: null, currency: 'EUR' })
   }
 
   // ── Step 3: aggregate ─────────────────────────────────────────────────────
-  const mostExpensive = Math.max(...prices)
-  const setValue      = prices.reduce((sum, p) => sum + p, 0)
+  const setValue = rows.reduce((sum, r) => sum + r.price, 0)
+
+  // Find the price row with the highest price
+  const mostExpensiveRow = rows.reduce<PriceRow>(
+    (max, r) => (r.price > max.price ? r : max),
+    rows[0],
+  )
+  const mostExpensive = mostExpensiveRow.price
+
+  // Resolve the card details for the most expensive card
+  const card = cardByTcggoId.get(mostExpensiveRow.item_id) ?? null
+  const setName = (setRow as { name?: string | null } | null)?.name ?? null
+
+  const mostExpensiveCard = card
+    ? {
+        name:    card.name    ?? null,
+        number:  card.number  ?? null,
+        image:   card.image   ?? null,
+        setName,
+      }
+    : null
 
   return NextResponse.json(
-    { mostExpensive, setValue, currency: 'EUR' },
+    { mostExpensive, mostExpensiveCard, setValue, currency: 'EUR' },
     {
       headers: {
         // Cache for 5 minutes — prices update hourly at most

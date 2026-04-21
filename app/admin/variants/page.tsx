@@ -5,13 +5,14 @@ import { VariantManager } from '@/components/admin/VariantManager'
 import { useAuthStore } from '@/lib/store'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import type { Variant, VariantSuggestion } from '@/types'
+import type { Variant, VariantSuggestion, MissingCardReport } from '@/types'
 
 export default function AdminVariantsPage() {
   const { user, profile, isLoading } = useAuthStore()
   const router = useRouter()
   const [variants, setVariants] = useState<Variant[]>([])
   const [suggestions, setSuggestions] = useState<VariantSuggestion[]>([])
+  const [missingCardReports, setMissingCardReports] = useState<MissingCardReport[]>([])
   const [dataLoading, setDataLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -59,6 +60,14 @@ export default function AdminVariantsPage() {
       }
       const suggestionsData = await suggestionsResponse.json()
       setSuggestions(Array.isArray(suggestionsData) ? suggestionsData : [])
+
+      // Fetch missing card reports
+      const missingResponse = await fetch('/api/missing-card-suggestions')
+      if (missingResponse.ok) {
+        const missingData = await missingResponse.json()
+        setMissingCardReports(Array.isArray(missingData) ? missingData : [])
+      }
+      // Missing card reports fetch is non-fatal — page still works without them
 
     } catch (err) {
       console.error('Error fetching admin data:', err)
@@ -129,6 +138,7 @@ export default function AdminVariantsPage() {
         <VariantManager
           initialVariants={variants}
           initialSuggestions={suggestions}
+          initialMissingCardReports={missingCardReports}
           onVariantsChange={setVariants}
           onSuggestionsChange={setSuggestions}
         />

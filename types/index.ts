@@ -205,6 +205,24 @@ export interface UserCardVariant {
   updated_at: string;
 }
 
+// ── Missing Card Suggestions ──────────────────────────────────────────────────
+
+/** A user-submitted report for a card that is absent from the database. */
+export interface MissingCardReport {
+  id:           string
+  card_name:    string
+  set_name:     string | null
+  card_number:  string | null
+  variant:      string | null
+  submitted_by: string | null
+  status:       'pending' | 'resolved' | 'dismissed'
+  resolved_at:  string | null
+  resolved_by:  string | null
+  created_at:   string
+  /** Joined: submitted_by → users.id */
+  users: { id?: string; username?: string; email?: string } | null
+}
+
 export interface VariantSuggestion {
   id: string;
   card_id: string;

@@ -52,14 +52,21 @@ export async function GET(_request: NextRequest) {
 
   try {
     // ── 1. Accepted friend IDs ───────────────────────────────────────────────
+    // Query the friendships table directly instead of the accepted_friends view
+    // to avoid a runtime error if that view hasn't been created in the database.
     const { data: friendRows, error: friendsError } = await supabaseAdmin
-      .from('accepted_friends')
-      .select('friend_id')
-      .eq('user_id', me)
+      .from('friendships')
+      .select('requester_id, addressee_id')
+      .or(`requester_id.eq.${me},addressee_id.eq.${me}`)
+      .eq('status', 'accepted')
 
     if (friendsError) throw friendsError
 
-    const friendIds = (friendRows ?? []).map(f => f.friend_id as string)
+    const friendIds = (friendRows ?? []).map(f =>
+      (f.requester_id as string) === me
+        ? (f.addressee_id as string)
+        : (f.requester_id as string)
+    )
     if (friendIds.length === 0) {
       return NextResponse.json({ matches: [] })
     }

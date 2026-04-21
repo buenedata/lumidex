@@ -107,7 +107,7 @@ const FAQ_SECTIONS: { section: string; items: FAQItem[] }[] = [
       {
         question: 'Which card games does Lumidex support?',
         answer:
-          'Currently Lumidex focuses on the Pokémon Trading Card Game (English and other languages). Support for additional card games may be added in the future.',
+          'Currently Lumidex focuses on the Pokémon Trading Card Game (English and Japanese). Support for additional card games may be added in the future.',
       },
     ],
   },
