@@ -59,10 +59,12 @@ export async function GET(_request: NextRequest) {
 
   const me = user.id
 
+  let _step = 'start'
   try {
     // ── 1. Accepted friend IDs ───────────────────────────────────────────────
     // Query the friendships table directly instead of the accepted_friends view
     // to avoid a runtime error if that view hasn't been created in the database.
+    _step = 'step1-friendships'
     const { data: friendRows, error: friendsError } = await supabaseAdmin
       .from('friendships')
       .select('requester_id, addressee_id')
@@ -84,6 +86,7 @@ export async function GET(_request: NextRequest) {
     // NOTE: user_card_variants.card_id is nullable in the schema. Null values
     // must be filtered out before passing them to a PostgREST .in() filter —
     // an empty slot in the IN list (from null.join) triggers HTTP 400 Bad Request.
+    _step = 'step2-my-variants'
     const { data: myVariantRows, error: myCardsError } = await supabaseAdmin
       .from('user_card_variants')
       .select('card_id')
@@ -102,6 +105,7 @@ export async function GET(_request: NextRequest) {
     ]
 
     // ── 3. My wanted card IDs ────────────────────────────────────────────────
+    _step = 'step3-my-wanted'
     const { data: myWantedRows, error: myWantedError } = await supabaseAdmin
       .from('wanted_cards')
       .select('card_id')
@@ -115,6 +119,7 @@ export async function GET(_request: NextRequest) {
       .filter((id): id is string => id != null)
 
     // ── 4. "They want cards I own" ───────────────────────────────────────────
+    _step = 'step4-they-want'
     const theyWantRows: { user_id: string; card_id: string }[] = []
     if (myCardIds.length > 0) {
       const { data, error } = await supabaseAdmin
@@ -128,6 +133,7 @@ export async function GET(_request: NextRequest) {
     }
 
     // ── 5. "I want cards they own" — use user_card_variants ──────────────────
+    _step = 'step5-i-want'
     const iWantRows: { user_id: string; card_id: string }[] = []
     if (myWantedIds.length > 0) {
       const { data, error } = await supabaseAdmin
@@ -156,6 +162,7 @@ export async function GET(_request: NextRequest) {
     }
 
     // ── 6. Fetch full card data for all matched card IDs ─────────────────────
+    _step = 'step6-cards'
     const allCardIds = new Set([
       ...theyWantRows.map(r => r.card_id),
       ...iWantRows.map(r => r.card_id),
@@ -185,6 +192,7 @@ export async function GET(_request: NextRequest) {
     }
 
     // ── 7. Fetch friend profile data ─────────────────────────────────────────
+    _step = 'step7-users'
     const { data: userRows, error: usersError } = await supabaseAdmin
       .from('users')
       .select('id, display_name, username, avatar_url')
@@ -244,7 +252,11 @@ export async function GET(_request: NextRequest) {
     return response
 
   } catch (err) {
-    console.error('[wanted-board] Error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    const e = err as Record<string, unknown>
+    console.error('[wanted-board] Error at', _step, ':', e?.message)
+    return NextResponse.json(
+      { error: 'Internal server error', _debug: { step: _step, message: e?.message ?? null, code: e?.code ?? null } },
+      { status: 500 },
+    )
   }
 }
