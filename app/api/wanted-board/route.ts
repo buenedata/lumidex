@@ -11,6 +11,14 @@ import { supabaseAdmin } from '@/lib/supabase'
  *
  * Sorted: mutual matches (both sides) first, then by total match score.
  * Uses supabaseAdmin to bypass RLS for cross-user table reads.
+ *
+ * ── Query design note ──────────────────────────────────────────────────────
+ * Steps 4 & 5 deliberately avoid chaining a large .in('card_id', [...]) filter
+ * alongside .in('user_id', friendIds). When a user owns many cards (hundreds+),
+ * that second IN list exceeds PostgREST's URL-length limit and returns HTTP 400
+ * "Bad Request". Instead, we fetch all friend wanted/owned card rows filtered
+ * only by the small friendIds array, then intersect with the user's card sets
+ * in JavaScript memory — no URL limit to hit.
  */
 
 interface WBUser {
@@ -53,18 +61,15 @@ export async function GET(_request: NextRequest) {
   const { data: { user }, error: authError } = await serverClient.auth.getUser()
 
   if (authError || !user) {
-    console.error('[wanted-board] Auth failed — authError:', authError?.message ?? null, '| user present:', !!user)
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const me = user.id
 
-  let _step = 'start'
   try {
     // ── 1. Accepted friend IDs ───────────────────────────────────────────────
     // Query the friendships table directly instead of the accepted_friends view
     // to avoid a runtime error if that view hasn't been created in the database.
-    _step = 'step1-friendships'
     const { data: friendRows, error: friendsError } = await supabaseAdmin
       .from('friendships')
       .select('requester_id, addressee_id')
@@ -82,11 +87,9 @@ export async function GET(_request: NextRequest) {
       return NextResponse.json({ matches: [] })
     }
 
-    // ── 2. My owned card IDs (quantity > 0) — use user_card_variants ─────────
-    // NOTE: user_card_variants.card_id is nullable in the schema. Null values
-    // must be filtered out before passing them to a PostgREST .in() filter —
-    // an empty slot in the IN list (from null.join) triggers HTTP 400 Bad Request.
-    _step = 'step2-my-variants'
+    // ── 2. My owned card IDs (quantity > 0) ──────────────────────────────────
+    // user_card_variants.card_id is nullable — filter nulls before using the
+    // IDs in a PostgREST IN filter (null → empty slot → HTTP 400 Bad Request).
     const { data: myVariantRows, error: myCardsError } = await supabaseAdmin
       .from('user_card_variants')
       .select('card_id')
@@ -95,7 +98,6 @@ export async function GET(_request: NextRequest) {
 
     if (myCardsError) throw myCardsError
 
-    // De-duplicate and strip null card_ids to avoid malformed PostgREST IN filters
     const myCardIds = [
       ...new Set(
         (myVariantRows ?? [])
@@ -105,7 +107,6 @@ export async function GET(_request: NextRequest) {
     ]
 
     // ── 3. My wanted card IDs ────────────────────────────────────────────────
-    _step = 'step3-my-wanted'
     const { data: myWantedRows, error: myWantedError } = await supabaseAdmin
       .from('wanted_cards')
       .select('card_id')
@@ -113,28 +114,23 @@ export async function GET(_request: NextRequest) {
 
     if (myWantedError) throw myWantedError
 
-    // Defensive null-filter (wanted_cards.card_id is NOT NULL in the schema, but guard anyway)
     const myWantedIds = (myWantedRows ?? [])
       .map(w => w.card_id as string | null)
       .filter((id): id is string => id != null)
 
     // ── 4. "They want cards I own" ───────────────────────────────────────────
-    // IMPORTANT: do NOT add .in('card_id', myCardIds) here — if the user owns
-    // many cards, that IN list blows past the URL length limit and PostgREST
-    // returns HTTP 400 "Bad Request". Instead, fetch all friend wanted-lists
-    // and intersect with myCardIds in memory.
-    _step = 'step4-they-want'
+    // Fetch all wanted-cards rows for friends (small user_id IN list), then
+    // intersect in memory with myCardIds — avoids URL-length blow-up.
     const theyWantRows: { user_id: string; card_id: string }[] = []
     if (myCardIds.length > 0) {
       const myCardIdSet = new Set(myCardIds)
       const { data, error } = await supabaseAdmin
         .from('wanted_cards')
         .select('user_id, card_id')
-        .in('user_id', friendIds)      // friendIds is small (≤ ~50) — safe for URL
+        .in('user_id', friendIds)
 
       if (error) throw error
 
-      // Intersect server results with myCardIds in memory
       for (const row of (data ?? []) as { user_id: string; card_id: string }[]) {
         if (row.card_id != null && myCardIdSet.has(row.card_id)) {
           theyWantRows.push(row)
@@ -142,22 +138,19 @@ export async function GET(_request: NextRequest) {
       }
     }
 
-    // ── 5. "I want cards they own" — use user_card_variants ──────────────────
-    // Same URL-length concern: do NOT add .in('card_id', myWantedIds) when the
-    // wanted list may be large. Fetch all friends' owned cards and intersect in memory.
-    _step = 'step5-i-want'
+    // ── 5. "I want cards they own" ───────────────────────────────────────────
+    // Same pattern: filter by friendIds only server-side, intersect in memory.
     const iWantRows: { user_id: string; card_id: string }[] = []
     if (myWantedIds.length > 0) {
       const myWantedIdSet = new Set(myWantedIds)
       const { data, error } = await supabaseAdmin
         .from('user_card_variants')
         .select('user_id, card_id')
-        .in('user_id', friendIds)      // friendIds is small — safe for URL
+        .in('user_id', friendIds)
         .gt('quantity', 0)
 
       if (error) throw error
 
-      // Intersect server results with myWantedIds in memory; de-dupe per (user, card)
       const seen = new Set<string>()
       for (const row of (data ?? []) as { user_id: string; card_id: string }[]) {
         if (row.card_id == null || !myWantedIdSet.has(row.card_id)) continue
@@ -176,7 +169,6 @@ export async function GET(_request: NextRequest) {
     }
 
     // ── 6. Fetch full card data for all matched card IDs ─────────────────────
-    _step = 'step6-cards'
     const allCardIds = new Set([
       ...theyWantRows.map(r => r.card_id),
       ...iWantRows.map(r => r.card_id),
@@ -206,7 +198,6 @@ export async function GET(_request: NextRequest) {
     }
 
     // ── 7. Fetch friend profile data ─────────────────────────────────────────
-    _step = 'step7-users'
     const { data: userRows, error: usersError } = await supabaseAdmin
       .from('users')
       .select('id, display_name, username, avatar_url')
@@ -253,7 +244,7 @@ export async function GET(_request: NextRequest) {
       .map(m => ({
         ...m,
         isMutual:   m.theyWant.length > 0 && m.iWant.length > 0,
-        matchScore: m.theyWant.length + m.iWant.length * 2, // mutual side weighted higher
+        matchScore: m.theyWant.length + m.iWant.length * 2,
       }))
       .sort((a, b) => {
         if (a.isMutual !== b.isMutual) return a.isMutual ? -1 : 1
@@ -261,16 +252,11 @@ export async function GET(_request: NextRequest) {
       })
 
     const response = NextResponse.json({ matches })
-    // Private — do not cache on CDN; revalidate quickly
     response.headers.set('Cache-Control', 'private, no-cache')
     return response
 
   } catch (err) {
-    const e = err as Record<string, unknown>
-    console.error('[wanted-board] Error at', _step, ':', e?.message)
-    return NextResponse.json(
-      { error: 'Internal server error', _debug: { step: _step, message: e?.message ?? null, code: e?.code ?? null } },
-      { status: 500 },
-    )
+    console.error('[wanted-board] Error:', err)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
