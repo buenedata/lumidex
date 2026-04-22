@@ -32,6 +32,7 @@ const PRODUCT_TYPE_STYLES: Record<string, { bg: string; text: string; label: str
   'Blister Pack':    { bg: 'bg-teal-500/15',   text: 'text-teal-400',   label: 'Blister'         },
   'Case':            { bg: 'bg-indigo-500/15', text: 'text-indigo-400', label: 'Case'             },
   'Sleeved Booster': { bg: 'bg-cyan-500/15',   text: 'text-cyan-400',   label: 'Sleeved Booster'  },
+  'Other':           { bg: 'bg-gray-500/15',   text: 'text-gray-400',   label: 'Other'            },
 }
 
 function getProductTypeStyle(type: string | null) {

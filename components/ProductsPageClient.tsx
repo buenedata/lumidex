@@ -11,13 +11,14 @@ import type { SeriesProductGroup } from '@/types'
 const KNOWN_PRODUCT_TYPES = [
   'Booster Pack',
   'Booster Box',
-  'Elite Trainer Box',
   'ETB',
   'Booster Bundle',
   'Collection Box',
   'Tin',
   'Blister Pack',
+  'Sleeved Booster',
   'Case',
+  'Other',
 ]
 
 interface ProductsPageClientProps {
