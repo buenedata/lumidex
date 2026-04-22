@@ -22,26 +22,53 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   let userId: string | null = null
   let error: string | null = null
 
-  // Fetch all sealed products, joined with their sets, grouped by series
+  // Fetch all sealed products, then fetch set metadata separately.
+  // Note: set_products.set_id has NO database FK to sets.set_id, so PostgREST
+  // cannot resolve a join via the sets!inner() syntax. We do two queries instead.
   try {
-    const { data: rawProducts, error: productsError } = await supabaseAdmin
+    const { data: products, error: productsError } = await supabaseAdmin
       .from('set_products')
-      .select('id, set_id, name, product_type, image_url, sets!inner(name, series, logo_url)')
+      .select('id, set_id, name, product_type, image_url')
       .order('name', { ascending: true })
 
     if (productsError) {
       console.error('[products page] Failed to fetch products:', productsError)
       error = 'Failed to load sealed products.'
     } else {
+      // Collect unique set IDs present in the results
+      const uniqueSetIds = [...new Set((products ?? []).map(p => p.set_id as string))]
+
+      // Fetch set metadata for those IDs (one round-trip, no FK needed)
+      const setMetaMap = new Map<string, { name: string; series: string | null; logo_url: string | null }>()
+      if (uniqueSetIds.length > 0) {
+        const { data: setsData, error: setsError } = await supabaseAdmin
+          .from('sets')
+          .select('set_id, name, series, logo_url')
+          .in('set_id', uniqueSetIds)
+
+        if (setsError) {
+          console.error('[products page] Failed to fetch sets metadata:', setsError)
+          // Non-fatal — products will still render, just without series/set names
+        }
+
+        for (const s of (setsData ?? [])) {
+          setMetaMap.set(s.set_id as string, {
+            name:     s.name     as string,
+            series:   s.series   as string | null,
+            logo_url: s.logo_url as string | null,
+          })
+        }
+      }
+
+      // Group products: series → setId → products[]
       const seriesMap = new Map<string, Map<string, { setName: string; logoUrl: string | null; products: SealedProduct[] }>>()
 
-      for (const row of (rawProducts ?? [])) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const set     = Array.isArray((row as any).sets) ? (row as any).sets[0] : (row as any).sets
-        const series  = (set?.series   as string | null) ?? 'Other'
-        const setId   = row.set_id    as string
-        const setName = (set?.name    as string) ?? setId
-        const logoUrl = (set?.logo_url as string | null) ?? null
+      for (const row of (products ?? [])) {
+        const setMeta = setMetaMap.get(row.set_id as string)
+        const series  = setMeta?.series   ?? 'Other'
+        const setId   = row.set_id        as string
+        const setName = setMeta?.name     ?? setId
+        const logoUrl = setMeta?.logo_url ?? null
 
         if (!seriesMap.has(series)) seriesMap.set(series, new Map())
         const setsInSeries = seriesMap.get(series)!
@@ -59,8 +86,8 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         })
       }
 
-      allSeries = [...seriesMap.entries()].map(([series, setsMap]) => ({
-        series,
+      allSeries = [...seriesMap.entries()].map(([seriesName, setsMap]) => ({
+        series: seriesName,
         sets: [...setsMap.entries()].map(([setId, setData]) => ({
           setId,
           setName:  setData.setName,
