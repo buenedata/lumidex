@@ -201,7 +201,7 @@ export default function ProductsPageClient({
                 <button
                   type="button"
                   onClick={() => toggleSet(setGroup.setId)}
-                  className="w-full flex items-center gap-3 mb-4 group text-left"
+                  className="flex items-center gap-3 mb-4 group text-left"
                 >
                   {setGroup.logoUrl && (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -222,10 +222,10 @@ export default function ProductsPageClient({
                   <span className="pill text-xs text-muted bg-elevated px-2 py-0.5 rounded-full">
                     {setGroup.products.length}
                   </span>
-                  {/* Chevron */}
+                  {/* Chevron — sits right after the count badge */}
                   <span
                     className={cn(
-                      'ml-auto text-muted transition-transform duration-200',
+                      'text-base text-muted group-hover:text-primary transition-transform duration-200 leading-none',
                       isCollapsed ? '-rotate-90' : 'rotate-0'
                     )}
                     aria-hidden
