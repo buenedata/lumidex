@@ -233,7 +233,7 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
     // Fetch all sealed products and flatten into BrowseProduct[]
     supabaseAdmin
       .from('set_products')
-      .select('id, set_id, name, product_type, image_url, sets!inner(name, series, logo_url)')
+      .select('id, set_id, api_product_id, name, product_type, image_url, sets!inner(name, series, logo_url)')
       .order('name', { ascending: true })
       .then(({ data: rawProducts }) => {
         if (!rawProducts?.length) return
@@ -250,11 +250,12 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
           const setsInSeries = seriesMap.get(series)!
           if (!setsInSeries.has(setId)) setsInSeries.set(setId, { setName, logoUrl, products: [] })
           setsInSeries.get(setId)!.products.push({
-            id:           row.id           as string,
-            set_id:       row.set_id       as string,
-            name:         row.name         as string,
-            product_type: (row.product_type as string | null) ?? null,
-            image_url:    (row.image_url   as string | null) ?? null,
+            id:              row.id              as string,
+            set_id:          row.set_id          as string,
+            api_product_id:  (row.api_product_id as string | null) ?? null,
+            name:            row.name            as string,
+            product_type:    (row.product_type   as string | null) ?? null,
+            image_url:       (row.image_url      as string | null) ?? null,
           })
         }
         const groups: SeriesProductGroup[] = [...seriesMap.entries()].map(([series, setsMap]) => ({

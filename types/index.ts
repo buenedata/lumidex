@@ -366,11 +366,12 @@ export interface UserGradedCard {
 
 /** A sealed product row from the set_products table. */
 export interface SealedProduct {
-  id:           string
-  set_id:       string
-  name:         string
-  product_type: string | null
-  image_url:    string | null
+  id:              string
+  set_id:          string
+  api_product_id:  string | null
+  name:            string
+  product_type:    string | null
+  image_url:       string | null
 }
 
 /** Groups sealed products by series → set. Used by /products and browse pages. */

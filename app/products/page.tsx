@@ -28,7 +28,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   try {
     const { data: products, error: productsError } = await supabaseAdmin
       .from('set_products')
-      .select('id, set_id, name, product_type, image_url')
+      .select('id, set_id, api_product_id, name, product_type, image_url')
       .order('name', { ascending: true })
 
     if (productsError) {
@@ -90,11 +90,12 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         }
 
         setsInSeries.get(setId)!.products.push({
-          id:           row.id           as string,
-          set_id:       row.set_id       as string,
-          name:         row.name         as string,
-          product_type: (row.product_type as string | null) ?? null,
-          image_url:    (row.image_url   as string | null) ?? null,
+          id:              row.id              as string,
+          set_id:          row.set_id          as string,
+          api_product_id:  (row.api_product_id as string | null) ?? null,
+          name:            row.name            as string,
+          product_type:    (row.product_type   as string | null) ?? null,
+          image_url:       (row.image_url      as string | null) ?? null,
         })
       }
 

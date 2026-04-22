@@ -26,10 +26,11 @@ function getProductTypeStyle(type: string | null) {
 }
 
 interface SealedProduct {
-  id:           string
-  name:         string
-  product_type: string | null
-  image_url:    string | null
+  id:             string
+  api_product_id: string | null
+  name:           string
+  product_type:   string | null
+  image_url:      string | null
 }
 
 interface ProductCardProps {
@@ -49,7 +50,7 @@ export default function ProductCard({
   const [saving,   setSaving]   = useState(false)
 
   const typeStyle = getProductTypeStyle(product.product_type)
-  const { price, currency, loading: priceLoading } = useItemPrice(product.id, 'product', 'normal')
+  const { price, currency, loading: priceLoading } = useItemPrice(product.api_product_id, 'product', 'normal')
 
   const updateQuantity = useCallback(async (newQty: number) => {
     if (!userId || saving) return
