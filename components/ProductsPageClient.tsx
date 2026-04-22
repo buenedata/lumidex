@@ -16,6 +16,7 @@ const KNOWN_PRODUCT_TYPES = [
   'Collection Box',
   'Tin',
   'Blister Pack',
+  'Case',
 ]
 
 interface ProductsPageClientProps {
