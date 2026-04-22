@@ -3,6 +3,8 @@
 import { useState, useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import { useItemPrice } from '@/hooks/useItemPrice'
+import { useAuthStore } from '@/lib/store'
+import { fmtCardPrice } from '@/lib/currency'
 
 // ── Product type badge colours ────────────────────────────────────────────────
 const PRODUCT_TYPE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
@@ -49,8 +51,11 @@ export default function ProductCard({
   const [quantity, setQuantity] = useState(initialQuantity)
   const [saving,   setSaving]   = useState(false)
 
+  const { profile } = useAuthStore()
+  const userCurrency: string = (profile as any)?.preferred_currency ?? 'USD'
+
   const typeStyle = getProductTypeStyle(product.product_type)
-  const { price, currency, loading: priceLoading } = useItemPrice(product.api_product_id, 'product', 'normal')
+  const { price, loading: priceLoading } = useItemPrice(product.api_product_id, 'product', 'normal')
 
   const updateQuantity = useCallback(async (newQty: number) => {
     if (!userId || saving) return
@@ -129,7 +134,7 @@ export default function ProductCard({
             <span className="text-xs text-muted animate-pulse">Loading…</span>
           ) : price !== null ? (
             <span className="text-sm font-semibold text-accent">
-              {currency} {price.toFixed(2)}
+              {fmtCardPrice({ eur: price, usd: null }, userCurrency) ?? `EUR ${price.toFixed(2)}`}
             </span>
           ) : (
             <span className="text-xs text-muted">—</span>
