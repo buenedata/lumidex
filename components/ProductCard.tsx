@@ -15,6 +15,7 @@ export const PRODUCT_TYPES = [
   'Collection Box',
   'Tin',
   'Blister Pack',
+  'Sleeved Booster',
   'Case',
   'Other',
 ]
@@ -30,6 +31,7 @@ const PRODUCT_TYPE_STYLES: Record<string, { bg: string; text: string; label: str
   'Tin':             { bg: 'bg-yellow-500/15', text: 'text-yellow-400', label: 'Tin'              },
   'Blister Pack':    { bg: 'bg-teal-500/15',   text: 'text-teal-400',   label: 'Blister'         },
   'Case':            { bg: 'bg-indigo-500/15', text: 'text-indigo-400', label: 'Case'             },
+  'Sleeved Booster': { bg: 'bg-cyan-500/15',   text: 'text-cyan-400',   label: 'Sleeved Booster'  },
 }
 
 function getProductTypeStyle(type: string | null) {
