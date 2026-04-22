@@ -3,6 +3,7 @@
 import { useState, useMemo, useCallback } from 'react'
 import ProductCard from '@/components/ProductCard'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/lib/store'
 import type { SeriesProductGroup } from '@/types'
 
 // ── Known product types for the type filter pills ─────────────────────────────
@@ -30,6 +31,9 @@ export default function ProductsPageClient({
   ownedQuantities,
   userId,
 }: ProductsPageClientProps) {
+  const { profile } = useAuthStore()
+  const isAdmin = (profile as any)?.role === 'admin'
+
   const [activeSeries,  setActiveSeries]  = useState<string>(initialSeries)
   const [activeType,    setActiveType]    = useState<string>('All')
   const [collapsedSets, setCollapsedSets] = useState<Set<string>>(new Set())
@@ -239,12 +243,13 @@ export default function ProductsPageClient({
                   <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
                     {setGroup.products.map(product => (
                       <ProductCard
-                        key={product.id}
-                        product={product}
-                        setName={setGroup.setName}
-                        userId={userId}
-                        initialQuantity={ownedQuantities[product.id] ?? 0}
-                      />
+                          key={product.id}
+                          product={product}
+                          setName={setGroup.setName}
+                          userId={userId}
+                          initialQuantity={ownedQuantities[product.id] ?? 0}
+                          isAdmin={isAdmin}
+                        />
                     ))}
                   </div>
                 )}

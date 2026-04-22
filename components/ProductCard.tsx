@@ -6,6 +6,19 @@ import { useItemPrice } from '@/hooks/useItemPrice'
 import { useAuthStore } from '@/lib/store'
 import { fmtCardPrice } from '@/lib/currency'
 
+// ── Known product types ───────────────────────────────────────────────────────
+export const PRODUCT_TYPES = [
+  'Booster Pack',
+  'Booster Box',
+  'Elite Trainer Box',
+  'ETB',
+  'Booster Bundle',
+  'Collection Box',
+  'Tin',
+  'Blister Pack',
+  'Other',
+]
+
 // ── Product type badge colours ────────────────────────────────────────────────
 const PRODUCT_TYPE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   'Booster Pack':    { bg: 'bg-green-500/15',  text: 'text-green-400',  label: 'Booster Pack'    },
@@ -40,6 +53,7 @@ interface ProductCardProps {
   setName:          string
   userId:           string | null
   initialQuantity?: number
+  isAdmin?:         boolean
 }
 
 export default function ProductCard({
@@ -47,14 +61,33 @@ export default function ProductCard({
   setName,
   userId,
   initialQuantity = 0,
+  isAdmin = false,
 }: ProductCardProps) {
-  const [quantity, setQuantity] = useState(initialQuantity)
-  const [saving,   setSaving]   = useState(false)
+  const [quantity,    setQuantity]    = useState(initialQuantity)
+  const [saving,      setSaving]      = useState(false)
+  const [productType, setProductType] = useState<string | null>(product.product_type)
+  const [typesaving,  setTypeSaving]  = useState(false)
 
   const { profile } = useAuthStore()
   const userCurrency: string = (profile as any)?.preferred_currency ?? 'USD'
 
-  const typeStyle = getProductTypeStyle(product.product_type)
+  const typeStyle = getProductTypeStyle(productType)
+
+  const handleTypeChange = useCallback(async (newType: string) => {
+    setProductType(newType)
+    setTypeSaving(true)
+    try {
+      await fetch(`/api/admin/set-products/${product.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product_type: newType }),
+      })
+    } catch {
+      console.error('[ProductCard] Failed to update product type')
+    } finally {
+      setTypeSaving(false)
+    }
+  }, [product.id])
   const { price, loading: priceLoading } = useItemPrice(product.api_product_id, 'product', 'normal')
 
   const updateQuantity = useCallback(async (newQty: number) => {
@@ -105,16 +138,33 @@ export default function ProductCard({
       )}
 
       <div className="p-4 flex flex-col gap-3 flex-1">
-        {/* Product type badge + set name */}
+        {/* Product type badge (or admin dropdown) + set name */}
         <div className="flex items-start justify-between gap-2">
-          <span
-            className={cn(
-              'pill inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
-              typeStyle.bg, typeStyle.text
-            )}
-          >
-            {typeStyle.label}
-          </span>
+          {isAdmin ? (
+            <select
+              value={productType ?? ''}
+              onChange={e => handleTypeChange(e.target.value)}
+              disabled={typesaving}
+              className={cn(
+                'pill text-xs font-medium rounded-full px-2 py-0.5 border cursor-pointer',
+                'bg-surface border-subtle text-secondary hover:border-accent/50',
+                'disabled:opacity-50'
+              )}
+            >
+              {PRODUCT_TYPES.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          ) : (
+            <span
+              className={cn(
+                'pill inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
+                typeStyle.bg, typeStyle.text
+              )}
+            >
+              {typeStyle.label}
+            </span>
+          )}
           <span className="text-xs text-muted text-right leading-tight shrink-0 max-w-[45%] line-clamp-1">
             {setName}
           </span>
