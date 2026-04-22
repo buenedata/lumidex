@@ -29,6 +29,7 @@ const PRODUCT_TYPE_STYLES: Record<string, { bg: string; text: string; label: str
   'Collection Box':  { bg: 'bg-pink-500/15',   text: 'text-pink-400',   label: 'Collection Box'  },
   'Tin':             { bg: 'bg-yellow-500/15', text: 'text-yellow-400', label: 'Tin'              },
   'Blister Pack':    { bg: 'bg-teal-500/15',   text: 'text-teal-400',   label: 'Blister'         },
+  'Case':            { bg: 'bg-indigo-500/15', text: 'text-indigo-400', label: 'Case'             },
 }
 
 function getProductTypeStyle(type: string | null) {
