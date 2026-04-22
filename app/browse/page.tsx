@@ -2,7 +2,7 @@ import { Suspense } from 'react'
 import BrowseClient from '@/components/browse/BrowseClient'
 import { supabaseAdmin } from '@/lib/supabase'
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
-import type { SeriesProductGroup } from '@/types'
+import type { SeriesProductGroup, SealedProduct } from '@/types'
 import type {
   SearchMode,
   CardSearchResult,
@@ -230,8 +230,42 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
       ? fetchArtistResults(rawQuery).then(r => { initialArtists = r })
       : Promise.resolve(),
 
-    // Products: empty until new pricing system is implemented
-    Promise.resolve(),
+    // Fetch all sealed products and flatten into BrowseProduct[]
+    supabaseAdmin
+      .from('set_products')
+      .select('id, set_id, name, product_type, image_url, sets!inner(name, series, logo_url)')
+      .order('name', { ascending: true })
+      .then(({ data: rawProducts }) => {
+        if (!rawProducts?.length) return
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const seriesMap = new Map<string, Map<string, { setName: string; logoUrl: string | null; products: SealedProduct[] }>>()
+        for (const row of rawProducts) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const set     = Array.isArray((row as any).sets) ? (row as any).sets[0] : (row as any).sets
+          const series  = (set?.series   as string | null) ?? 'Other'
+          const setId   = row.set_id    as string
+          const setName = (set?.name    as string) ?? setId
+          const logoUrl = (set?.logo_url as string | null) ?? null
+          if (!seriesMap.has(series)) seriesMap.set(series, new Map())
+          const setsInSeries = seriesMap.get(series)!
+          if (!setsInSeries.has(setId)) setsInSeries.set(setId, { setName, logoUrl, products: [] })
+          setsInSeries.get(setId)!.products.push({
+            id:           row.id           as string,
+            set_id:       row.set_id       as string,
+            name:         row.name         as string,
+            product_type: (row.product_type as string | null) ?? null,
+            image_url:    (row.image_url   as string | null) ?? null,
+          })
+        }
+        const groups: SeriesProductGroup[] = [...seriesMap.entries()].map(([series, setsMap]) => ({
+          series,
+          sets: [...setsMap.entries()].map(([setId, setData]) => ({
+            setId, setName: setData.setName, logoUrl: setData.logoUrl, products: setData.products,
+          })),
+        }))
+        allProducts     = flattenProducts(groups)
+        initialProducts = allProducts
+      }),
 
     // Discovery data (landing state — fetched only when there is no query)
     !hasQuery

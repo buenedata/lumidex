@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import { supabaseAdmin } from '@/lib/supabase'
-import type { SeriesProductGroup } from '@/types'
+import type { SeriesProductGroup, SealedProduct } from '@/types'
 import ProductsPageClient from '@/components/ProductsPageClient'
 
 // Opt out of static pre-rendering: reads auth cookies at request time.
@@ -22,8 +22,57 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
   let userId: string | null = null
   let error: string | null = null
 
-  // Products will be empty until the new pricing system is implemented
-  allSeries = []
+  // Fetch all sealed products, joined with their sets, grouped by series
+  try {
+    const { data: rawProducts, error: productsError } = await supabaseAdmin
+      .from('set_products')
+      .select('id, set_id, name, product_type, image_url, sets!inner(name, series, logo_url)')
+      .order('name', { ascending: true })
+
+    if (productsError) {
+      console.error('[products page] Failed to fetch products:', productsError)
+      error = 'Failed to load sealed products.'
+    } else {
+      const seriesMap = new Map<string, Map<string, { setName: string; logoUrl: string | null; products: SealedProduct[] }>>()
+
+      for (const row of (rawProducts ?? [])) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const set     = Array.isArray((row as any).sets) ? (row as any).sets[0] : (row as any).sets
+        const series  = (set?.series   as string | null) ?? 'Other'
+        const setId   = row.set_id    as string
+        const setName = (set?.name    as string) ?? setId
+        const logoUrl = (set?.logo_url as string | null) ?? null
+
+        if (!seriesMap.has(series)) seriesMap.set(series, new Map())
+        const setsInSeries = seriesMap.get(series)!
+
+        if (!setsInSeries.has(setId)) {
+          setsInSeries.set(setId, { setName, logoUrl, products: [] })
+        }
+
+        setsInSeries.get(setId)!.products.push({
+          id:           row.id           as string,
+          set_id:       row.set_id       as string,
+          name:         row.name         as string,
+          product_type: (row.product_type as string | null) ?? null,
+          image_url:    (row.image_url   as string | null) ?? null,
+        })
+      }
+
+      allSeries = [...seriesMap.entries()].map(([series, setsMap]) => ({
+        series,
+        sets: [...setsMap.entries()].map(([setId, setData]) => ({
+          setId,
+          setName:  setData.setName,
+          logoUrl:  setData.logoUrl,
+          products: setData.products,
+        })),
+      }))
+    }
+  } catch (err) {
+    console.error('[products page] Products fetch threw:', err)
+    error = 'Failed to load sealed products.'
+  }
 
   // Fetch auth user + preferences + owned quantities
   try {
