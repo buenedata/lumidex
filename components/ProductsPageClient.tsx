@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useCallback } from 'react'
 import ProductCard from '@/components/ProductCard'
+import MissingProductModal from '@/components/MissingProductModal'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/lib/store'
 import type { SeriesProductGroup } from '@/types'
@@ -35,9 +36,10 @@ export default function ProductsPageClient({
   const { profile } = useAuthStore()
   const isAdmin = (profile as any)?.role === 'admin'
 
-  const [activeSeries,  setActiveSeries]  = useState<string>(initialSeries)
-  const [activeType,    setActiveType]    = useState<string>('All')
-  const [collapsedSets, setCollapsedSets] = useState<Set<string>>(new Set())
+  const [activeSeries,         setActiveSeries]         = useState<string>(initialSeries)
+  const [activeType,           setActiveType]           = useState<string>('All')
+  const [collapsedSets,        setCollapsedSets]        = useState<Set<string>>(new Set())
+  const [missingProductOpen,   setMissingProductOpen]   = useState(false)
 
   const toggleSet = useCallback((setId: string) => {
     setCollapsedSets(prev => {
@@ -166,6 +168,25 @@ export default function ProductsPageClient({
             </div>
           </div>
         )}
+
+        {/* Missing a Product? button */}
+        <div className="flex justify-end">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs text-muted uppercase tracking-wider select-none">Report</span>
+            <button
+              onClick={() => setMissingProductOpen(true)}
+              title="Report a sealed product that is missing from the database"
+              className={cn(
+                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium',
+                'border border-subtle bg-surface text-secondary',
+                'hover:border-accent/50 hover:text-primary transition-all duration-150 cursor-pointer'
+              )}
+            >
+              <span className="text-base leading-none" aria-hidden>📦</span>
+              <span>Missing a Product?</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* ── Empty state ─────────────────────────────────────────────────── */}
@@ -259,6 +280,12 @@ export default function ProductsPageClient({
           })}
         </section>
       ))}
+
+      {/* ── Missing Product Modal ─────────────────────────────────────── */}
+      <MissingProductModal
+        isOpen={missingProductOpen}
+        onClose={() => setMissingProductOpen(false)}
+      />
     </div>
   )
 }
