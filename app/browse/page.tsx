@@ -261,7 +261,7 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
         const groups: SeriesProductGroup[] = [...seriesMap.entries()].map(([series, setsMap]) => ({
           series,
           sets: [...setsMap.entries()].map(([setId, setData]) => ({
-            setId, setName: setData.setName, logoUrl: setData.logoUrl, products: setData.products,
+            setId, setName: setData.setName, logoUrl: setData.logoUrl, releaseDate: null, products: setData.products,
           })),
         }))
         allProducts     = flattenProducts(groups)

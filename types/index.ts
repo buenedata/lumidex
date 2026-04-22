@@ -379,9 +379,10 @@ export interface SeriesProductGroup {
   /** Series name, e.g. "Scarlet & Violet" */
   series: string
   sets: Array<{
-    setId:    string
-    setName:  string
-    logoUrl:  string | null
-    products: SealedProduct[]
+    setId:       string
+    setName:     string
+    logoUrl:     string | null
+    releaseDate: string | null
+    products:    SealedProduct[]
   }>
 }

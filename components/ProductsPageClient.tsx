@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import ProductCard from '@/components/ProductCard'
 import { cn } from '@/lib/utils'
 import type { SeriesProductGroup } from '@/types'
@@ -30,8 +30,18 @@ export default function ProductsPageClient({
   ownedQuantities,
   userId,
 }: ProductsPageClientProps) {
-  const [activeSeries, setActiveSeries] = useState<string>(initialSeries)
-  const [activeType,   setActiveType]   = useState<string>('All')
+  const [activeSeries,  setActiveSeries]  = useState<string>(initialSeries)
+  const [activeType,    setActiveType]    = useState<string>('All')
+  const [collapsedSets, setCollapsedSets] = useState<Set<string>>(new Set())
+
+  const toggleSet = useCallback((setId: string) => {
+    setCollapsedSets(prev => {
+      const next = new Set(prev)
+      if (next.has(setId)) next.delete(setId)
+      else next.add(setId)
+      return next
+    })
+  }, [])
 
   // ── Collect all unique product types present in the data ──────────────────
   const availableTypes = useMemo(() => {
@@ -183,45 +193,64 @@ export default function ProductsPageClient({
           )}
 
           {/* Per-set sub-sections within the series */}
-          {group.sets.map(setGroup => (
-            <div key={setGroup.setId} className="mb-8">
-              {/* Set heading */}
-              <div className="flex items-center gap-3 mb-4">
-                {setGroup.logoUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={setGroup.logoUrl}
-                    alt={setGroup.setName}
-                    width={80}
-                    height={40}
-                    className="object-contain h-7 w-auto"
-                  />
-                )}
-                <h3
-                  className="text-sm font-semibold text-secondary"
-                  style={{ fontFamily: 'var(--font-space-grotesk)' }}
+          {group.sets.map(setGroup => {
+            const isCollapsed = collapsedSets.has(setGroup.setId)
+            return (
+              <div key={setGroup.setId} className="mb-8">
+                {/* Set heading — click anywhere to toggle */}
+                <button
+                  type="button"
+                  onClick={() => toggleSet(setGroup.setId)}
+                  className="w-full flex items-center gap-3 mb-4 group text-left"
                 >
-                  {setGroup.setName}
-                </h3>
-                <span className="pill text-xs text-muted bg-elevated px-2 py-0.5 rounded-full">
-                  {setGroup.products.length}
-                </span>
-              </div>
+                  {setGroup.logoUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={setGroup.logoUrl}
+                      alt={setGroup.setName}
+                      width={80}
+                      height={40}
+                      className="object-contain h-7 w-auto"
+                    />
+                  )}
+                  <h3
+                    className="text-sm font-semibold text-secondary group-hover:text-primary transition-colors"
+                    style={{ fontFamily: 'var(--font-space-grotesk)' }}
+                  >
+                    {setGroup.setName}
+                  </h3>
+                  <span className="pill text-xs text-muted bg-elevated px-2 py-0.5 rounded-full">
+                    {setGroup.products.length}
+                  </span>
+                  {/* Chevron */}
+                  <span
+                    className={cn(
+                      'ml-auto text-muted transition-transform duration-200',
+                      isCollapsed ? '-rotate-90' : 'rotate-0'
+                    )}
+                    aria-hidden
+                  >
+                    ▾
+                  </span>
+                </button>
 
-              {/* Product grid */}
-              <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
-                {setGroup.products.map(product => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    setName={setGroup.setName}
-                    userId={userId}
-                    initialQuantity={ownedQuantities[product.id] ?? 0}
-                  />
-                ))}
+                {/* Product grid — hidden when collapsed */}
+                {!isCollapsed && (
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+                    {setGroup.products.map(product => (
+                      <ProductCard
+                        key={product.id}
+                        product={product}
+                        setName={setGroup.setName}
+                        userId={userId}
+                        initialQuantity={ownedQuantities[product.id] ?? 0}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            )
+          })}
         </section>
       ))}
     </div>

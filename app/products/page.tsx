@@ -62,7 +62,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
       }
 
       // Group products: series → setId → products[]
-      const seriesMap = new Map<string, Map<string, { setName: string; logoUrl: string | null; products: SealedProduct[] }>>()
+      const seriesMap = new Map<string, Map<string, { setName: string; logoUrl: string | null; releaseDate: string | null; products: SealedProduct[] }>>()
       // Track the most-recent set release_date within each series (for sorting)
       const seriesMaxDate = new Map<string, string>()
 
@@ -86,7 +86,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         const setsInSeries = seriesMap.get(series)!
 
         if (!setsInSeries.has(setId)) {
-          setsInSeries.set(setId, { setName, logoUrl, products: [] })
+          setsInSeries.set(setId, { setName, logoUrl, releaseDate, products: [] })
         }
 
         setsInSeries.get(setId)!.products.push({
@@ -99,21 +99,29 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         })
       }
 
-      // Build series array sorted newest-first by max set release_date within series
+      // Build series array sorted newest-first by max set release_date within series.
+      // Within each series, sort sets newest-first by their own release_date.
       allSeries = [...seriesMap.entries()]
         .map(([seriesName, setsMap]) => ({
           series: seriesName,
-          sets: [...setsMap.entries()].map(([setId, setData]) => ({
-            setId,
-            setName:  setData.setName,
-            logoUrl:  setData.logoUrl,
-            products: setData.products,
-          })),
+          sets: [...setsMap.entries()]
+            .map(([setId, setData]) => ({
+              setId,
+              setName:     setData.setName,
+              logoUrl:     setData.logoUrl,
+              releaseDate: setData.releaseDate,
+              products:    setData.products,
+            }))
+            .sort((a, b) => {
+              const da = a.releaseDate ?? ''
+              const db = b.releaseDate ?? ''
+              return db.localeCompare(da) // newest set first within series
+            }),
         }))
         .sort((a, b) => {
           const dateA = seriesMaxDate.get(a.series) ?? ''
           const dateB = seriesMaxDate.get(b.series) ?? ''
-          return dateB.localeCompare(dateA) // descending: newest first
+          return dateB.localeCompare(dateA) // descending: newest series first
         })
     }
   } catch (err) {
