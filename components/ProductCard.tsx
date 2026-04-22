@@ -10,12 +10,12 @@ import { fmtCardPrice } from '@/lib/currency'
 export const PRODUCT_TYPES = [
   'Booster Pack',
   'Booster Box',
-  'Elite Trainer Box',
   'ETB',
   'Booster Bundle',
   'Collection Box',
   'Tin',
   'Blister Pack',
+  'Case',
   'Other',
 ]
 
