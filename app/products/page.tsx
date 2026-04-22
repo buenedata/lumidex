@@ -39,11 +39,11 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
       const uniqueSetIds = [...new Set((products ?? []).map(p => p.set_id as string))]
 
       // Fetch set metadata for those IDs (one round-trip, no FK needed)
-      const setMetaMap = new Map<string, { name: string; series: string | null; logo_url: string | null }>()
+      const setMetaMap = new Map<string, { name: string; series: string | null; logo_url: string | null; release_date: string | null }>()
       if (uniqueSetIds.length > 0) {
         const { data: setsData, error: setsError } = await supabaseAdmin
           .from('sets')
-          .select('set_id, name, series, logo_url')
+          .select('set_id, name, series, logo_url, release_date')
           .in('set_id', uniqueSetIds)
 
         if (setsError) {
@@ -53,22 +53,34 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
 
         for (const s of (setsData ?? [])) {
           setMetaMap.set(s.set_id as string, {
-            name:     s.name     as string,
-            series:   s.series   as string | null,
-            logo_url: s.logo_url as string | null,
+            name:         s.name         as string,
+            series:       s.series       as string | null,
+            logo_url:     s.logo_url     as string | null,
+            release_date: s.release_date as string | null,
           })
         }
       }
 
       // Group products: series → setId → products[]
       const seriesMap = new Map<string, Map<string, { setName: string; logoUrl: string | null; products: SealedProduct[] }>>()
+      // Track the most-recent set release_date within each series (for sorting)
+      const seriesMaxDate = new Map<string, string>()
 
       for (const row of (products ?? [])) {
-        const setMeta = setMetaMap.get(row.set_id as string)
-        const series  = setMeta?.series   ?? 'Other'
-        const setId   = row.set_id        as string
-        const setName = setMeta?.name     ?? setId
-        const logoUrl = setMeta?.logo_url ?? null
+        const setMeta     = setMetaMap.get(row.set_id as string)
+        const series      = setMeta?.series       ?? 'Other'
+        const setId       = row.set_id            as string
+        const setName     = setMeta?.name         ?? setId
+        const logoUrl     = setMeta?.logo_url     ?? null
+        const releaseDate = setMeta?.release_date ?? null
+
+        // Track the newest release_date seen within each series (for sort)
+        if (releaseDate) {
+          const existing = seriesMaxDate.get(series)
+          if (!existing || releaseDate > existing) {
+            seriesMaxDate.set(series, releaseDate)
+          }
+        }
 
         if (!seriesMap.has(series)) seriesMap.set(series, new Map())
         const setsInSeries = seriesMap.get(series)!
@@ -86,15 +98,22 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
         })
       }
 
-      allSeries = [...seriesMap.entries()].map(([seriesName, setsMap]) => ({
-        series: seriesName,
-        sets: [...setsMap.entries()].map(([setId, setData]) => ({
-          setId,
-          setName:  setData.setName,
-          logoUrl:  setData.logoUrl,
-          products: setData.products,
-        })),
-      }))
+      // Build series array sorted newest-first by max set release_date within series
+      allSeries = [...seriesMap.entries()]
+        .map(([seriesName, setsMap]) => ({
+          series: seriesName,
+          sets: [...setsMap.entries()].map(([setId, setData]) => ({
+            setId,
+            setName:  setData.setName,
+            logoUrl:  setData.logoUrl,
+            products: setData.products,
+          })),
+        }))
+        .sort((a, b) => {
+          const dateA = seriesMaxDate.get(a.series) ?? ''
+          const dateB = seriesMaxDate.get(b.series) ?? ''
+          return dateB.localeCompare(dateA) // descending: newest first
+        })
     }
   } catch (err) {
     console.error('[products page] Products fetch threw:', err)

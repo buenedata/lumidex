@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { cn } from '@/lib/utils'
+import { useItemPrice } from '@/hooks/useItemPrice'
 
 // ── Product type badge colours ────────────────────────────────────────────────
 const PRODUCT_TYPE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
@@ -48,6 +49,7 @@ export default function ProductCard({
   const [saving,   setSaving]   = useState(false)
 
   const typeStyle = getProductTypeStyle(product.product_type)
+  const { price, currency, loading: priceLoading } = useItemPrice(product.id, 'product', 'normal')
 
   const updateQuantity = useCallback(async (newQty: number) => {
     if (!userId || saving) return
@@ -119,6 +121,19 @@ export default function ProductCard({
         >
           {product.name}
         </h3>
+
+        {/* Price */}
+        <div className="text-right">
+          {priceLoading ? (
+            <span className="text-xs text-muted animate-pulse">Loading…</span>
+          ) : price !== null ? (
+            <span className="text-sm font-semibold text-accent">
+              {currency} {price.toFixed(2)}
+            </span>
+          ) : (
+            <span className="text-xs text-muted">—</span>
+          )}
+        </div>
 
         {/* Quantity controls */}
         <div className="flex items-end justify-end gap-2">
