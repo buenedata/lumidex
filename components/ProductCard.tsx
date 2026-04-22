@@ -114,6 +114,7 @@ export default function ProductCard({
   }, [userId, saving, product.id, quantity])
 
   return (
+    <div className="flex flex-col gap-1">
     <div
       className={cn(
         'flex flex-col rounded-xl overflow-hidden',
@@ -138,33 +139,16 @@ export default function ProductCard({
       )}
 
       <div className="p-4 flex flex-col gap-3 flex-1">
-        {/* Product type badge (or admin dropdown) + set name */}
+        {/* Product type badge + set name */}
         <div className="flex items-start justify-between gap-2">
-          {isAdmin ? (
-            <select
-              value={productType ?? ''}
-              onChange={e => handleTypeChange(e.target.value)}
-              disabled={typesaving}
-              className={cn(
-                'pill text-xs font-medium rounded-full px-2 py-0.5 border cursor-pointer',
-                'bg-surface border-subtle text-secondary hover:border-accent/50',
-                'disabled:opacity-50'
-              )}
-            >
-              {PRODUCT_TYPES.map(t => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </select>
-          ) : (
-            <span
-              className={cn(
-                'pill inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
-                typeStyle.bg, typeStyle.text
-              )}
-            >
-              {typeStyle.label}
-            </span>
-          )}
+          <span
+            className={cn(
+              'pill inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium',
+              typeStyle.bg, typeStyle.text
+            )}
+          >
+            {typeStyle.label}
+          </span>
           <span className="text-xs text-muted text-right leading-tight shrink-0 max-w-[45%] line-clamp-1">
             {setName}
           </span>
@@ -233,6 +217,27 @@ export default function ProductCard({
           )}
         </div>
       </div>
+    </div>
+
+    {/* Admin type selector — rendered below the card, outside its layout */}
+    {isAdmin && (
+      <div className="px-1">
+        <select
+          value={productType ?? ''}
+          onChange={e => handleTypeChange(e.target.value)}
+          disabled={typesaving}
+          className={cn(
+            'w-full text-xs rounded-lg px-2 py-1.5 border cursor-pointer',
+            'bg-surface border-subtle text-secondary hover:border-accent/50 focus:outline-none',
+            'disabled:opacity-50'
+          )}
+        >
+          {PRODUCT_TYPES.map(t => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+      </div>
+    )}
     </div>
   )
 }
