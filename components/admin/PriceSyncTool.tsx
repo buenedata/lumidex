@@ -350,10 +350,11 @@ function SyncAllSetsSection() {
 // ── Section 3: Sync Products ──────────────────────────────────────────────────
 
 interface ProductsResult {
-  total:   number
-  synced:  number
-  skipped: number
-  failed:  number
+  total:          number
+  synced:         number
+  skipped:        number
+  failed:         number
+  catalogCreated: number
 }
 
 function SyncProductsSection() {
@@ -413,11 +414,11 @@ function SyncProductsSection() {
 
       <p className="text-gray-400 text-xs leading-relaxed">
         Fetches <strong className="text-white">all sealed products</strong> for the selected set from
-        the <strong className="text-white">TCGGO episode endpoint</strong> and upserts each
+        the <strong className="text-white">TCGGO episode endpoint</strong>, upserts each
         product&apos;s Cardmarket <strong className="text-white">lowest</strong> price into{' '}
-        <code className="text-yellow-400">item_prices</code>.
-        Also back-fills <code className="text-yellow-400">set_products.api_product_id</code> where
-        it is missing.
+        <code className="text-yellow-400">item_prices</code>, and{' '}
+        <strong className="text-white">creates new catalog entries</strong> in{' '}
+        <code className="text-yellow-400">set_products</code> for any products not yet in the database.
       </p>
 
       {status !== 'done' && (
@@ -445,10 +446,11 @@ function SyncProductsSection() {
           <p className="font-semibold text-green-400">
             ✅ Product sync complete{selectedSetName ? ` — ${selectedSetName}` : ''}
           </p>
-          <div className="grid grid-cols-3 gap-2">
-            <Stat label="Synced"  value={result.synced}  colour="text-green-400" />
-            <Stat label="Skipped" value={result.skipped} colour="text-gray-400"  />
-            <Stat label="Failed"  value={result.failed}  colour="text-red-400"   />
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <Stat label="Synced"           value={result.synced}         colour="text-green-400"  />
+            <Stat label="Skipped"          value={result.skipped}        colour="text-gray-400"   />
+            <Stat label="Failed"           value={result.failed}         colour="text-red-400"    />
+            <Stat label="Catalog Created"  value={result.catalogCreated ?? 0} colour="text-blue-400" />
           </div>
           <p className="text-gray-400 text-xs">
             {result.total.toLocaleString()} product{result.total !== 1 ? 's' : ''} processed in total.

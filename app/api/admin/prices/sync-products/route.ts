@@ -123,6 +123,36 @@ export async function POST(req: NextRequest) {
     })
   }
 
+  // ── 4b. Upsert product catalog entries into set_products ──────────────────
+  // Ensures that any product returned by TCGGO appears in the set_products
+  // catalog so it shows up on the /products page.
+  // Uses api_product_id as the conflict key so re-running is fully idempotent.
+  // ignoreDuplicates = true preserves any manually-set product_type / image_url
+  // on rows that already exist.
+  let catalogCreated = 0
+  const catalogRows = allProducts
+    .filter(p => p.name)
+    .map(p => ({
+      set_id:         setId,
+      api_product_id: String(p.id),
+      name:           String(p.name),
+    }))
+
+  if (catalogRows.length > 0) {
+    for (let i = 0; i < catalogRows.length; i += UPSERT_BATCH) {
+      const batch = catalogRows.slice(i, i + UPSERT_BATCH)
+      const { error: catalogError, data: catalogData } = await supabaseAdmin
+        .from('set_products')
+        .upsert(batch, { onConflict: 'api_product_id', ignoreDuplicates: true })
+        .select('id')
+      if (catalogError) {
+        console.warn('[sync-products] Catalog upsert error (non-fatal):', catalogError)
+      } else {
+        catalogCreated += catalogData?.length ?? 0
+      }
+    }
+  }
+
   // ── 4. Build upsert rows ──────────────────────────────────────────────────
   const now  = new Date().toISOString()
   const rows = allProducts.map((product) => ({
@@ -192,10 +222,11 @@ export async function POST(req: NextRequest) {
 
   // ── 7. Return summary ─────────────────────────────────────────────────────
   return NextResponse.json({
-    success: true,
-    total:   rows.length,
+    success:        true,
+    total:          rows.length,
     synced,
     skipped,
     failed,
+    catalogCreated,
   })
 }
