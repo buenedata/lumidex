@@ -37,6 +37,13 @@ interface Props {
   onProductSelect: (product: ProductGridItem) => void
   onProductsLoaded: (products: ProductGridItem[]) => void
   refreshKey?: number
+  /**
+   * Cache-busted URLs for products that were just uploaded.  Keyed by product
+   * ID.  When present, the override URL is used for the thumbnail `<img src>`
+   * so the new image is visible immediately even if the CDN still caches the
+   * old file at the stable R2 URL.
+   */
+  imageOverrides?: Record<string, string>
 }
 
 export function ProductImageGrid({
@@ -45,6 +52,7 @@ export function ProductImageGrid({
   onProductSelect,
   onProductsLoaded,
   refreshKey = 0,
+  imageOverrides = {},
 }: Props) {
   const [products, setProducts] = useState<ProductGridItem[]>([])
   const [loading, setLoading]   = useState(false)
@@ -101,8 +109,8 @@ export function ProductImageGrid({
     )
   }
 
-  const withImage    = products.filter((p) => p.image_url)
-  const withoutImage = products.filter((p) => !p.image_url)
+  const withImage    = products.filter((p) => imageOverrides[p.id] ?? p.image_url)
+  const withoutImage = products.filter((p) => !(imageOverrides[p.id] ?? p.image_url))
 
   return (
     <div className="space-y-6">
@@ -133,7 +141,7 @@ export function ProductImageGrid({
                 flex items-center gap-3 p-3 rounded-xl border text-left transition-all duration-150
                 ${isSelected
                   ? 'border-yellow-400 bg-yellow-400/5 ring-1 ring-yellow-400/30'
-                  : product.image_url
+                  : (imageOverrides[product.id] ?? product.image_url)
                     ? 'border-gray-700 bg-gray-900 hover:border-gray-500'
                     : 'border-gray-800 bg-gray-950 hover:border-gray-600'
                 }
@@ -141,9 +149,9 @@ export function ProductImageGrid({
             >
               {/* Thumbnail or placeholder */}
               <div className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 bg-gray-800 flex items-center justify-center">
-                {product.image_url ? (
+                {(imageOverrides[product.id] ?? product.image_url) ? (
                   <img
-                    src={product.image_url}
+                    src={imageOverrides[product.id] ?? product.image_url!}
                     alt={product.name}
                     className="w-full h-full object-cover"
                   />
@@ -163,7 +171,7 @@ export function ProductImageGrid({
                       {product.product_type}
                     </span>
                   )}
-                  {product.image_url ? (
+                  {(imageOverrides[product.id] ?? product.image_url) ? (
                     <span className="text-xs text-green-500">✅ has image</span>
                   ) : (
                     <span className="text-xs text-gray-600">no image</span>

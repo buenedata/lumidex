@@ -341,12 +341,20 @@ function ProductImagesTab() {
   const [productList, setProductList]         = useState<ProductGridItem[]>([])
   const [modalOpen, setModalOpen]             = useState(false)
   const [gridRefreshKey, setGridRefreshKey]   = useState(0)
+  /**
+   * Cache-busted URLs returned by upload-product-image for products that were
+   * just uploaded.  Passed to ProductImageGrid so the new image is shown
+   * instantly even if the CDN still serves the old cached file at the stable
+   * R2 URL.  Cleared whenever the selected set changes.
+   */
+  const [imageOverrides, setImageOverrides]   = useState<Record<string, string>>({})
 
   const handleSetSelect = (setId: string, setName: string) => {
     setSelectedSetId(setId)
     setSelectedSetName(setName)
     setSelectedProduct(null)
     setProductList([])
+    setImageOverrides({})
   }
 
   const handleProductSelect = (product: ProductGridItem) => {
@@ -355,9 +363,19 @@ function ProductImagesTab() {
   }
 
   const handleUploadSuccess = (_productId: string, imageUrl: string) => {
+    // Immediately patch the grid with the cache-busted URL from the upload
+    // response so the admin sees the new image without waiting for the CDN.
+    setImageOverrides((prev) => ({ ...prev, [_productId]: imageUrl }))
+    // Keep productList in sync for "Next Product" navigation and also update
+    // selectedProduct so the modal "already has an image" notice reflects the
+    // new URL if the same product is opened again.
     setProductList((prev) =>
       prev.map((p) => (p.id === _productId ? { ...p, image_url: imageUrl } : p))
     )
+    setSelectedProduct((prev) =>
+      prev?.id === _productId ? { ...prev, image_url: imageUrl } : prev
+    )
+    // Also trigger a full re-fetch so the summary bar and DB state stay in sync.
     setGridRefreshKey((k) => k + 1)
   }
 
@@ -413,6 +431,7 @@ function ProductImagesTab() {
             onProductSelect={handleProductSelect}
             onProductsLoaded={setProductList}
             refreshKey={gridRefreshKey}
+            imageOverrides={imageOverrides}
           />
         </div>
       ) : (
