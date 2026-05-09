@@ -1514,7 +1514,15 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
         <div className="text-center py-16">
           <div className="text-muted text-lg">
             {filter === 'owned'      && 'No owned cards in this set yet'}
-            {filter === 'missing'    && 'All cards in this set are owned! 🎉'}
+            {filter === 'missing'    && (() => {
+              // Only claim "all cards owned" when no search is active (cards === full set).
+              // When a search narrows the list, missing=0 just means the matched cards are
+              // all owned — not the entire set.
+              const isSearchActive = allCards != null && allCards.length !== cards.length
+              return isSearchActive
+                ? 'All matching cards are owned'
+                : 'All cards in this set are owned! 🎉'
+            })()}
             {filter === 'duplicates' && 'No duplicate cards in this set'}
             {filter === 'all'        && 'No cards found'}
           </div>
