@@ -771,7 +771,7 @@ export default function ProfilePage() {
                     const earnedIds   = new Set(userAchievements.map(a => a.id))
                     const earnedCount = categoryAll.filter(a => earnedIds.has(a.id)).length
                     return (
-                      <div key={category.label}>
+                      <div key={category.labelKey}>
                         <h3 className="text-[10px] font-semibold text-muted uppercase tracking-wide mb-2 flex items-center gap-2">
                           {t(category.labelKey)}
                           <span className={cn(
