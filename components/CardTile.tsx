@@ -85,8 +85,11 @@ function CardTileInner({
   // Full grayscale for fully unowned cards only — partially owned cards skip this
   // and instead get the diagonal overlay (rendered below the image).
   const shouldGrey      = greyOutUnowned && !isOwned && !isPartiallyOwned
-  // Card-specific variants are never shown as dots — the +N badge handles them
-  const buttonsToRender = variantDots.filter(v => v.card_id == null)
+  // Show as dot if: globally-scoped (card_id == null) OR explicitly configured by admin
+  // via the ⚙️ Variant Dot Display panel (is_configured_as_dot === true).
+  // Card-specific variants that were NOT explicitly configured remain hidden here;
+  // the +N badge on the card tile handles them instead.
+  const buttonsToRender = variantDots.filter(v => v.card_id == null || v.is_configured_as_dot === true)
 
   return (
     <div

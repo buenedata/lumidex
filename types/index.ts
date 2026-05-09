@@ -254,6 +254,14 @@ export interface QuickAddVariant {
   is_quick_add?: boolean;
   /** Per-card variant image URL (from card_variant_images table). Used for the hover image swap in the modal. */
   variant_image_url?: string | null;
+  /**
+   * When true, this variant should be rendered as a coloured dot under the card image.
+   * Global (card_id == null) variants are always dots.
+   * Card-specific variants are dots ONLY when the admin has explicitly added them to
+   * card_variant_availability via the ⚙️ Variant Dot Display panel.
+   * When false (or absent on old data), card-specific variants are shown via the +N badge only.
+   */
+  is_configured_as_dot?: boolean;
 }
 
 // Color mapping for UI

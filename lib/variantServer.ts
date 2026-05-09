@@ -90,13 +90,36 @@ async function _batchFetchVariantStructure(
   for (const cId of cardIds) {
     const overrideIds = overrideMap[cId]
     const specific    = cardSpecificMap[cId] ?? []
-    let applicableGlobal: Variant[]
 
     if (overrideIds && overrideIds.size > 0) {
-      // Explicit override list — honour exactly
-      applicableGlobal = globalVariants.filter(v => overrideIds.has(v.id))
-    } else if (specific.length > 0) {
-      // Card-specific variants present → suppress rarity fallback entirely
+      // Explicit override: return ONLY the explicitly-selected variants (global + card-specific).
+      // Do NOT auto-merge all card-specific; only the ones the admin explicitly picked.
+      // All returned variants are marked is_configured_as_dot=true so CardTile renders them.
+      const globals  = globalVariants.filter(v => overrideIds.has(v.id))
+      const gIds     = new Set(globals.map(v => v.id))
+      const explicit = specific.filter(v => overrideIds.has(v.id) && !gIds.has(v.id))
+      const merged   = [...globals, ...explicit]
+
+      result[cId] = merged.map(v => ({
+        id:                   v.id,
+        name:                 v.name,
+        color:                (v as any).color        as QuickAddVariant['color'],
+        short_label:          (v as any).short_label  ?? null,
+        quantity:             0,
+        sort_order:           (v as any).sort_order   ?? 0,
+        card_id:              (v as any).card_id      ?? null,
+        is_quick_add:         (v as any).is_quick_add ?? false,
+        variant_image_url:    null,
+        is_configured_as_dot: true,  // all in override are explicitly configured as dots
+      }))
+      continue
+    }
+
+    let applicableGlobal: Variant[]
+
+    if (specific.length > 0) {
+      // Card-specific variants present, no override → suppress rarity fallback.
+      // Include card-specific for modal display; is_configured_as_dot=false for them.
       applicableGlobal = []
     } else {
       const info = cardInfoMap[cId]
@@ -112,21 +135,23 @@ async function _batchFetchVariantStructure(
       }
     }
 
-    // Merge card-specific on top (deduplicate by id) — same as the API route
+    // Non-override: merge card-specific for modal display (they are NOT shown as dots)
     const globalIds      = new Set(applicableGlobal.map(v => v.id))
     const uniqueSpecific = specific.filter(v => !globalIds.has(v.id))
     const merged         = [...applicableGlobal, ...uniqueSpecific]
 
     result[cId] = merged.map(v => ({
-      id:                v.id,
-      name:              v.name,
-      color:             (v as any).color        as QuickAddVariant['color'],
-      short_label:       (v as any).short_label  ?? null,
-      quantity:          0,          // filled in client-side once user auth resolves
-      sort_order:        (v as any).sort_order   ?? 0,
-      card_id:           (v as any).card_id      ?? null,
-      is_quick_add:      (v as any).is_quick_add ?? false,
-      variant_image_url: null,       // loaded on-demand when the card modal opens
+      id:                   v.id,
+      name:                 v.name,
+      color:                (v as any).color        as QuickAddVariant['color'],
+      short_label:          (v as any).short_label  ?? null,
+      quantity:             0,          // filled in client-side once user auth resolves
+      sort_order:           (v as any).sort_order   ?? 0,
+      card_id:              (v as any).card_id      ?? null,
+      is_quick_add:         (v as any).is_quick_add ?? false,
+      variant_image_url:    null,       // loaded on-demand when the card modal opens
+      // Only global (card_id==null) variants are shown as dots when there is no override
+      is_configured_as_dot: (v as any).card_id == null,
     }))
   }
 

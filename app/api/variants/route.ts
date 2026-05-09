@@ -447,8 +447,16 @@ export async function POST(request: NextRequest) {
         let globalVariants: Variant[]
 
         if (overrideIds && overrideIds.size > 0) {
-          globalVariants = variants.filter((v: Variant) => overrideIds.has(v.id))
+          // Explicit override: return ONLY the explicitly-selected variants.
+          // Card-specific variants are included only if they're in the override list —
+          // they are NOT auto-merged so the caller knows which ones to show as dots.
+          const globals = variants.filter((v: Variant) => overrideIds.has(v.id))
+          const gIds    = new Set(globals.map(v => v.id))
+          const explicit = specific.filter(v => overrideIds.has(v.id) && !gIds.has(v.id))
+          return [...globals, ...explicit]
         } else if (specific.length > 0) {
+          // Card-specific variants present, no override → suppress rarity fallback.
+          // Include card-specific for modal display; is_configured_as_dot=false in response.
           globalVariants = []
         } else {
           const info = cardInfoMap[cId]
@@ -464,6 +472,7 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // Non-override: merge card-specific variants for modal display
         const globalIds      = new Set(globalVariants.map(v => v.id))
         const uniqueSpecific = specific.filter(v => !globalIds.has(v.id))
         return [...globalVariants, ...uniqueSpecific]
@@ -496,10 +505,14 @@ export async function POST(request: NextRequest) {
         const grouped: Record<string, VariantWithQuantity[]> = {}
         cardIdList.forEach(cId => {
           const q = quantityMap[cId] || {}
+          const hasOverride = !!(overrideMap[cId]?.size > 0)
           grouped[cId] = variantsForCard(cId).map((v: Variant) => ({
             ...v,
             quantity: q[v.id] || 0,
             variant_image_url: batchVariantImageMap[cId]?.[v.id] ?? null,
+            // dot flag: global variants always shown as dots; card-specific only when
+            // the admin explicitly added them to an override via the ⚙️ panel.
+            is_configured_as_dot: v.card_id == null || hasOverride,
           }))
         })
 
@@ -510,10 +523,12 @@ export async function POST(request: NextRequest) {
 
       const grouped: Record<string, VariantWithQuantity[]> = {}
       cardIdList.forEach(cId => {
+        const hasOverride = !!(overrideMap[cId]?.size > 0)
         grouped[cId] = variantsForCard(cId).map((v: Variant) => ({
           ...v,
           quantity: 0,
           variant_image_url: batchVariantImageMap[cId]?.[v.id] ?? null,
+          is_configured_as_dot: v.card_id == null || hasOverride,
         }))
       })
       const r = NextResponse.json(grouped)

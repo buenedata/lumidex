@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidateTag } from 'next/cache'
 import { supabaseAdmin } from '@/lib/supabase'
 import { Variant } from '@/types'
 
@@ -326,6 +327,10 @@ export async function POST(request: NextRequest) {
         throw new Error(`Failed to update default variant: ${cardUpdateError.message}`)
       }
     }
+
+    // Bust the SSR variant-structure cache so the next page load reflects the new
+    // availability immediately instead of waiting up to 600 s for it to expire.
+    revalidateTag('variants', { expire: 0 })
 
     return NextResponse.json({ success: true, count: variantIds?.length ?? 0 })
   } catch (error: any) {

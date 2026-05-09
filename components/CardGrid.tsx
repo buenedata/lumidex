@@ -640,6 +640,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
           short_label: null, quantity: v.quantity ?? 0,
           sort_order: v.sort_order ?? 0, card_id: v.card_id ?? null,
           is_quick_add: v.is_quick_add ?? false, variant_image_url: null,
+          // Preserve the server-set flag; fall back to global-variant heuristic for old data
+          is_configured_as_dot: v.is_configured_as_dot ?? (v.card_id == null),
         }))
       setCardVariantDots(prev => new Map(prev).set(cardId, dots))
       setCardVariants(prev => new Map(prev).set(cardId, newDots as VariantWithQuantity[]))
@@ -970,12 +972,16 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
               card_id: v.card_id ?? null,
               is_quick_add: v.is_quick_add ?? false,
               variant_image_url: v.variant_image_url ?? null,
+              // Preserve the server-set flag; fall back to global-variant heuristic for old data
+              is_configured_as_dot: v.is_configured_as_dot ?? (v.card_id == null),
             }))
           newVariantDots.set(cardId, dots)
           newCardVariants.set(cardId, variants as VariantWithQuantity[])
 
           // Track count of card-specific variants for the ★ indicator (multiple-variant case)
-          const customCount = dots.filter(v => v.card_id != null).length
+          // Only count card-specific variants that are NOT shown as explicit dots
+          // (those shown as dots appear in buttonsToRender in CardTile, not via the +N badge)
+          const customCount = dots.filter(v => v.card_id != null && !v.is_configured_as_dot).length
           if (customCount > 0) newCustomCounts.set(cardId, customCount)
         })
 
