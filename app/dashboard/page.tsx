@@ -13,7 +13,6 @@ import QuickActions   from '@/components/dashboard/QuickActions'
 
 // ── Below-the-fold components (lazy-loaded to reduce initial parse time) ─────
 const CollectionSpotlight = dynamic(() => import('@/components/dashboard/CollectionSpotlight'))
-const WantedBoard         = dynamic(() => import('@/components/dashboard/WantedBoard'))
 const NewsStories          = dynamic(() => import('@/components/dashboard/NewsStories'))
 const ComingSoonFeatures   = dynamic(() => import('@/components/dashboard/ComingSoonFeatures'))
 
@@ -96,8 +95,6 @@ export default function DashboardPage() {
           </div>
           {/* Spotlight skeleton */}
           <div className="skeleton h-52 rounded-2xl" />
-          {/* Wanted Board skeleton */}
-          <div className="skeleton h-12 rounded-xl" />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="skeleton h-36 rounded-xl" />
@@ -144,9 +141,6 @@ export default function DashboardPage() {
             totalCardsToComplete={totalCardsToComplete}
           />
         </div>
-
-        {/* ── Wanted Board (collapsed by default) ──────────────────────── */}
-        <WantedBoard />
 
         {/* ── News Stories ─────────────────────────────────────────────── */}
         <NewsStories />
