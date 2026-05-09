@@ -120,9 +120,9 @@ const nb: TranslationDict = {
   profile_no_sets_other_desc:      '{name} har ikke lagt til noen sett ennå',
   profile_browse_sets:             'Bla gjennom sett',
   profile_view_dashboard:          'Se dashbord',
-  profile_achievements:            'Prestasjoner',
-  profile_achievements_own_empty:  'Du har ikke låst opp noen prestasjoner ennå',
-  profile_achievements_other_empty:'Ingen prestasjoner låst opp ennå',
+  profile_achievements:            'Achievements',
+  profile_achievements_own_empty:  'Du har ikke låst opp noen achievements ennå',
+  profile_achievements_other_empty:'Ingen achievements låst opp ennå',
   profile_view_collection:         'Se samling',
 
   // ── Achievement categories ───────────────────────────────────────────────────
@@ -154,7 +154,7 @@ const nb: TranslationDict = {
   settings_grey_out_desc:          'Kort du ikke eier vil vises dempet i settvisninger',
   settings_section_privacy:        'Personvern',
   settings_private_profile:        'Privat profil',
-  settings_private_profile_desc:   'Bio, sted, sett og prestasjoner vil skjules for andre brukere',
+  settings_private_profile_desc:   'Bio, sted, sett og achievements vil skjules for andre brukere',
   settings_portfolio_visibility:   'Synlighet for porteføljeverdi',
   settings_lists_public:           'Nye lister er offentlige som standard',
   settings_lists_public_desc:      'Når du oppretter en ny liste vil den være offentlig synlig med mindre du endrer det',
