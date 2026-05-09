@@ -176,7 +176,6 @@ export default function CollectionSpotlight({
               </p>
               {cardsToGo > 0 ? (
                 <p className="text-xs text-muted mt-0.5">
-                  <span className="text-accent font-semibold">{cardsToGo}</span>{' '}
                   {cardsToGo === 1 ? t('spotlight_card_to_go', { n: cardsToGo }) : t('spotlight_cards_to_go', { n: cardsToGo })}
                 </p>
               ) : (

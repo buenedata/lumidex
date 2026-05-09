@@ -303,7 +303,7 @@ const nb: TranslationDict = {
   analytics_tooltip_cards:       '{count} kort',
 
   // ── Collection Spotlight ──────────────────────────────────────────────────────
-  spotlight_title:           'Samlingsrampelys',
+  spotlight_title:           'Collection Spotlight',
   spotlight_cards_collected: '{owned} / {total} kort samlet',
   spotlight_card_to_go:      '{n} kort igjen',
   spotlight_cards_to_go:     '{n} kort igjen',
@@ -325,7 +325,7 @@ const nb: TranslationDict = {
   coming_soon_heading:         'Hva kommer til Lumidex',
   coming_soon_badge:           'Roadmap',
   coming_soon_label:           'Kommer snart',
-  feature_trade_hub_title:     'Byttesentrum',
+  feature_trade_hub_title:     'Trade Hub',
   feature_trade_hub_tagline:   'Bytt kort med venner',
   feature_trade_hub_desc:      'List opp duplikatene dine, bla gjennom hva venner har, og avtal byttehandler direkte på Lumidex — ingen mellomledd, ingen gebyrer.',
   feature_marketplace_title:   'Markedsplass',
@@ -343,7 +343,7 @@ const nb: TranslationDict = {
   wb_cash:           ' + {currency} kontant',
   wb_declined:       '{name} avslo byttetilbudet ditt',
   wb_view:           'Se →',
-  wb_no_matches:     'Ingen bytte-treff ennå',
+  wb_no_matches:     'Ingen trade matches ennå',
   wb_empty_desc:     'Stjernemerker kort på ønskelisten din og koble til venner — når en venn eier et kort du ønsker (eller omvendt), vises et bytte-treff her.',
   wb_add_wanted:     '★ Legg til ønskede kort',
   wb_view_board:     'Se Wanted Board →',
