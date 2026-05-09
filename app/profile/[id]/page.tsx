@@ -82,7 +82,8 @@ export default function ProfilePage() {
   const [setProgressMap, setSetProgressMap]   = useState<Record<string, SetProgress>>({})
   const [userAchievements, setUserAchievements] = useState<Achievement[]>([])
   const [allAchievements, setAllAchievements]   = useState<Achievement[]>([])
-  const [setsCollapsed, setSetsCollapsed]       = useState(false)
+  const [setsCollapsed, setSetsCollapsed]           = useState(false)
+  const [achievementsCollapsed, setAchievementsCollapsed] = useState(true)
   const [stats, setStats] = useState({
     totalCards: 0,
     completedSets: 0,
@@ -709,21 +710,43 @@ export default function ProfilePage() {
 
             {/* ── Achievements Section ──────────────────────────────────────────── */}
             <section className="mb-8">
-              <div className="flex items-center gap-3 mb-4">
-                <h2
-                  className="text-xl font-bold text-primary"
-                  style={{ fontFamily: 'var(--font-space-grotesk)' }}
-                >
-                  Achievements
-                </h2>
-                {userAchievements.length > 0 && (
-                  <span className="pill px-2 py-0.5 rounded-full text-xs font-bold bg-accent-dim text-accent border border-[rgba(109,95,255,0.3)]">
-                    {userAchievements.length} earned
+              <button
+                type="button"
+                onClick={() => setAchievementsCollapsed(c => !c)}
+                className="w-full flex items-center justify-between mb-4 group text-left"
+                aria-expanded={!achievementsCollapsed}
+                aria-label={achievementsCollapsed ? 'Expand achievements' : 'Collapse achievements'}
+              >
+                <div className="flex items-center gap-3">
+                  <h2
+                    className="text-xl font-bold text-primary"
+                    style={{ fontFamily: 'var(--font-space-grotesk)' }}
+                  >
+                    Achievements
+                  </h2>
+                  <span className={cn(
+                    'pill px-2 py-0.5 rounded-full text-xs font-bold border',
+                    userAchievements.length > 0
+                      ? 'bg-accent-dim text-accent border-[rgba(109,95,255,0.3)]'
+                      : 'bg-surface text-muted border-subtle'
+                  )}>
+                    {userAchievements.length} / {allAchievements.length || '?'}
                   </span>
-                )}
-              </div>
+                </div>
+                <svg
+                  className={cn(
+                    'w-4 h-4 text-muted group-hover:text-primary transition-all duration-200',
+                    achievementsCollapsed ? '' : 'rotate-180'
+                  )}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
 
-              {allAchievements.length > 0 ? (
+              {!achievementsCollapsed && allAchievements.length > 0 ? (
                 <div className="space-y-5">
                   {ACHIEVEMENT_CATEGORIES.map(category => {
                     const categoryAll = allAchievements.filter(a => category.names.includes(a.name))
@@ -754,7 +777,7 @@ export default function ProfilePage() {
                     )
                   })}
                 </div>
-              ) : userAchievements.length > 0 ? (
+              ) : !achievementsCollapsed && userAchievements.length > 0 ? (
                 // Fallback while allAchievements loads — show earned only
                 <div className="flex flex-wrap gap-1.5">
                   {userAchievements.map(achievement => (
@@ -765,7 +788,7 @@ export default function ProfilePage() {
                     />
                   ))}
                 </div>
-              ) : (
+              ) : !achievementsCollapsed ? (
                 <div className="bg-surface border border-subtle rounded-xl p-8 flex flex-col items-center gap-3 text-center">
                   <div className="text-3xl">🏆</div>
                   <p className="text-secondary text-sm">
@@ -783,7 +806,7 @@ export default function ProfilePage() {
                     </Button>
                   )}
                 </div>
-              )}
+              ) : null}
             </section>
 
             {/* ── Wanted Cards Section ─────────────────────────────────────────── */}
