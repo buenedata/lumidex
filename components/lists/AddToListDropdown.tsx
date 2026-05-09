@@ -18,6 +18,12 @@ interface AddToListDropdownProps {
    * `isInAnyList` is true if the card now belongs to at least one list.
    */
   onListMembershipChange: (cardId: string, isInAnyList: boolean) => void
+  /**
+   * Pre-computed initial value: true if the card already belongs to at least
+   * one list.  Used to show the star filled before the dropdown is opened
+   * (i.e. before the membership fetch runs).
+   */
+  initialIsInList?: boolean
 }
 
 export default function AddToListDropdown({
@@ -26,6 +32,7 @@ export default function AddToListDropdown({
   wantedLoading,
   onToggleWanted,
   onListMembershipChange,
+  initialIsInList = false,
 }: AddToListDropdownProps) {
   const [isOpen, setIsOpen]             = useState(false)
   const [lists, setLists]               = useState<UserCardList[]>([])
@@ -36,6 +43,9 @@ export default function AddToListDropdown({
   const [newListName, setNewListName]   = useState('')
   const [createLoading, setCreateLoading] = useState(false)
   const [createError, setCreateError]   = useState<string | null>(null)
+  // Tracks whether the membership API has been fetched at least once.
+  // Before the first fetch, we rely on initialIsInList to show the star filled.
+  const [hasFetchedMembership, setHasFetchedMembership] = useState(false)
 
   const dropdownRef = useRef<HTMLDivElement>(null)
   const inputRef    = useRef<HTMLInputElement>(null)
@@ -74,7 +84,11 @@ export default function AddToListDropdown({
         setMemberListIds(new Set(json.listIds ?? []))
       }
     } catch { /* non-critical */ }
-    finally { setLoading(false) }
+    finally {
+      setLoading(false)
+      // Mark that we've fetched membership — star now reflects actual server state
+      setHasFetchedMembership(true)
+    }
   }, [cardId])
 
   function handleOpen() {
@@ -158,8 +172,11 @@ export default function AddToListDropdown({
     }
   }
 
-  // Star appearance: filled if wanted OR in any list
-  const isStarFilled = isWanted || memberListIds.size > 0
+  // Star appearance: filled if wanted OR in any list.
+  // Before the membership fetch runs (hasFetchedMembership=false), fall back to
+  // initialIsInList (passed from the parent's pre-loaded listCardIds set) so the
+  // star is already coloured when the modal first opens.
+  const isStarFilled = isWanted || memberListIds.size > 0 || (!hasFetchedMembership && initialIsInList)
 
   return (
     <div ref={dropdownRef} className="relative">
@@ -267,9 +284,9 @@ export default function AddToListDropdown({
                             </svg>
                           )}
                           {/* Show public/private indicator */}
-                          {!list.is_public && (
-                            <span className="text-[10px] text-muted shrink-0">🔒</span>
-                          )}
+                          <span className="text-[10px] text-muted shrink-0">
+                            {list.is_public ? '🔓' : '🔒'}
+                          </span>
                         </button>
                       )
                     })}

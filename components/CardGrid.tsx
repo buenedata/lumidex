@@ -647,26 +647,28 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   }
 
   // Admin: save variant dot availability config for this card.
+  // Sends both global AND card-specific variant IDs so that existing card-specific
+  // variants (e.g. a promo "Holo – Marnie Rival Battle Deck") are preserved and
+  // referenced instead of a new global entry being created on the next reload.
   async function handleSaveAvailConfig() {
     if (!selectedCard || isSavingAvailConfig) return
     setIsSavingAvailConfig(true)
     try {
-      // Only send global variant IDs — card-specific variants are not managed here
-      const globalIds = Array.from(availSelectedIds).filter(id =>
-        availGlobalVariants.some(v => v.id === id)
-      )
+      // Include all selected IDs — global variants AND any card-specific variants
+      // that are already checked in availSelectedIds (loaded from the API on modal open).
+      const allSelectedIds = Array.from(availSelectedIds)
       const res = await fetch('/api/card-variant-availability', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           cardId:           selectedCard.id,
-          variantIds:       globalIds,
+          variantIds:       allSelectedIds,
           defaultVariantId: modalDefaultVariantId,
         }),
       })
       if (res.ok) {
         setAvailSavedIds(new Set(availSelectedIds))
-        setAvailHasOverrides(globalIds.length > 0)
+        setAvailHasOverrides(allSelectedIds.length > 0)
         await reloadCardDots(selectedCard.id)
       }
     } catch { /* non-critical */ }
@@ -1614,6 +1616,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                       isWanted={wantedCardIds.has(selectedCard.id)}
                       wantedLoading={wantedLoading}
                       onToggleWanted={() => toggleWanted(selectedCard.id)}
+                      initialIsInList={listCardIds.has(selectedCard.id)}
                       onListMembershipChange={(cardId, isInAnyList) => {
                         setListCardIds(prev => {
                           const next = new Set(prev)
@@ -2192,6 +2195,31 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                                   />
                                   <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${colorMap[v.color as keyof typeof colorMap] ?? 'bg-gray-500'}`} />
                                   <span className="text-xs text-secondary group-hover:text-primary transition-colors">{v.name}</span>
+                                </label>
+                              ))}
+                              {/* Card-specific variants (e.g. promo-deck variants with a custom
+                                  description). These are already loaded in filteredVariants and
+                                  must appear here so the admin can see/toggle them and so they
+                                  are preserved (not dropped) when saving the availability config. */}
+                              {filteredVariants.filter(v => v.card_id != null).map(v => (
+                                <label key={v.id} className="flex items-center gap-2 cursor-pointer group">
+                                  <input
+                                    type="checkbox"
+                                    checked={availSelectedIds.has(v.id)}
+                                    onChange={() => setAvailSelectedIds(prev => {
+                                      const next = new Set(prev)
+                                      if (next.has(v.id)) next.delete(v.id); else next.add(v.id)
+                                      return next
+                                    })}
+                                    className="w-3.5 h-3.5 accent-accent"
+                                  />
+                                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${colorMap[v.color as keyof typeof colorMap] ?? 'bg-gray-500'}`} />
+                                  <span className="text-xs text-secondary group-hover:text-primary transition-colors">{v.name}</span>
+                                  {v.description && (
+                                    <span className="text-[10px] text-muted truncate max-w-[120px]" title={v.description}>
+                                      {v.description}
+                                    </span>
+                                  )}
                                 </label>
                               ))}
                             </div>
