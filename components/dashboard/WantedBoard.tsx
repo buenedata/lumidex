@@ -151,24 +151,70 @@ function CardStrip({ cards, max = 4 }: { cards: WBCard[]; max?: number }) {
   )
 }
 
-// ── Section header — always rendered ─────────────────────────────────────────
-function SectionHeader({ matchCount }: { matchCount: number | null }) {
+// ── Chevron icon ──────────────────────────────────────────────────────────────
+function ChevronIcon({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`text-muted transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`}
+    >
+      <path d="M19 9l-7 7-7-7" />
+    </svg>
+  )
+}
+
+// ── Section header — always rendered; clickable to toggle collapse ─────────────
+function SectionHeader({
+  matchCount,
+  isLoading,
+  collapsed,
+  onToggle,
+}: {
+  matchCount: number | null
+  isLoading?: boolean
+  collapsed: boolean
+  onToggle: () => void
+}) {
   return (
     <div className="flex items-center justify-between mb-4">
-      <div className="flex items-center gap-2">
+      {/* Left side — clickable toggle area */}
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex items-center gap-2 group cursor-pointer focus:outline-none"
+        aria-expanded={!collapsed}
+      >
         <span className="text-lg" aria-hidden>🔄</span>
         <h2
-          className="text-lg font-semibold text-primary"
+          className="text-lg font-semibold text-primary group-hover:text-accent transition-colors duration-150"
           style={{ fontFamily: 'var(--font-space-grotesk)' }}
         >
           Wanted Board
         </h2>
-        {matchCount !== null && matchCount > 0 && (
+
+        {/* Match count badge — shown whenever count is known and > 0 */}
+        {!isLoading && matchCount !== null && matchCount > 0 && (
           <span className="pill text-xs px-2 py-0.5 rounded-full bg-price/10 border border-price/30 text-price font-medium">
             {matchCount} match{matchCount !== 1 ? 'es' : ''}
           </span>
         )}
-      </div>
+
+        {/* Loading spinner in place of the badge while fetching */}
+        {isLoading && (
+          <span className="w-4 h-4 rounded-full border-2 border-accent/30 border-t-accent animate-spin" />
+        )}
+
+        <ChevronIcon collapsed={collapsed} />
+      </button>
+
+      {/* Right side — standalone link, not part of the toggle */}
       <Link
         href="/wanted-board"
         className="text-sm text-accent hover:text-accent-light transition-colors font-medium"
@@ -295,10 +341,12 @@ function DeclinedProposalBanner({ proposal }: { proposal: PendingProposal }) {
 
 export default function WantedBoard() {
   const { user } = useAuthStore()
-  const [matches,          setMatches]          = useState<WBMatch[]>([])
-  const [proposals,        setProposals]        = useState<PendingProposal[]>([])
+  const [matches,           setMatches]           = useState<WBMatch[]>([])
+  const [proposals,         setProposals]         = useState<PendingProposal[]>([])
   const [declinedProposals, setDeclinedProposals] = useState<PendingProposal[]>([])
-  const [loading,          setLoading]          = useState(true)
+  const [loading,           setLoading]           = useState(true)
+  // Collapsed by default — user clicks to expand
+  const [collapsed,         setCollapsed]         = useState(true)
 
   useEffect(() => {
     if (!user) return
@@ -329,7 +377,7 @@ export default function WantedBoard() {
       .catch(() => {})
   }, [user])
 
-  // Received pending + declined outgoing banners
+  // Received pending + declined outgoing banners — always shown regardless of collapse
   const hasBanners = proposals.length > 0 || declinedProposals.length > 0
   const pendingBanner = hasBanners ? (
     <div className="mb-4 flex flex-col gap-2">
@@ -338,21 +386,24 @@ export default function WantedBoard() {
     </div>
   ) : null
 
-  // ── Loading skeleton — full section shell always visible ──────────────────
+  const toggleCollapsed = () => setCollapsed(c => !c)
+
+  // ── Loading state ─────────────────────────────────────────────────────────
   if (loading) {
     return (
       <section className="mb-6">
         {pendingBanner}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <div className="skeleton h-5 w-5 rounded" />
-            <div className="skeleton h-6 w-36 rounded" />
+        <SectionHeader
+          matchCount={null}
+          isLoading
+          collapsed={collapsed}
+          onToggle={toggleCollapsed}
+        />
+        {!collapsed && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[0, 1, 2].map(i => <div key={i} className="skeleton h-52 rounded-xl" />)}
           </div>
-          <div className="skeleton h-4 w-16 rounded" />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[0, 1, 2].map(i => <div key={i} className="skeleton h-52 rounded-xl" />)}
-        </div>
+        )}
       </section>
     )
   }
@@ -362,44 +413,50 @@ export default function WantedBoard() {
     return (
       <section className="mb-6">
         {pendingBanner}
-        <SectionHeader matchCount={null} />
+        <SectionHeader
+          matchCount={null}
+          collapsed={collapsed}
+          onToggle={toggleCollapsed}
+        />
 
-        <div className="bg-elevated border border-subtle rounded-xl px-6 py-8 flex flex-col items-center text-center gap-4">
-          {/* Icon */}
-          <div className="w-14 h-14 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-2xl shadow-sm">
-            🔄
-          </div>
+        {!collapsed && (
+          <div className="bg-elevated border border-subtle rounded-xl px-6 py-8 flex flex-col items-center text-center gap-4">
+            {/* Icon */}
+            <div className="w-14 h-14 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-2xl shadow-sm">
+              🔄
+            </div>
 
-          {/* Copy */}
-          <div>
-            <h3
-              className="text-base font-semibold text-primary mb-1"
-              style={{ fontFamily: 'var(--font-space-grotesk)' }}
-            >
-              No trade matches yet
-            </h3>
-            <p className="text-sm text-secondary max-w-sm mx-auto leading-relaxed">
-              Star cards on your wanted list and connect with friends — when a friend owns a card
-              you want (or vice‑versa), a trade match will appear here.
-            </p>
-          </div>
+            {/* Copy */}
+            <div>
+              <h3
+                className="text-base font-semibold text-primary mb-1"
+                style={{ fontFamily: 'var(--font-space-grotesk)' }}
+              >
+                No trade matches yet
+              </h3>
+              <p className="text-sm text-secondary max-w-sm mx-auto leading-relaxed">
+                Star cards on your wanted list and connect with friends — when a friend owns a card
+                you want (or vice‑versa), a trade match will appear here.
+              </p>
+            </div>
 
-          {/* CTAs */}
-          <div className="flex flex-wrap justify-center gap-3 pt-1">
-            <Link
-              href="/wanted"
-              className="inline-flex items-center gap-1.5 h-9 px-4 text-sm font-semibold rounded-lg bg-accent text-white hover:bg-accent-light transition-colors"
-            >
-              ★ Add Wanted Cards
-            </Link>
-            <Link
-              href="/wanted-board"
-              className="inline-flex items-center gap-1.5 h-9 px-4 text-sm font-medium rounded-lg bg-surface border border-subtle text-secondary hover:text-primary hover:border-accent/40 transition-colors"
-            >
-              View Wanted Board →
-            </Link>
+            {/* CTAs */}
+            <div className="flex flex-wrap justify-center gap-3 pt-1">
+              <Link
+                href="/wanted"
+                className="inline-flex items-center gap-1.5 h-9 px-4 text-sm font-semibold rounded-lg bg-accent text-white hover:bg-accent-light transition-colors"
+              >
+                ★ Add Wanted Cards
+              </Link>
+              <Link
+                href="/wanted-board"
+                className="inline-flex items-center gap-1.5 h-9 px-4 text-sm font-medium rounded-lg bg-surface border border-subtle text-secondary hover:text-primary hover:border-accent/40 transition-colors"
+              >
+                View Wanted Board →
+              </Link>
+            </div>
           </div>
-        </div>
+        )}
       </section>
     )
   }
@@ -410,76 +467,82 @@ export default function WantedBoard() {
   return (
     <section className="mb-6">
       {pendingBanner}
-      <SectionHeader matchCount={matches.length} />
+      <SectionHeader
+        matchCount={matches.length}
+        collapsed={collapsed}
+        onToggle={toggleCollapsed}
+      />
 
-      {/* ── Match cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {topMatches.map(match => (
-          <div
-            key={match.user.id}
-            className="relative bg-elevated border border-subtle rounded-xl p-5 flex flex-col gap-4 hover:border-accent/40 transition-colors duration-150"
-          >
-            {/* Mutual badge */}
-            {match.isMutual && (
-              <span className="pill absolute top-3 right-3 text-[10px] font-bold px-2 py-0.5 rounded-full bg-price/15 border border-price/40 text-price leading-tight">
-                MUTUAL
-              </span>
-            )}
-
-            {/* Friend info */}
-            <div className="flex items-center gap-2.5 pr-16">
-              <FriendAvatar user={match.user} />
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-primary truncate leading-tight">
-                  {match.user.display_name ?? match.user.username ?? 'Trainer'}
-                </p>
-                <p className="text-xs text-muted leading-tight">
-                  Wants {match.theyWant.length} card{match.theyWant.length !== 1 ? 's' : ''} you own
-                  {match.iWant.length > 0 && (
-                    <span className="text-price"> · you want {match.iWant.length}</span>
-                  )}
-                </p>
-              </div>
-            </div>
-
-            {/* Card strips */}
-            <div className="flex flex-col gap-3">
-              {match.isMutual ? (
-                <>
-                  {/* They want from me */}
-                  {match.theyWant.length > 0 && (
-                    <div>
-                      <p className="text-[10px] font-semibold text-muted uppercase tracking-wide mb-2">
-                        They want from you
-                      </p>
-                      <CardStrip cards={match.theyWant} max={3} />
-                    </div>
-                  )}
-                  {/* I want from them */}
-                  {match.iWant.length > 0 && (
-                    <div>
-                      <p className="text-[10px] font-semibold text-price uppercase tracking-wide mb-2">
-                        You want from them
-                      </p>
-                      <CardStrip cards={match.iWant} max={3} />
-                    </div>
-                  )}
-                </>
-              ) : (
-                <CardStrip cards={match.theyWant.length > 0 ? match.theyWant : match.iWant} max={4} />
-              )}
-            </div>
-
-            {/* CTA */}
-            <Link
-              href={buildTradeUrl(match)}
-              className="inline-flex items-center justify-center gap-1.5 h-9 px-3 text-sm font-semibold rounded-lg bg-accent text-white hover:bg-accent-light transition-colors mt-auto"
+      {!collapsed && (
+        /* ── Match cards ── */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {topMatches.map(match => (
+            <div
+              key={match.user.id}
+              className="relative bg-elevated border border-subtle rounded-xl p-5 flex flex-col gap-4 hover:border-accent/40 transition-colors duration-150"
             >
-              🔄 Propose Trade
-            </Link>
-          </div>
-        ))}
-      </div>
+              {/* Mutual badge */}
+              {match.isMutual && (
+                <span className="pill absolute top-3 right-3 text-[10px] font-bold px-2 py-0.5 rounded-full bg-price/15 border border-price/40 text-price leading-tight">
+                  MUTUAL
+                </span>
+              )}
+
+              {/* Friend info */}
+              <div className="flex items-center gap-2.5 pr-16">
+                <FriendAvatar user={match.user} />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-primary truncate leading-tight">
+                    {match.user.display_name ?? match.user.username ?? 'Trainer'}
+                  </p>
+                  <p className="text-xs text-muted leading-tight">
+                    Wants {match.theyWant.length} card{match.theyWant.length !== 1 ? 's' : ''} you own
+                    {match.iWant.length > 0 && (
+                      <span className="text-price"> · you want {match.iWant.length}</span>
+                    )}
+                  </p>
+                </div>
+              </div>
+
+              {/* Card strips */}
+              <div className="flex flex-col gap-3">
+                {match.isMutual ? (
+                  <>
+                    {/* They want from me */}
+                    {match.theyWant.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-muted uppercase tracking-wide mb-2">
+                          They want from you
+                        </p>
+                        <CardStrip cards={match.theyWant} max={3} />
+                      </div>
+                    )}
+                    {/* I want from them */}
+                    {match.iWant.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-price uppercase tracking-wide mb-2">
+                          You want from them
+                        </p>
+                        <CardStrip cards={match.iWant} max={3} />
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <CardStrip cards={match.theyWant.length > 0 ? match.theyWant : match.iWant} max={4} />
+                )}
+              </div>
+
+              {/* CTA */}
+              <Link
+                href={buildTradeUrl(match)}
+                className="inline-flex items-center justify-center gap-1.5 h-9 px-3 text-sm font-semibold rounded-lg bg-accent text-white hover:bg-accent-light transition-colors mt-auto"
+              >
+                🔄 Propose Trade
+              </Link>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   )
 }
