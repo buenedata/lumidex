@@ -2,6 +2,7 @@
 
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/Input'
+import { useLocale } from '@/contexts/LocaleContext'
 
 // ── Public type shared with wizard + settings modal ───────────
 export interface SettingsValues {
@@ -234,6 +235,7 @@ export default function SettingsForm({
   onChange,
   sections = ['identity', 'locale', 'display', 'privacy', 'social'],
 }: SettingsFormProps) {
+  const { t } = useLocale()
   const show = (s: string) => sections.includes(s as never)
 
   return (
@@ -243,13 +245,13 @@ export default function SettingsForm({
       {show('identity') && (
         <section className="flex flex-col gap-4">
           <h3 className="text-xs font-semibold text-muted uppercase tracking-wider">
-            Identity
+            {t('settings_section_identity')}
           </h3>
 
           <Input
             id="display_name"
-            label="Display Name"
-            placeholder="How you appear to others"
+            label={t('settings_display_name')}
+            placeholder={t('settings_display_name_ph')}
             value={values.display_name}
             onChange={e => onChange({ display_name: e.target.value })}
             maxLength={50}
@@ -257,12 +259,12 @@ export default function SettingsForm({
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="bio" className="text-xs font-medium text-secondary">
-              Bio
+              {t('settings_bio')}
             </label>
             <textarea
               id="bio"
               rows={3}
-              placeholder="Tell the community a little about yourself…"
+              placeholder={t('settings_bio_ph')}
               value={values.bio}
               maxLength={BIO_MAX}
               onChange={e => onChange({ bio: e.target.value })}
@@ -281,8 +283,8 @@ export default function SettingsForm({
 
           <Input
             id="location"
-            label="Location"
-            placeholder="e.g. Oslo, Norway"
+            label={t('settings_location')}
+            placeholder={t('settings_location_ph')}
             value={values.location}
             onChange={e => onChange({ location: e.target.value })}
             maxLength={80}
@@ -302,18 +304,18 @@ export default function SettingsForm({
       {show('locale') && (
         <section className="flex flex-col gap-4">
           <h3 className="text-xs font-semibold text-muted uppercase tracking-wider">
-            Locale
+            {t('settings_section_locale')}
           </h3>
           <SelectField
             id="preferred_language"
-            label="Preferred Language"
+            label={t('settings_preferred_language')}
             value={values.preferred_language}
             onChange={v => onChange({ preferred_language: v })}
             options={LANGUAGES}
           />
           <SelectField
             id="preferred_currency"
-            label="Preferred Currency"
+            label={t('settings_preferred_currency')}
             value={values.preferred_currency}
             onChange={v => onChange({ preferred_currency: v })}
             options={CURRENCIES}
@@ -325,19 +327,19 @@ export default function SettingsForm({
       {show('display') && (
         <section className="flex flex-col gap-4">
           <h3 className="text-xs font-semibold text-muted uppercase tracking-wider">
-            Collection Display
+            {t('settings_section_display')}
           </h3>
 
           {/* Pricing preferences — coming soon */}
           <div className="opacity-50 cursor-not-allowed">
-            <label className="block text-sm font-medium text-gray-400">Price Source</label>
-            <p className="text-xs text-gray-500 mt-1">Price source preferences are coming soon with the new pricing system.</p>
+            <label className="block text-sm font-medium text-gray-400">{t('settings_price_source')}</label>
+            <p className="text-xs text-gray-500 mt-1">{t('settings_price_source_soon')}</p>
           </div>
 
           <Toggle
             id="grey_out_unowned"
-            label="Grey out unowned cards"
-            description="Cards you don't own will appear dimmed in set views"
+            label={t('settings_grey_out')}
+            description={t('settings_grey_out_desc')}
             checked={values.grey_out_unowned}
             onChange={v => onChange({ grey_out_unowned: v })}
           />
@@ -348,27 +350,27 @@ export default function SettingsForm({
       {show('privacy') && (
         <section className="flex flex-col gap-4">
           <h3 className="text-xs font-semibold text-muted uppercase tracking-wider">
-            Privacy
+            {t('settings_section_privacy')}
           </h3>
 
           <Toggle
             id="profile_private"
-            label="Private profile"
-            description="Your bio, location, sets and achievements will be hidden from other users"
+            label={t('settings_private_profile')}
+            description={t('settings_private_profile_desc')}
             checked={values.profile_private}
             onChange={v => onChange({ profile_private: v })}
           />
 
           {/* Portfolio value visibility — coming soon */}
           <div className="opacity-50 cursor-not-allowed">
-            <label className="block text-sm font-medium text-gray-400">Portfolio Value Visibility</label>
-            <p className="text-xs text-gray-500 mt-1">Price source preferences are coming soon with the new pricing system.</p>
+            <label className="block text-sm font-medium text-gray-400">{t('settings_portfolio_visibility')}</label>
+            <p className="text-xs text-gray-500 mt-1">{t('settings_price_source_soon')}</p>
           </div>
 
           <Toggle
             id="lists_public_by_default"
-            label="New lists are public by default"
-            description="When you create a new custom list it will be publicly visible unless you change it"
+            label={t('settings_lists_public')}
+            description={t('settings_lists_public_desc')}
             checked={values.lists_public_by_default}
             onChange={v => onChange({ lists_public_by_default: v })}
           />
@@ -379,21 +381,20 @@ export default function SettingsForm({
       {show('social') && (
         <section className="flex flex-col gap-4">
           <h3 className="text-xs font-semibold text-muted uppercase tracking-wider">
-            Social &amp; Marketplace Links
+            {t('settings_section_social')}
           </h3>
           <p className="text-xs text-muted -mt-2 leading-snug">
-            These will appear as icons on your public profile.
+            {t('settings_social_desc')}
           </p>
 
           {/* Cardmarket */}
           <Input
             id="social_cardmarket"
-            label="Cardmarket Profile URL"
+            label={t('settings_cardmarket_url')}
             placeholder="https://www.cardmarket.com/en/Pokemon/Users/YourUsername"
             value={values.social_cardmarket}
             onChange={e => onChange({ social_cardmarket: e.target.value })}
             icon={
-              /* Shopping-cart icon standing in for Cardmarket */
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -404,12 +405,11 @@ export default function SettingsForm({
           {/* Instagram */}
           <Input
             id="social_instagram"
-            label="Instagram"
+            label={t('settings_instagram_label')}
             placeholder="https://instagram.com/yourhandle  or  @yourhandle"
             value={values.social_instagram}
             onChange={e => onChange({ social_instagram: e.target.value })}
             icon={
-              /* Camera icon */
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -422,12 +422,11 @@ export default function SettingsForm({
           {/* Facebook */}
           <Input
             id="social_facebook"
-            label="Facebook Profile URL"
+            label={t('settings_facebook_url')}
             placeholder="https://facebook.com/yourprofile"
             value={values.social_facebook}
             onChange={e => onChange({ social_facebook: e.target.value })}
             icon={
-              /* User icon */
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                   d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />

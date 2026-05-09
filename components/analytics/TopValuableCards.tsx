@@ -8,6 +8,7 @@
 
 import type { TopCard } from './types'
 import { fmtCardPrice } from '@/lib/currency'
+import { useLocale } from '@/contexts/LocaleContext'
 
 interface TopValuableCardsProps {
   cards: TopCard[]
@@ -15,10 +16,12 @@ interface TopValuableCardsProps {
 }
 
 export default function TopValuableCards({ cards, currency }: TopValuableCardsProps) {
+  const { t } = useLocale()
+
   if (cards.length === 0) {
     return (
       <div className="flex items-center justify-center py-14 text-gray-500 text-sm">
-        No cards with price data yet.
+        {t('analytics_no_price_data')}
       </div>
     )
   }

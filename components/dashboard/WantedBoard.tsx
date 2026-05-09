@@ -5,6 +5,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
 import { useRouter } from 'next/navigation'
+import { useLocale } from '@/contexts/LocaleContext'
 
 // ── Minimal type for pending proposals ────────────────────────────────────────
 interface PendingProposal {
@@ -170,17 +171,25 @@ function ChevronIcon({ collapsed }: { collapsed: boolean }) {
   )
 }
 
-// ── Section header — always rendered; clickable to toggle collapse ─────────────
+// ── Section header ─────────────────────────────────────────────────────────────
 function SectionHeader({
   matchCount,
   isLoading,
   collapsed,
   onToggle,
+  title,
+  viewAllLabel,
+  matchSingular,
+  matchPlural,
 }: {
   matchCount: number | null
   isLoading?: boolean
   collapsed: boolean
   onToggle: () => void
+  title: string
+  viewAllLabel: string
+  matchSingular: string
+  matchPlural: string
 }) {
   return (
     <div className="flex items-center justify-between mb-4">
@@ -196,17 +205,17 @@ function SectionHeader({
           className="text-lg font-semibold text-primary group-hover:text-accent transition-colors duration-150"
           style={{ fontFamily: 'var(--font-space-grotesk)' }}
         >
-          Wanted Board
+          {title}
         </h2>
 
-        {/* Match count badge — shown whenever count is known and > 0 */}
+        {/* Match count badge */}
         {!isLoading && matchCount !== null && matchCount > 0 && (
           <span className="pill text-xs px-2 py-0.5 rounded-full bg-price/10 border border-price/30 text-price font-medium">
-            {matchCount} match{matchCount !== 1 ? 'es' : ''}
+            {matchCount === 1 ? matchSingular : matchPlural}
           </span>
         )}
 
-        {/* Loading spinner in place of the badge while fetching */}
+        {/* Loading spinner */}
         {isLoading && (
           <span className="w-4 h-4 rounded-full border-2 border-accent/30 border-t-accent animate-spin" />
         )}
@@ -214,12 +223,12 @@ function SectionHeader({
         <ChevronIcon collapsed={collapsed} />
       </button>
 
-      {/* Right side — standalone link, not part of the toggle */}
+      {/* Right side — standalone link */}
       <Link
         href="/wanted-board"
         className="text-sm text-accent hover:text-accent-light transition-colors font-medium"
       >
-        View all →
+        {viewAllLabel}
       </Link>
     </div>
   )
@@ -228,6 +237,7 @@ function SectionHeader({
 // ── Pending proposal compact card ─────────────────────────────────────────────
 function PendingProposalBanner({ proposal }: { proposal: PendingProposal }) {
   const router = useRouter()
+  const { t } = useLocale()
   const name = proposal.otherUser?.display_name ?? proposal.otherUser?.username ?? 'Trainer'
   const offeringCards = proposal.trade_proposal_items.filter(i => i.direction === 'offering')
   const hasCash = proposal.cash_offered > 0
@@ -254,11 +264,13 @@ function PendingProposalBanner({ proposal }: { proposal: PendingProposal }) {
       {/* Info */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-primary leading-tight truncate">
-          <span className="text-amber-400">📬</span> {name} proposed a trade
+          <span className="text-amber-400">📬</span> {t('wb_proposed_trade', { name })}
         </p>
         <p className="text-xs text-muted leading-tight">
-          {offeringCards.length} card{offeringCards.length !== 1 ? 's' : ''}
-          {hasCash ? ` + ${proposal.currency_code} cash` : ''}
+          {offeringCards.length === 1
+            ? t('wb_card_single', { n: offeringCards.length })
+            : t('wb_card_plural', { n: offeringCards.length })}
+          {hasCash ? t('wb_cash', { currency: proposal.currency_code }) : ''}
           {' · '}{relTime(proposal.created_at)}
         </p>
       </div>
@@ -277,7 +289,7 @@ function PendingProposalBanner({ proposal }: { proposal: PendingProposal }) {
         onClick={() => router.push('/wanted-board')}
         className="shrink-0 h-8 px-3 rounded-lg bg-amber-500 text-white text-xs font-semibold hover:bg-amber-400 transition-colors"
       >
-        View →
+        {t('wb_view')}
       </button>
     </div>
   )
@@ -286,6 +298,7 @@ function PendingProposalBanner({ proposal }: { proposal: PendingProposal }) {
 // ── Declined proposal compact card ────────────────────────────────────────────
 function DeclinedProposalBanner({ proposal }: { proposal: PendingProposal }) {
   const router = useRouter()
+  const { t } = useLocale()
   const name = proposal.otherUser?.display_name ?? proposal.otherUser?.username ?? 'Trainer'
   const offeringCards = proposal.trade_proposal_items.filter(i => i.direction === 'offering')
 
@@ -311,10 +324,12 @@ function DeclinedProposalBanner({ proposal }: { proposal: PendingProposal }) {
       {/* Info */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-primary leading-tight truncate">
-          <span className="text-red-400">❌</span> {name} declined your trade offer
+          <span className="text-red-400">❌</span> {t('wb_declined', { name })}
         </p>
         <p className="text-xs text-muted leading-tight">
-          {offeringCards.length} card{offeringCards.length !== 1 ? 's' : ''}
+          {offeringCards.length === 1
+            ? t('wb_card_single', { n: offeringCards.length })
+            : t('wb_card_plural', { n: offeringCards.length })}
           {' · '}{relTime(proposal.created_at)}
         </p>
       </div>
@@ -333,7 +348,7 @@ function DeclinedProposalBanner({ proposal }: { proposal: PendingProposal }) {
         onClick={() => router.push('/wanted-board')}
         className="shrink-0 h-8 px-3 rounded-lg bg-surface border border-subtle text-muted text-xs font-semibold hover:text-primary hover:border-accent/40 transition-colors"
       >
-        View →
+        {t('wb_view')}
       </button>
     </div>
   )
@@ -341,11 +356,11 @@ function DeclinedProposalBanner({ proposal }: { proposal: PendingProposal }) {
 
 export default function WantedBoard() {
   const { user } = useAuthStore()
+  const { t } = useLocale()
   const [matches,           setMatches]           = useState<WBMatch[]>([])
   const [proposals,         setProposals]         = useState<PendingProposal[]>([])
   const [declinedProposals, setDeclinedProposals] = useState<PendingProposal[]>([])
   const [loading,           setLoading]           = useState(true)
-  // Collapsed by default — user clicks to expand
   const [collapsed,         setCollapsed]         = useState(true)
 
   useEffect(() => {
@@ -363,11 +378,9 @@ export default function WantedBoard() {
       .then(r => r.json())
       .then(d => {
         const all = d.proposals ?? []
-        // Pending proposals received from others — needs the user's action
         const received = all.filter(
           (p: PendingProposal) => p.status === 'pending' && !p.isProposer,
         )
-        // Outgoing proposals the other party already declined
         const declined = all.filter(
           (p: PendingProposal) => p.status === 'declined' && p.isProposer,
         )
@@ -377,7 +390,6 @@ export default function WantedBoard() {
       .catch(() => {})
   }, [user])
 
-  // Received pending + declined outgoing banners — always shown regardless of collapse
   const hasBanners = proposals.length > 0 || declinedProposals.length > 0
   const pendingBanner = hasBanners ? (
     <div className="mb-4 flex flex-col gap-2">
@@ -388,12 +400,20 @@ export default function WantedBoard() {
 
   const toggleCollapsed = () => setCollapsed(c => !c)
 
+  const sectionHeaderProps = {
+    title: t('wb_title'),
+    viewAllLabel: t('wb_view_all'),
+    matchSingular: t('wb_match_single', { n: matches.length }),
+    matchPlural:   t('wb_match_plural', { n: matches.length }),
+  }
+
   // ── Loading state ─────────────────────────────────────────────────────────
   if (loading) {
     return (
       <section className="mb-6">
         {pendingBanner}
         <SectionHeader
+          {...sectionHeaderProps}
           matchCount={null}
           isLoading
           collapsed={collapsed}
@@ -408,12 +428,13 @@ export default function WantedBoard() {
     )
   }
 
-  // ── No matches — show promo / empty state ─────────────────────────────────
+  // ── No matches ────────────────────────────────────────────────────────────
   if (matches.length === 0) {
     return (
       <section className="mb-6">
         {pendingBanner}
         <SectionHeader
+          {...sectionHeaderProps}
           matchCount={null}
           collapsed={collapsed}
           onToggle={toggleCollapsed}
@@ -421,38 +442,34 @@ export default function WantedBoard() {
 
         {!collapsed && (
           <div className="bg-elevated border border-subtle rounded-xl px-6 py-8 flex flex-col items-center text-center gap-4">
-            {/* Icon */}
             <div className="w-14 h-14 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-2xl shadow-sm">
               🔄
             </div>
 
-            {/* Copy */}
             <div>
               <h3
                 className="text-base font-semibold text-primary mb-1"
                 style={{ fontFamily: 'var(--font-space-grotesk)' }}
               >
-                No trade matches yet
+                {t('wb_no_matches')}
               </h3>
               <p className="text-sm text-secondary max-w-sm mx-auto leading-relaxed">
-                Star cards on your wanted list and connect with friends — when a friend owns a card
-                you want (or vice‑versa), a trade match will appear here.
+                {t('wb_empty_desc')}
               </p>
             </div>
 
-            {/* CTAs */}
             <div className="flex flex-wrap justify-center gap-3 pt-1">
               <Link
                 href="/wanted"
                 className="inline-flex items-center gap-1.5 h-9 px-4 text-sm font-semibold rounded-lg bg-accent text-white hover:bg-accent-light transition-colors"
               >
-                ★ Add Wanted Cards
+                {t('wb_add_wanted')}
               </Link>
               <Link
                 href="/wanted-board"
                 className="inline-flex items-center gap-1.5 h-9 px-4 text-sm font-medium rounded-lg bg-surface border border-subtle text-secondary hover:text-primary hover:border-accent/40 transition-colors"
               >
-                View Wanted Board →
+                {t('wb_view_board')}
               </Link>
             </div>
           </div>
@@ -461,20 +478,20 @@ export default function WantedBoard() {
     )
   }
 
-  // ── Has matches — card grid ───────────────────────────────────────────────
+  // ── Has matches ───────────────────────────────────────────────────────────
   const topMatches = matches.slice(0, 3)
 
   return (
     <section className="mb-6">
       {pendingBanner}
       <SectionHeader
+        {...sectionHeaderProps}
         matchCount={matches.length}
         collapsed={collapsed}
         onToggle={toggleCollapsed}
       />
 
       {!collapsed && (
-        /* ── Match cards ── */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {topMatches.map(match => (
             <div
@@ -484,7 +501,7 @@ export default function WantedBoard() {
               {/* Mutual badge */}
               {match.isMutual && (
                 <span className="pill absolute top-3 right-3 text-[10px] font-bold px-2 py-0.5 rounded-full bg-price/15 border border-price/40 text-price leading-tight">
-                  MUTUAL
+                  {t('wb_mutual')}
                 </span>
               )}
 
@@ -496,9 +513,11 @@ export default function WantedBoard() {
                     {match.user.display_name ?? match.user.username ?? 'Trainer'}
                   </p>
                   <p className="text-xs text-muted leading-tight">
-                    Wants {match.theyWant.length} card{match.theyWant.length !== 1 ? 's' : ''} you own
+                    {match.theyWant.length === 1
+                      ? t('wb_wants_card', { n: match.theyWant.length })
+                      : t('wb_wants_cards', { n: match.theyWant.length })}
                     {match.iWant.length > 0 && (
-                      <span className="text-price"> · you want {match.iWant.length}</span>
+                      <span className="text-price"> · {t('wb_you_want_n', { n: match.iWant.length })}</span>
                     )}
                   </p>
                 </div>
@@ -508,20 +527,18 @@ export default function WantedBoard() {
               <div className="flex flex-col gap-3">
                 {match.isMutual ? (
                   <>
-                    {/* They want from me */}
                     {match.theyWant.length > 0 && (
                       <div>
                         <p className="text-[10px] font-semibold text-muted uppercase tracking-wide mb-2">
-                          They want from you
+                          {t('wb_they_want')}
                         </p>
                         <CardStrip cards={match.theyWant} max={3} />
                       </div>
                     )}
-                    {/* I want from them */}
                     {match.iWant.length > 0 && (
                       <div>
                         <p className="text-[10px] font-semibold text-price uppercase tracking-wide mb-2">
-                          You want from them
+                          {t('wb_you_want')}
                         </p>
                         <CardStrip cards={match.iWant} max={3} />
                       </div>
@@ -537,7 +554,7 @@ export default function WantedBoard() {
                 href={buildTradeUrl(match)}
                 className="inline-flex items-center justify-center gap-1.5 h-9 px-3 text-sm font-semibold rounded-lg bg-accent text-white hover:bg-accent-light transition-colors mt-auto"
               >
-                🔄 Propose Trade
+                {t('wb_propose_trade')}
               </Link>
             </div>
           ))}

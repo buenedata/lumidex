@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { ActivityItem, GradedCardActivityItem } from '@/app/api/users/[id]/last-activity/route'
+import { useLocale } from '@/contexts/LocaleContext'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -336,6 +337,7 @@ export default function LastActivitySection({
   isOwnProfile,
   compact = false,
 }: LastActivitySectionProps): React.ReactElement | null {
+  const { t } = useLocale()
   const [items,   setItems]   = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -369,13 +371,13 @@ export default function LastActivitySection({
           className="text-xl font-bold text-primary mb-4"
           style={{ fontFamily: 'var(--font-space-grotesk)' }}
         >
-          Last Activity
+          {t('activity_title')}
         </h2>
       )}
 
       {compact && (
         <h3 className="text-sm font-semibold text-muted uppercase tracking-wider mb-3">
-          Last Activity
+          {t('activity_title')}
         </h3>
       )}
 
@@ -390,7 +392,7 @@ export default function LastActivitySection({
         /* ── Empty state (own profile only) ─────────────────────────────── */
         <div className="bg-surface border border-subtle rounded-xl p-6 flex items-center gap-3 text-sm text-secondary">
           <span className="text-xl">🕐</span>
-          <span>No recent activity yet — start adding cards to your collection!</span>
+          <span>{t('activity_empty')}</span>
         </div>
       ) : (
         /* ── Activity row ────────────────────────────────────────────────── */

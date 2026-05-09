@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useLocale } from '@/contexts/LocaleContext'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -92,6 +93,7 @@ function StoryCardSkeleton() {
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export default function NewsStories() {
+  const { t } = useLocale()
   const [stories, setStories] = useState<StorySummary[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -116,10 +118,10 @@ export default function NewsStories() {
             style={{ fontFamily: 'var(--font-space-grotesk)' }}
           >
             <span className="text-base">📰</span>
-            Stories
+            {t('news_heading')}
           </h2>
           <p className="text-sm text-secondary mt-0.5">
-            News, trivia and fun from the Pokémon TCG world.
+            {t('news_subtitle')}
           </p>
         </div>
 
@@ -127,7 +129,7 @@ export default function NewsStories() {
           href="/news"
           className="shrink-0 text-sm text-muted hover:text-accent transition-colors duration-150 flex items-center gap-1 mt-0.5"
         >
-          View All
+          {t('news_view_all')}
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
           </svg>

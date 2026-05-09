@@ -22,6 +22,7 @@ import PortfolioValueChart from './PortfolioValueChart'
 import CollectionAnalytics from './CollectionAnalytics'
 import AnalyticsProGateOverlay from './AnalyticsProGateOverlay'
 import type { PortfolioHistoryPoint } from './types'
+import { useLocale } from '@/contexts/LocaleContext'
 
 // ── API response type ─────────────────────────────────────────────────────────
 
@@ -75,6 +76,7 @@ function SectionSkeleton() {
 export default function AnalyticsSection() {
   const { isPro, isLoading: proLoading } = useProGate()
   const { profile } = useAuthStore()
+  const { t } = useLocale()
   const currency: string = (profile as any)?.preferred_currency ?? 'USD'
 
   const [range, setRange]                     = useState<RangeOption>('30d')
@@ -130,11 +132,11 @@ export default function AnalyticsSection() {
       {/* Portfolio Value Over Time */}
       <div className="mb-8">
         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-          Portfolio Value Over Time
+          {t('analytics_portfolio_over_time')}
         </h3>
         {portfolioError ? (
           <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-5 text-sm text-gray-400 text-center">
-            Failed to load portfolio history: {portfolioError}
+            {t('analytics_portfolio_error', { error: portfolioError })}
           </div>
         ) : (
           <PortfolioValueChart
@@ -163,7 +165,7 @@ export default function AnalyticsSection() {
           className="text-xl font-bold text-white"
           style={{ fontFamily: 'var(--font-space-grotesk)' }}
         >
-          📊 Collection Analytics
+          {t('analytics_section_title')}
         </h2>
         <ProBadge size="sm" />
       </div>

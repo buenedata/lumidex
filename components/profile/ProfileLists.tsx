@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { UserCardList } from '@/types'
+import { useLocale } from '@/contexts/LocaleContext'
 
 interface ProfileListsProps {
   userId: string
@@ -12,6 +13,7 @@ interface ProfileListsProps {
 }
 
 export default function ProfileLists({ userId, isOwnProfile, displayName }: ProfileListsProps) {
+  const { t } = useLocale()
   const [lists, setLists]       = useState<UserCardList[]>([])
   const [loading, setLoading]   = useState(true)
   const [error, setError]       = useState<string | null>(null)
@@ -37,9 +39,9 @@ export default function ProfileLists({ userId, isOwnProfile, displayName }: Prof
         return res.json()
       })
       .then(data => setLists(data.lists ?? []))
-      .catch(() => setError('Could not load lists.'))
+      .catch(() => setError(t('lists_load_error')))
       .finally(() => setLoading(false))
-  }, [userId, isOwnProfile])
+  }, [userId, isOwnProfile])  // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleCreate() {
     const name = newName.trim()
@@ -58,14 +60,14 @@ export default function ProfileLists({ userId, isOwnProfile, displayName }: Prof
       setNewName('')
       setCreating(false)
     } catch {
-      setCreateError('Could not create list. Please try again.')
+      setCreateError(t('lists_create_error'))
     } finally {
       setCreateLoading(false)
     }
   }
 
   async function handleDelete(listId: string) {
-    if (!confirm('Delete this list? This cannot be undone.')) return
+    if (!confirm(t('lists_delete_confirm'))) return
     const prev = lists
     setLists(lists.filter(l => l.id !== listId))
     try {
@@ -77,7 +79,9 @@ export default function ProfileLists({ userId, isOwnProfile, displayName }: Prof
   }
 
   // ── Section header ──────────────────────────────────────────────────────────
-  const sectionTitle = isOwnProfile ? 'Your Lists' : `${displayName}'s Lists`
+  const sectionTitle = isOwnProfile
+    ? t('lists_own_title')
+    : t('lists_other_title', { name: displayName })
 
   return (
     <section className="mb-8">
@@ -96,7 +100,7 @@ export default function ProfileLists({ userId, isOwnProfile, displayName }: Prof
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            New List
+            {t('lists_new')}
           </button>
         )}
         {isOwnProfile && lists.length > 0 && !creating && (
@@ -104,7 +108,7 @@ export default function ProfileLists({ userId, isOwnProfile, displayName }: Prof
             href="/lists"
             className="text-xs text-accent hover:text-accent-light transition-colors ml-auto"
           >
-            Manage all →
+            {t('lists_manage_all')}
           </Link>
         )}
       </div>
@@ -112,7 +116,7 @@ export default function ProfileLists({ userId, isOwnProfile, displayName }: Prof
       {/* ── Inline create form ─────────────────────────────────────────────── */}
       {creating && (
         <div className="mb-4 p-4 rounded-xl bg-surface border border-subtle flex flex-col gap-3">
-          <p className="text-sm font-semibold text-primary">Create a new list</p>
+          <p className="text-sm font-semibold text-primary">{t('lists_create_title')}</p>
           <input
             autoFocus
             type="text"
@@ -122,7 +126,7 @@ export default function ProfileLists({ userId, isOwnProfile, displayName }: Prof
               if (e.key === 'Enter') handleCreate()
               if (e.key === 'Escape') { setCreating(false); setNewName('') }
             }}
-            placeholder="List name…"
+            placeholder={t('lists_name_placeholder')}
             maxLength={80}
             className={cn(
               'w-full h-9 bg-elevated border border-subtle rounded-lg px-3 text-sm text-primary',
@@ -140,13 +144,13 @@ export default function ProfileLists({ userId, isOwnProfile, displayName }: Prof
                 'disabled:opacity-50 disabled:cursor-not-allowed',
               )}
             >
-              {createLoading ? 'Creating…' : 'Create List'}
+              {createLoading ? t('lists_creating') : t('lists_create_btn')}
             </button>
             <button
               onClick={() => { setCreating(false); setNewName(''); setCreateError(null) }}
               className="h-8 px-3 text-xs text-muted hover:text-primary rounded-lg hover:bg-elevated transition-colors"
             >
-              Cancel
+              {t('lists_cancel')}
             </button>
           </div>
         </div>
@@ -159,7 +163,7 @@ export default function ProfileLists({ userId, isOwnProfile, displayName }: Prof
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
-          <span className="text-sm">Loading lists…</span>
+          <span className="text-sm">{t('lists_loading')}</span>
         </div>
       )}
 
@@ -176,16 +180,16 @@ export default function ProfileLists({ userId, isOwnProfile, displayName }: Prof
           <div className="text-3xl">📋</div>
           {isOwnProfile ? (
             <>
-              <p className="text-secondary text-sm">You have no lists yet.</p>
+              <p className="text-secondary text-sm">{t('lists_own_empty')}</p>
               <button
                 onClick={() => setCreating(true)}
                 className="h-8 px-4 text-xs font-medium rounded-lg bg-accent text-white hover:bg-accent-light transition-all"
               >
-                Create your first list
+                {t('lists_create_first')}
               </button>
             </>
           ) : (
-            <p className="text-secondary text-sm">No public lists yet.</p>
+            <p className="text-secondary text-sm">{t('lists_other_empty')}</p>
           )}
         </div>
       )}
@@ -221,7 +225,7 @@ export default function ProfileLists({ userId, isOwnProfile, displayName }: Prof
                     ))
                   ) : (
                     <div className="flex-1 flex items-center justify-center text-muted text-xs">
-                      No cards yet
+                      {t('lists_no_cards')}
                     </div>
                   )}
                 </div>
@@ -238,12 +242,14 @@ export default function ProfileLists({ userId, isOwnProfile, displayName }: Prof
                       {list.name}
                     </Link>
                     <p className="text-xs text-muted mt-0.5">
-                      {list.card_count ?? 0} card{(list.card_count ?? 0) !== 1 ? 's' : ''}
+                      {(list.card_count ?? 0) === 1
+                        ? t('lists_card_count_1', { count: list.card_count ?? 0 })
+                        : t('lists_card_count_n', { count: list.card_count ?? 0 })}
                       {isOwnProfile && (
                         <>
                           {' · '}
                           <span className={list.is_public ? 'text-green-400' : 'text-muted'}>
-                            {list.is_public ? '🌐 Public' : '🔒 Private'}
+                            {list.is_public ? t('lists_is_public') : t('lists_is_private')}
                           </span>
                         </>
                       )}
@@ -254,7 +260,7 @@ export default function ProfileLists({ userId, isOwnProfile, displayName }: Prof
                   {isOwnProfile && (
                     <button
                       onClick={() => handleDelete(list.id)}
-                      title="Delete list"
+                      title={t('lists_delete_title')}
                       className="shrink-0 p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-red-400/10 transition-colors opacity-0 group-hover:opacity-100"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
+import { useLocale } from '@/contexts/LocaleContext'
 
 export interface FriendEntry {
   friendship_id: string
@@ -28,6 +29,7 @@ export default function FriendsList({
   className,
 }: FriendsListProps) {
   const router = useRouter()
+  const { t } = useLocale()
 
   if (friends.length === 0) {
     return (
@@ -36,10 +38,10 @@ export default function FriendsList({
         className
       )}>
         <div className="text-3xl">🤝</div>
-        <p className="text-secondary text-sm">No friends yet</p>
+        <p className="text-secondary text-sm">{t('friends_no_friends')}</p>
         {isOwnProfile && onFindFriends && (
           <Button variant="primary" size="sm" onClick={onFindFriends}>
-            Find Friends
+            {t('friends_find')}
           </Button>
         )}
       </div>
@@ -112,7 +114,7 @@ export default function FriendsList({
               +
             </div>
             <p className="text-xs font-medium text-muted group-hover:text-accent transition-colors leading-tight">
-              Find Friends
+              {t('friends_find')}
             </p>
           </button>
         )}

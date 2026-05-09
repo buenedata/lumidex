@@ -10,6 +10,7 @@
 
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/lib/store'
+import { useLocale } from '@/contexts/LocaleContext'
 import {
   Tabs,
   TabsList,
@@ -147,6 +148,7 @@ function PerformersSkeleton() {
 
 export default function CollectionAnalytics() {
   const { profile } = useAuthStore()
+  const { t } = useLocale()
   const currency: string = (profile as any)?.preferred_currency ?? 'USD'
 
   const [data, setData]       = useState<CollectionAnalyticsData | null>(null)
@@ -199,7 +201,7 @@ export default function CollectionAnalytics() {
   if (error) {
     return (
       <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6 text-center text-sm text-gray-400">
-        Failed to load analytics data: {error}
+        {t('analytics_load_error', { error })}
       </div>
     )
   }
@@ -207,10 +209,10 @@ export default function CollectionAnalytics() {
   return (
     <Tabs defaultValue="top-cards">
       <TabsList>
-        <TabsTrigger value="top-cards">Top Cards</TabsTrigger>
-        <TabsTrigger value="by-rarity">By Rarity</TabsTrigger>
-        <TabsTrigger value="by-set">By Set</TabsTrigger>
-        <TabsTrigger value="performers">Performers</TabsTrigger>
+        <TabsTrigger value="top-cards">{t('analytics_tab_top_cards')}</TabsTrigger>
+        <TabsTrigger value="by-rarity">{t('analytics_tab_by_rarity')}</TabsTrigger>
+        <TabsTrigger value="by-set">{t('analytics_tab_by_set')}</TabsTrigger>
+        <TabsTrigger value="performers">{t('analytics_tab_performers')}</TabsTrigger>
       </TabsList>
 
       <TabsContent value="top-cards" className="pt-3">

@@ -19,6 +19,7 @@ import {
 } from 'recharts'
 import type { PortfolioHistoryPoint } from './types'
 import { fmtCardPrice } from '@/lib/currency'
+import { useLocale } from '@/contexts/LocaleContext'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -99,6 +100,7 @@ export default function PortfolioValueChart({
   isLoading,
   currency,
 }: PortfolioValueChartProps) {
+  const { t } = useLocale()
   if (isLoading) return <LoadingSkeleton />
 
   // Compute summary stats
@@ -127,13 +129,13 @@ export default function PortfolioValueChart({
               <p className="text-2xl font-bold text-white">{fmtCardPrice({ eur: currentValue, usd: null }, currency) ?? '—'}</p>
               {data.length >= 2 && (
                 <p className={`text-sm mt-0.5 font-medium ${isPositive ? 'text-green-400' : 'text-red-400'}`}>
-                  {isPositive ? '+' : ''}{fmtCardPrice({ eur: delta, usd: null }, currency) ?? '—'}&nbsp;
-                  ({isPositive ? '+' : ''}{deltaPercent.toFixed(1)}%) this period
-                </p>
+                    {isPositive ? '+' : ''}{fmtCardPrice({ eur: delta, usd: null }, currency) ?? '—'}&nbsp;
+                    ({isPositive ? '+' : ''}{deltaPercent.toFixed(1)}%) {t('analytics_this_period')}
+                  </p>
               )}
             </>
           ) : (
-            <p className="text-sm text-gray-500">No portfolio data yet</p>
+            <p className="text-sm text-gray-500">{t('analytics_no_portfolio')}</p>
           )}
         </div>
 
@@ -158,7 +160,7 @@ export default function PortfolioValueChart({
       {/* ── Chart or empty state ── */}
       {data.length < 2 ? (
         <div className="flex items-center justify-center h-48 text-gray-500 text-sm text-center px-4">
-          Not enough data yet — check back tomorrow!
+          {t('analytics_not_enough_data')}
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={220}>

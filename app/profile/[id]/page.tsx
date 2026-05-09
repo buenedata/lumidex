@@ -26,6 +26,8 @@ import { User, Achievement, PokemonSet, SetProgress } from '@/types'
 import type { FriendEntry } from '@/components/profile/FriendsList'
 import { cn } from '@/lib/utils'
 import { fmtCardPrice } from '@/lib/currency'
+import { useLocale } from '@/contexts/LocaleContext'
+import type { TranslationKey } from '@/locales/en'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -55,17 +57,17 @@ function userToSettings(u: ProfileUser): SettingsValues {
 }
 
 // ── Achievement categories ────────────────────────────────────────────────────
-// Maps achievement names (as stored in DB) to display category labels.
-const ACHIEVEMENT_CATEGORIES: { label: string; names: string[] }[] = [
-  { label: 'Collection Size', names: ['First Steps', 'Century Club', 'Enthusiast', 'Diamond Collector', 'Elite Collector', 'Master Vault', 'Legendary Hoard', 'Card Emperor'] },
-  { label: 'Unique Cards',    names: ['Card Hunter', 'Dedicated Collector', 'Thousand Faces', 'Card Archivist'] },
-  { label: 'Sets Tracked',    names: ['Collector', 'Set Explorer', 'Set Hoarder', 'Set Chronicler', 'Set Archivist'] },
-  { label: 'Set Completion',  names: ['Completionist', 'Master Collector', 'Legend', 'Set Perfectionist', 'Living Pokédex'] },
-  { label: 'Duplicates',      names: ['Double Trouble', 'Trade Ready'] },
-  { label: 'Wanted List',     names: ['Wishful Thinking', 'On the Hunt', 'Obsessive Collector'] },
-  { label: 'Sealed Products', names: ['Sealed Ambitions', 'Box Hoarder', 'Sealed Vault'] },
-  { label: 'Social',          names: ['Friend Finder', 'Social Butterfly', 'Network Builder', 'Community Pillar'] },
-  { label: 'Profile',         names: ['Picture Perfect', 'Identity'] },
+// Maps achievement names (as stored in DB) to i18n label keys.
+const ACHIEVEMENT_CATEGORIES: { labelKey: TranslationKey; names: string[] }[] = [
+  { labelKey: 'achieve_cat_collection_size', names: ['First Steps', 'Century Club', 'Enthusiast', 'Diamond Collector', 'Elite Collector', 'Master Vault', 'Legendary Hoard', 'Card Emperor'] },
+  { labelKey: 'achieve_cat_unique_cards',    names: ['Card Hunter', 'Dedicated Collector', 'Thousand Faces', 'Card Archivist'] },
+  { labelKey: 'achieve_cat_sets_tracked',    names: ['Collector', 'Set Explorer', 'Set Hoarder', 'Set Chronicler', 'Set Archivist'] },
+  { labelKey: 'achieve_cat_set_completion',  names: ['Completionist', 'Master Collector', 'Legend', 'Set Perfectionist', 'Living Pokédex'] },
+  { labelKey: 'achieve_cat_duplicates',      names: ['Double Trouble', 'Trade Ready'] },
+  { labelKey: 'achieve_cat_wanted_list',     names: ['Wishful Thinking', 'On the Hunt', 'Obsessive Collector'] },
+  { labelKey: 'achieve_cat_sealed_products', names: ['Sealed Ambitions', 'Box Hoarder', 'Sealed Vault'] },
+  { labelKey: 'achieve_cat_social',          names: ['Friend Finder', 'Social Butterfly', 'Network Builder', 'Community Pillar'] },
+  { labelKey: 'achieve_cat_profile',         names: ['Picture Perfect', 'Identity'] },
 ]
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -75,6 +77,7 @@ export default function ProfilePage() {
   const userId = params.id as string
   const { user: currentUser, profile, setProfile } = useAuthStore()
   const router = useRouter()
+  const { t } = useLocale()
 
   const [profileUser, setProfileUser]         = useState<ProfileUser | null>(null)
   const [userSets, setUserSets]               = useState<string[]>([])
@@ -437,13 +440,13 @@ export default function ProfilePage() {
               className="text-2xl font-bold text-primary"
               style={{ fontFamily: 'var(--font-space-grotesk)' }}
             >
-              User not found
+              {t('profile_not_found')}
             </h1>
             <p className="text-secondary text-sm">
-              This profile doesn&apos;t exist or has been removed.
+              {t('profile_not_found_desc')}
             </p>
             <Button variant="secondary" onClick={() => router.back()}>
-              Go Back
+              {t('profile_go_back')}
             </Button>
           </div>
         </div>
@@ -518,7 +521,7 @@ export default function ProfilePage() {
                   ? <ProBadge size="sm" />
                   : isOwnProfile && (
                       <span className="pill px-2 py-0.5 rounded-full text-xs font-medium bg-accent-dim text-accent border border-[rgba(109,95,255,0.3)]">
-                        You
+                        {t('profile_you')}
                       </span>
                     )
                 }
@@ -553,7 +556,7 @@ export default function ProfilePage() {
                   <span className="text-subtle text-xs">·</span>
                 )}
                 {joinDate && (
-                  <span className="text-muted text-xs">Member since {joinDate}</span>
+                  <span className="text-muted text-xs">{t('profile_member_since', { date: joinDate })}</span>
                 )}
               </div>
 
@@ -632,8 +635,8 @@ export default function ProfilePage() {
                     'text-muted hover:text-primary hover:border-accent/40 transition-all duration-150',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50'
                   )}
-                  aria-label="Open profile settings"
-                  title="Profile Settings"
+                  aria-label={t('profile_settings_aria')}
+                  title={t('profile_settings_label')}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path
@@ -650,7 +653,7 @@ export default function ProfilePage() {
                     />
                   </svg>
                 </button>
-                <span className="text-[10px] text-muted hidden md:block">Settings</span>
+                <span className="text-[10px] text-muted hidden md:block">{t('profile_settings_label')}</span>
               </div>
             )}
 
@@ -673,7 +676,7 @@ export default function ProfilePage() {
           <div className="bg-surface border border-subtle rounded-xl p-8 mb-6 flex flex-col items-center gap-3 text-center">
             <div className="text-3xl">🔒</div>
             <p className="text-secondary text-sm">
-              This profile is private.
+              {t('profile_private_notice')}
             </p>
           </div>
         )}
@@ -683,23 +686,23 @@ export default function ProfilePage() {
             {/* ── Stats Row ────────────────────────────────────────────────────── */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
               <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
-                <span className="text-xs text-muted uppercase tracking-wider">Cards Collected</span>
+                <span className="text-xs text-muted uppercase tracking-wider">{t('profile_cards_collected')}</span>
                 <span className="text-2xl font-bold text-primary">
                   {stats.totalCards.toLocaleString()}
                 </span>
               </div>
               <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
-                <span className="text-xs text-muted uppercase tracking-wider">Sets Started</span>
+                <span className="text-xs text-muted uppercase tracking-wider">{t('profile_sets_started')}</span>
                 <span className="text-2xl font-bold text-primary">{userSets.length}</span>
               </div>
               <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
-                <span className="text-xs text-muted uppercase tracking-wider">Portfolio Value</span>
+                <span className="text-xs text-muted uppercase tracking-wider">{t('profile_portfolio_value')}</span>
                 <span className="text-2xl font-bold text-price">
                   {portfolioValue ?? '—'}
                 </span>
               </div>
               <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
-                <span className="text-xs text-muted uppercase tracking-wider">Friends</span>
+                <span className="text-xs text-muted uppercase tracking-wider">{t('profile_stat_friends')}</span>
                 <span className="text-2xl font-bold text-primary">
                   {friendsLoading ? '—' : acceptedFriends.length}
                 </span>
@@ -736,7 +739,7 @@ export default function ProfilePage() {
                     className="text-xl font-bold text-primary"
                     style={{ fontFamily: 'var(--font-space-grotesk)' }}
                   >
-                    Achievements
+                    {t('profile_achievements')}
                   </h2>
                   <span className={cn(
                     'pill px-2 py-0.5 rounded-full text-xs font-bold border',
@@ -770,7 +773,7 @@ export default function ProfilePage() {
                     return (
                       <div key={category.label}>
                         <h3 className="text-[10px] font-semibold text-muted uppercase tracking-wide mb-2 flex items-center gap-2">
-                          {category.label}
+                          {t(category.labelKey)}
                           <span className={cn(
                             'text-[10px] font-bold',
                             earnedCount === categoryAll.length ? 'text-accent' : 'text-muted'
@@ -807,8 +810,8 @@ export default function ProfilePage() {
                   <div className="text-3xl">🏆</div>
                   <p className="text-secondary text-sm">
                     {isOwnProfile
-                      ? "You haven't unlocked any achievements yet"
-                      : 'No achievements unlocked yet'}
+                      ? t('profile_achievements_own_empty')
+                      : t('profile_achievements_other_empty')}
                   </p>
                   {isOwnProfile && (
                     <Button
@@ -816,7 +819,7 @@ export default function ProfilePage() {
                       size="sm"
                       onClick={() => router.push('/collection')}
                     >
-                      View Collection
+                      {t('profile_view_collection')}
                     </Button>
                   )}
                 </div>
@@ -843,7 +846,9 @@ export default function ProfilePage() {
                 className="text-xl font-bold text-primary mb-4"
                 style={{ fontFamily: 'var(--font-space-grotesk)' }}
               >
-                {isOwnProfile ? 'Friends' : `${displayName}'s Friends`}
+                {isOwnProfile
+                  ? t('profile_friends_heading')
+                  : t('profile_friends_heading_other', { name: displayName })}
               </h2>
 
               {friendsLoading ? (
@@ -871,7 +876,9 @@ export default function ProfilePage() {
                   className="text-xl font-bold text-primary"
                   style={{ fontFamily: 'var(--font-space-grotesk)' }}
                 >
-                  {isOwnProfile ? 'Your Sets' : `${displayName}'s Sets`}
+                  {isOwnProfile
+                    ? t('profile_sets_heading')
+                    : t('profile_sets_heading_other', { name: displayName })}
                 </h2>
                 {displaySets.length > 0 && (
                   <button
@@ -880,7 +887,7 @@ export default function ProfilePage() {
                     className="flex items-center gap-1.5 text-xs text-muted hover:text-primary transition-colors px-2 py-1 rounded-lg hover:bg-elevated"
                     aria-label={setsCollapsed ? 'Expand sets' : 'Collapse sets'}
                   >
-                    {setsCollapsed ? 'Show' : 'Hide'}
+                    {setsCollapsed ? t('profile_sets_show') : t('profile_sets_hide')}
                     <svg
                       className={cn('w-3.5 h-3.5 transition-transform duration-200', setsCollapsed ? '' : 'rotate-180')}
                       fill="none"
@@ -915,21 +922,21 @@ export default function ProfilePage() {
                           className="text-lg font-semibold text-primary mb-1"
                           style={{ fontFamily: 'var(--font-space-grotesk)' }}
                         >
-                          {isOwnProfile ? 'No collection yet' : 'No sets started yet'}
+                          {isOwnProfile ? t('profile_no_collection') : t('profile_no_sets_started')}
                         </h3>
                         <p className="text-secondary text-sm">
                           {isOwnProfile
-                            ? 'Start by browsing sets and tracking your cards'
-                            : `${displayName} hasn't added any sets yet`}
+                            ? t('profile_no_sets_own_desc')
+                            : t('profile_no_sets_other_desc', { name: displayName })}
                         </p>
                       </div>
                       {isOwnProfile && (
                         <div className="flex gap-3">
                           <Button variant="primary" onClick={() => router.push('/sets')}>
-                            Browse Sets
+                            {t('profile_browse_sets')}
                           </Button>
                           <Button variant="secondary" onClick={() => router.push('/dashboard')}>
-                            View Dashboard
+                            {t('profile_view_dashboard')}
                           </Button>
                         </div>
                       )}

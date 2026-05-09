@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
+import { useLocale } from '@/contexts/LocaleContext'
 import type { FriendEntry } from './FriendsList'
 
 interface FriendRequestsProps {
@@ -15,6 +16,7 @@ interface FriendRequestsProps {
 
 export default function FriendRequests({ initialRequests, onFriendAccepted, className }: FriendRequestsProps) {
   const router = useRouter()
+  const { t } = useLocale()
   const [requests, setRequests] = useState<FriendEntry[]>(initialRequests)
   const [loadingId, setLoadingId] = useState<string | null>(null)
 
@@ -33,7 +35,6 @@ export default function FriendRequests({ initialRequests, onFriendAccepted, clas
         return
       }
       setRequests(prev => prev.filter(r => r.friendship_id !== request.friendship_id))
-      // Notify parent to re-fetch accepted friends so the list + count update immediately
       onFriendAccepted?.()
     } catch (err) {
       console.error('FriendRequests: accept failed', err)
@@ -61,7 +62,7 @@ export default function FriendRequests({ initialRequests, onFriendAccepted, clas
   return (
     <div className={cn('mb-6', className)}>
       <h3 className="text-sm font-semibold text-secondary uppercase tracking-wider mb-3">
-        Friend Requests
+        {t('friends_requests_heading')}
         <span className="pill ml-2 px-1.5 py-0.5 rounded-full text-xs font-bold bg-accent text-white">
           {requests.length}
         </span>
@@ -119,7 +120,7 @@ export default function FriendRequests({ initialRequests, onFriendAccepted, clas
                   onClick={() => handleAccept(request)}
                   disabled={isLoading}
                 >
-                  Accept
+                  {t('friends_accept')}
                 </Button>
                 <Button
                   variant="secondary"
@@ -127,7 +128,7 @@ export default function FriendRequests({ initialRequests, onFriendAccepted, clas
                   onClick={() => handleDecline(request)}
                   disabled={isLoading}
                 >
-                  Decline
+                  {t('friends_decline')}
                 </Button>
               </div>
             </div>

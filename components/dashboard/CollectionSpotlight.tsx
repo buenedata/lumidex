@@ -5,6 +5,7 @@ import Link from 'next/link'
 import type { PokemonSet, SetProgress } from '@/types'
 import { useAuthStore } from '@/lib/store'
 import { fmtCardPrice } from '@/lib/currency'
+import { useLocale } from '@/contexts/LocaleContext'
 
 interface CollectionSpotlightProps {
   sets: PokemonSet[]
@@ -33,15 +34,13 @@ export default function CollectionSpotlight({
   totalCardsToComplete,
 }: CollectionSpotlightProps) {
   const { profile } = useAuthStore()
+  const { t } = useLocale()
   const currency = (profile as any)?.preferred_currency ?? 'USD'
 
   const [mostExpensiveInfo,   setMostExpensiveInfo]   = useState<MostExpensiveInfo | null>(null)
   const [collectionValueEur,  setCollectionValueEur]  = useState<number | null>(null)
-  // Track whether the price fetch has finished so we can show "—" instead of "Loading…"
   const [pricesLoaded,        setPricesLoaded]        = useState(false)
 
-  // Fetch set-stats for every tracked set in parallel and aggregate into
-  // collection-level "Most Expensive" and "Collection Value" figures.
   useEffect(() => {
     if (sets.length === 0) return
     let cancelled = false
@@ -67,7 +66,6 @@ export default function CollectionSpotlight({
         if ((data.mostExpensive ?? 0) > maxPrice) {
           maxPrice = data.mostExpensive
           hasData  = true
-          // Capture the full card details returned by the API
           bestCard = {
             price:   data.mostExpensive,
             name:    data.mostExpensiveCard?.name    ?? null,
@@ -86,11 +84,10 @@ export default function CollectionSpotlight({
     })
 
     return () => { cancelled = true }
-  }, [sets.length]) // re-run when the number of tracked sets changes
+  }, [sets.length])
 
   if (sets.length === 0) return null
 
-  // Find the set with the highest completion percentage
   const spotlight = sets.reduce<{ set: PokemonSet; progress: SetProgress } | null>(
     (best, set) => {
       const progress = getProgress(set.id)
@@ -107,7 +104,6 @@ export default function CollectionSpotlight({
   const { set, progress } = spotlight
   const cardsToGo = (progress.total_cards ?? 0) - (progress.owned_cards ?? 0)
 
-  // SVG ring
   const radius       = 22
   const circumference = 2 * Math.PI * radius
   const dashOffset   = circumference - (progress.percentage / 100) * circumference
@@ -135,7 +131,7 @@ export default function CollectionSpotlight({
 
       {/* Section label */}
       <p className="relative text-xs text-muted uppercase tracking-wider font-medium mb-4">
-        Collection Spotlight
+        {t('spotlight_title')}
       </p>
 
       {/* ── Main horizontal layout ────────────────────────────────────── */}
@@ -176,17 +172,15 @@ export default function CollectionSpotlight({
                 {set.name}
               </h3>
               <p className="text-sm text-secondary mt-1">
-                <span className="font-semibold text-primary">{progress.owned_cards}</span>
-                {' / '}
-                {progress.total_cards} cards collected
+                {t('spotlight_cards_collected', { owned: progress.owned_cards, total: progress.total_cards })}
               </p>
               {cardsToGo > 0 ? (
                 <p className="text-xs text-muted mt-0.5">
                   <span className="text-accent font-semibold">{cardsToGo}</span>{' '}
-                  {cardsToGo === 1 ? 'card' : 'cards'} to go
+                  {cardsToGo === 1 ? t('spotlight_card_to_go', { n: cardsToGo }) : t('spotlight_cards_to_go', { n: cardsToGo })}
                 </p>
               ) : (
-                <p className="text-xs text-price font-semibold mt-0.5">🎉 Set complete!</p>
+                <p className="text-xs text-price font-semibold mt-0.5">{t('spotlight_set_complete')}</p>
               )}
             </div>
 
@@ -229,7 +223,7 @@ export default function CollectionSpotlight({
             href={`/set/${encodeURIComponent(set.id)}`}
             className="inline-flex items-center justify-center gap-1.5 w-full py-2.5 rounded-xl bg-accent/15 border border-accent/30 text-accent text-sm font-semibold hover:bg-accent/25 transition-colors duration-150"
           >
-            Continue collecting
+            {t('spotlight_continue')}
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
@@ -241,21 +235,17 @@ export default function CollectionSpotlight({
 
           {/* ── Most Expensive card ──────────────────────────────────── */}
           <div className="rounded-xl bg-surface border border-subtle p-3 flex flex-col gap-2 min-w-0">
-            {/* Header row */}
             <div className="flex items-center gap-1.5">
               <span className="text-sm leading-none" role="img" aria-hidden>💎</span>
               <p className="text-[10px] text-muted uppercase tracking-wider font-medium truncate leading-none">
-                Most Expensive
+                {t('spotlight_most_expensive')}
               </p>
             </div>
 
             {!pricesLoaded ? (
-              /* Loading state */
-              <p className="text-xs text-muted leading-tight">Loading…</p>
+              <p className="text-xs text-muted leading-tight">{t('spotlight_loading')}</p>
             ) : mostExpensiveInfo ? (
-              /* Card details + price */
               <div className="flex items-start gap-2 min-w-0">
-                {/* Card thumbnail */}
                 {mostExpensiveInfo.image && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -265,7 +255,6 @@ export default function CollectionSpotlight({
                     loading="lazy"
                   />
                 )}
-                {/* Text details */}
                 <div className="min-w-0 flex flex-col gap-0.5">
                   {mostExpensiveInfo.name && (
                     <p className="text-xs font-bold text-primary leading-tight truncate">
@@ -285,10 +274,9 @@ export default function CollectionSpotlight({
                 </div>
               </div>
             ) : (
-              /* No data */
               <>
                 <p className="text-sm font-bold text-primary leading-tight">—</p>
-                <p className="text-xs text-muted leading-tight">no price data</p>
+                <p className="text-xs text-muted leading-tight">{t('spotlight_no_price')}</p>
               </>
             )}
           </div>
@@ -297,23 +285,29 @@ export default function CollectionSpotlight({
           <div className="rounded-xl bg-surface border border-subtle p-3 flex flex-col gap-1.5 min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-sm leading-none" role="img" aria-hidden>🎯</span>
-              <p className="text-[10px] text-muted uppercase tracking-wider font-medium truncate leading-none">Sets Complete</p>
+              <p className="text-[10px] text-muted uppercase tracking-wider font-medium truncate leading-none">
+                {t('spotlight_sets_complete')}
+              </p>
             </div>
             <p className="text-sm font-bold text-primary truncate leading-tight">{completedSets}</p>
-            <p className="text-xs text-muted truncate leading-tight">{completedSets === 1 ? '1 set finished' : `${completedSets} sets finished`}</p>
+            <p className="text-xs text-muted truncate leading-tight">
+              {completedSets === 1 ? t('spotlight_1_set_finished') : t('spotlight_n_sets_finished', { n: completedSets })}
+            </p>
           </div>
 
           {/* ── Cards Needed ──────────────────────────────────────────── */}
           <div className="rounded-xl bg-surface border border-subtle p-3 flex flex-col gap-1.5 min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-sm leading-none" role="img" aria-hidden>📋</span>
-              <p className="text-[10px] text-muted uppercase tracking-wider font-medium truncate leading-none">Cards Needed</p>
+              <p className="text-[10px] text-muted uppercase tracking-wider font-medium truncate leading-none">
+                {t('spotlight_cards_needed')}
+              </p>
             </div>
             <p className="text-sm font-bold text-primary truncate leading-tight">{totalCardsToComplete.toLocaleString()}</p>
             <p className="text-xs text-muted truncate leading-tight">
               {totalCardsToComplete === 0
-                ? 'All sets complete!'
-                : 'to finish tracked sets'}
+                ? t('spotlight_all_complete')
+                : t('spotlight_to_finish')}
             </p>
           </div>
 
@@ -321,13 +315,15 @@ export default function CollectionSpotlight({
           <div className="rounded-xl bg-surface border border-subtle p-3 flex flex-col gap-1.5 min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-sm leading-none" role="img" aria-hidden>💰</span>
-              <p className="text-[10px] text-muted uppercase tracking-wider font-medium truncate leading-none">Collection Value</p>
+              <p className="text-[10px] text-muted uppercase tracking-wider font-medium truncate leading-none">
+                {t('spotlight_collection_value')}
+              </p>
             </div>
             <p className="text-sm font-bold text-price truncate leading-tight">
               {collectionValueFormatted ?? '—'}
             </p>
             <p className="text-xs text-muted truncate leading-tight">
-              {!pricesLoaded ? 'Loading…' : 'across tracked sets'}
+              {!pricesLoaded ? t('spotlight_loading') : t('spotlight_across_sets')}
             </p>
           </div>
 

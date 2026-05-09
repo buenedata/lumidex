@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import type { UserSearchResult } from '@/app/api/users/search/route'
+import { useLocale } from '@/contexts/LocaleContext'
 
 interface AddFriendModalProps {
   isOpen: boolean
@@ -21,6 +22,7 @@ export default function AddFriendModal({
   currentUserId,
 }: AddFriendModalProps) {
   const router = useRouter()
+  const { t } = useLocale()
   const inputRef = useRef<HTMLInputElement>(null)
 
   const [query, setQuery]     = useState('')
@@ -157,14 +159,14 @@ export default function AddFriendModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Find Friends"
+      title={t('add_friend_title')}
       maxWidth="md"
     >
       <div className="px-6 pb-6 flex flex-col gap-4">
         {/* Search input */}
         <Input
           ref={inputRef}
-          placeholder="Search by username or name…"
+          placeholder={t('add_friend_placeholder')}
           value={query}
           onChange={e => setQuery(e.target.value)}
           icon={
@@ -187,14 +189,14 @@ export default function AddFriendModal({
           {/* No query yet */}
           {!searching && query.trim().length < 2 && (
             <p className="text-center text-secondary text-sm py-8">
-              Type at least 2 characters to search
+              {t('add_friend_min_chars')}
             </p>
           )}
 
           {/* No results */}
           {!searching && query.trim().length >= 2 && results.length === 0 && (
             <p className="text-center text-secondary text-sm py-8">
-              No users found for &ldquo;{query.trim()}&rdquo;
+              {t('add_friend_no_results', { query: query.trim() })}
             </p>
           )}
 
@@ -252,7 +254,7 @@ export default function AddFriendModal({
                       onClick={() => handleAddFriend(result)}
                       disabled={isLoading}
                     >
-                      {isLoading ? 'Sending…' : '+ Add Friend'}
+                      {isLoading ? t('friends_adding') : t('friends_add')}
                     </Button>
                   )}
 
@@ -262,7 +264,7 @@ export default function AddFriendModal({
                         'text-xs px-2.5 py-1 rounded-lg',
                         'bg-elevated border border-subtle text-muted'
                       )}>
-                        Request Sent
+                        {t('friends_request_sent')}
                       </span>
                       <button
                         type="button"
@@ -270,7 +272,7 @@ export default function AddFriendModal({
                         disabled={isLoading}
                         className="text-xs text-muted hover:text-secondary transition-colors"
                       >
-                        Cancel
+                        {t('friends_cancel')}
                       </button>
                     </div>
                   )}
@@ -283,7 +285,7 @@ export default function AddFriendModal({
                         onClick={() => handleAccept(result)}
                         disabled={isLoading}
                       >
-                        Accept
+                        {t('friends_accept')}
                       </Button>
                       <Button
                         variant="secondary"
@@ -291,7 +293,7 @@ export default function AddFriendModal({
                         onClick={() => handleDecline(result)}
                         disabled={isLoading}
                       >
-                        Decline
+                        {t('friends_decline')}
                       </Button>
                     </div>
                   )}
@@ -302,7 +304,7 @@ export default function AddFriendModal({
                       'bg-accent-dim border border-[rgba(109,95,255,0.3)] text-accent',
                       'flex items-center gap-1'
                     )}>
-                      ✓ Friends
+                      {t('add_friend_friends')}
                     </span>
                   )}
                 </div>

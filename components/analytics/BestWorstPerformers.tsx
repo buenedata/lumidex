@@ -7,6 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { PerformerCard } from './types'
+import { useLocale } from '@/contexts/LocaleContext'
 
 // ── Single row ────────────────────────────────────────────────────────────────
 
@@ -77,9 +78,10 @@ interface ColumnProps {
   arrow: string
   cards: PerformerCard[]
   isGainer: boolean
+  emptyLabel: string
 }
 
-function PerformerColumn({ title, titleColor, arrow, cards, isGainer }: ColumnProps) {
+function PerformerColumn({ title, titleColor, arrow, cards, isGainer, emptyLabel }: ColumnProps) {
   return (
     <div>
       <h4 className={`text-sm font-semibold ${titleColor} mb-3 flex items-center gap-1.5`}>
@@ -88,7 +90,7 @@ function PerformerColumn({ title, titleColor, arrow, cards, isGainer }: ColumnPr
       </h4>
       {cards.length === 0 ? (
         <div className="flex items-center justify-center py-8 bg-gray-900/50 border border-gray-700 rounded-lg">
-          <p className="text-gray-500 text-sm">No data yet</p>
+          <p className="text-gray-500 text-sm">{emptyLabel}</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -112,21 +114,25 @@ export default function BestWorstPerformers({
   bestPerformers,
   worstPerformers,
 }: BestWorstPerformersProps) {
+  const { t } = useLocale()
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
       <PerformerColumn
-        title="Top Gainers"
+        title={t('analytics_top_gainers')}
         titleColor="text-green-400"
         arrow="▲"
         cards={bestPerformers}
         isGainer={true}
+        emptyLabel={t('analytics_no_performer_data')}
       />
       <PerformerColumn
-        title="Biggest Drops"
+        title={t('analytics_biggest_drops')}
         titleColor="text-red-400"
         arrow="▼"
         cards={worstPerformers}
         isGainer={false}
+        emptyLabel={t('analytics_no_performer_data')}
       />
     </div>
   )

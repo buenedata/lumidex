@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
+import { useLocale } from '@/contexts/LocaleContext'
 import type { FriendEntry } from './FriendsList'
 
 interface OutgoingRequestsProps {
@@ -15,6 +16,7 @@ export default function OutgoingRequests({
   className,
 }: OutgoingRequestsProps) {
   const router = useRouter()
+  const { t } = useLocale()
   const [requests, setRequests] = useState<FriendEntry[]>(initialRequests)
   const [loadingId, setLoadingId] = useState<string | null>(null)
 
@@ -35,7 +37,7 @@ export default function OutgoingRequests({
   return (
     <div className={cn('mb-6 max-w-md', className)}>
       <h3 className="text-sm font-semibold text-secondary uppercase tracking-wider mb-3">
-        Sent Friend Requests
+        {t('friends_sent_heading')}
         <span className="pill ml-2 px-1.5 py-0.5 rounded-full text-xs font-bold bg-elevated border border-subtle text-muted">
           {requests.length}
         </span>
@@ -88,7 +90,7 @@ export default function OutgoingRequests({
               {/* Status + Cancel */}
               <div className="flex items-center gap-3 shrink-0">
                 <span className="pill text-xs text-muted px-2.5 py-1 rounded-lg bg-elevated border border-subtle">
-                  Pending…
+                  {t('friends_pending')}
                 </span>
                 <button
                   type="button"
@@ -101,7 +103,7 @@ export default function OutgoingRequests({
                       : 'text-muted hover:text-red-400'
                   )}
                 >
-                  {isLoading ? 'Cancelling…' : 'Cancel'}
+                  {isLoading ? t('friends_cancelling') : t('friends_cancel')}
                 </button>
               </div>
             </div>

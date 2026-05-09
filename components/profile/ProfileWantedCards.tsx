@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useLocale } from '@/contexts/LocaleContext'
 
 interface WantedCard {
   id: string
@@ -19,6 +20,7 @@ interface ProfileWantedCardsProps {
 }
 
 export default function ProfileWantedCards({ userId, isOwnProfile, displayName }: ProfileWantedCardsProps) {
+  const { t } = useLocale()
   const [cards, setCards]     = useState<WantedCard[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
@@ -66,7 +68,9 @@ export default function ProfileWantedCards({ userId, isOwnProfile, displayName }
     }
   }
 
-  const sectionTitle = isOwnProfile ? 'Wanted Cards' : `${displayName}'s Wanted Cards`
+  const sectionTitle = isOwnProfile
+    ? t('wanted_own_title')
+    : t('wanted_other_title', { name: displayName })
 
   // Show nothing while loading if cards end up being empty (avoid flash)
   if (!loading && !error && cards.length === 0) {
@@ -84,16 +88,16 @@ export default function ProfileWantedCards({ userId, isOwnProfile, displayName }
           <div className="text-3xl">☆</div>
           {isOwnProfile ? (
             <>
-              <p className="text-secondary text-sm">You have no wanted cards yet.</p>
+              <p className="text-secondary text-sm">{t('wanted_own_empty')}</p>
               <Link
                 href="/browse"
                 className="inline-flex items-center gap-2 h-8 px-4 text-xs font-medium rounded-lg bg-accent text-white hover:bg-accent-light transition-all"
               >
-                Browse Cards
+                {t('wanted_browse')}
               </Link>
             </>
           ) : (
-            <p className="text-secondary text-sm">No wanted cards yet.</p>
+            <p className="text-secondary text-sm">{t('wanted_other_empty')}</p>
           )}
         </div>
       </section>
@@ -116,7 +120,7 @@ export default function ProfileWantedCards({ userId, isOwnProfile, displayName }
             href="/wanted"
             className="text-xs text-accent hover:text-accent-light transition-colors shrink-0"
           >
-            View all {cards.length} →
+            {t('wanted_view_all', { count: cards.length })}
           </Link>
         )}
       </div>
@@ -128,7 +132,7 @@ export default function ProfileWantedCards({ userId, isOwnProfile, displayName }
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
-          <span className="text-sm">Loading wanted cards…</span>
+          <span className="text-sm">{t('wanted_loading')}</span>
         </div>
       )}
 
@@ -166,7 +170,7 @@ export default function ProfileWantedCards({ userId, isOwnProfile, displayName }
                   <button
                     onClick={() => handleUnstar(card.id)}
                     disabled={removing.has(card.id)}
-                    title="Remove from wanted"
+                    title={t('wanted_remove_title')}
                     className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-surface border border-subtle flex items-center justify-center text-amber-400 hover:text-red-400 hover:border-red-400/50 hover:bg-red-400/10 transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50"
                   >
                     <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
@@ -184,15 +188,17 @@ export default function ProfileWantedCards({ userId, isOwnProfile, displayName }
                 className="shrink-0 w-[72px] h-[100px] rounded-lg border border-subtle bg-elevated flex flex-col items-center justify-center gap-1 text-muted hover:text-accent hover:border-accent/40 transition-all"
               >
                 <span className="text-lg font-bold">+{cards.length - 12}</span>
-                <span className="text-[10px]">more</span>
+                <span className="text-[10px]">{t('wanted_more')}</span>
               </Link>
             )}
           </div>
 
           {/* Card count footer */}
           <p className="text-xs text-muted mt-3">
-            {cards.length} card{cards.length !== 1 ? 's' : ''} wanted
-            {cards.length > 12 && ` · showing 12 of ${cards.length}`}
+            {cards.length === 1
+              ? t('wanted_count_1', { count: cards.length })
+              : t('wanted_count_n', { count: cards.length })}
+            {cards.length > 12 && ` · ${t('wanted_showing', { count: cards.length })}`}
           </p>
         </div>
       )}

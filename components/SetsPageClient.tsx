@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import type { DbSet } from '@/lib/db'
 import type { SetProgress } from '@/types'
 import { cn } from '@/lib/utils'
+import { useLocale } from '@/contexts/LocaleContext'
 
 export type EnrichedSet = DbSet & { user_card_count?: number }
 
@@ -53,6 +54,7 @@ const KNOWN_SERIES_ORDER: Record<string, number> = {
 }
 
 export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPageClientProps) {
+  const { t } = useLocale()
   const [favoritedIds, setFavoritedIds] = useState<Set<string>>(
     () => new Set(favoritedSetIds)
   )
@@ -239,7 +241,7 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
             </svg>
             <input
               type="text"
-              placeholder="Search sets..."
+              placeholder={t('sets_search_placeholder')}
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full h-10 bg-surface border border-subtle rounded-lg pl-9 pr-3 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
@@ -257,7 +259,7 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
                   : 'text-secondary hover:text-primary'
               )}
             >
-              English
+              {t('sets_lang_english')}
             </button>
             <button
               onClick={() => handleLanguageChange('ja')}
@@ -268,7 +270,7 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
                   : 'text-secondary hover:text-primary'
               )}
             >
-              Japanese
+              {t('sets_lang_japanese')}
             </button>
           </div>
         </div>
@@ -284,7 +286,7 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
                 : 'bg-surface border border-subtle text-secondary hover:border-accent/50 hover:text-primary'
             )}
           >
-            All
+            {t('sets_filter_all')}
           </button>
           {seriesOrder.map(series => (
             <button
@@ -307,9 +309,9 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
       {totalVisible === 0 && (
         <div className="text-center py-24">
           <div className="text-4xl mb-4">📦</div>
-          <p className="text-muted mb-2">No sets found</p>
+          <p className="text-muted mb-2">{t('sets_not_found')}</p>
           {searchQuery && (
-            <p className="text-xs text-muted/70">Try a different search term</p>
+            <p className="text-xs text-muted/70">{t('sets_not_found_hint')}</p>
           )}
         </div>
       )}
@@ -328,7 +330,7 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
                 className="text-lg font-semibold"
                 style={{ fontFamily: 'var(--font-space-grotesk)' }}
               >
-                ⭐ Favorites
+                {t('sets_favorites_heading')}
               </h2>
               <svg
                 className={cn(
@@ -452,11 +454,11 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
                       className="font-semibold text-sm text-accent leading-tight"
                       style={{ fontFamily: 'var(--font-space-grotesk)' }}
                     >
-                      Products
+                      {t('sets_products_title')}
                     </h3>
-                    <p className="text-xs text-muted">Sealed product collection</p>
+                    <p className="text-xs text-muted">{t('sets_products_desc')}</p>
                     <span className="mt-auto text-xs text-accent/70 group-hover:text-accent transition-colors">
-                      View all →
+                      {t('sets_products_view_all')}
                     </span>
                   </div>
               </Link>

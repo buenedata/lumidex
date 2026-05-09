@@ -18,6 +18,7 @@ import {
 } from 'recharts'
 import type { SetValueEntry } from './types'
 import { fmtCardPrice } from '@/lib/currency'
+import { useLocale } from '@/contexts/LocaleContext'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -38,12 +39,13 @@ interface CustomTooltipProps {
 }
 
 function CustomTooltip({ active, payload, currency }: CustomTooltipProps) {
+  const { t } = useLocale()
   if (!active || !payload?.length) return null
   const d = payload[0].payload
   return (
     <div className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 shadow-lg text-xs max-w-[200px]">
       <p className="font-semibold text-white mb-1.5 leading-snug">{d.set_name}</p>
-      <p className="text-gray-400">{d.card_count.toLocaleString()} cards</p>
+      <p className="text-gray-400">{t('analytics_tooltip_cards', { count: d.card_count.toLocaleString() })}</p>
       <p className="text-indigo-400 font-medium">{fmtCardPrice({ eur: d.total_value_eur, usd: null }, currency) ?? '—'}</p>
     </div>
   )
@@ -57,6 +59,7 @@ interface ValueBySetProps {
 }
 
 export default function ValueBySet({ data, currency }: ValueBySetProps) {
+  const { t } = useLocale()
   const sorted = [...data]
     .sort((a, b) => b.total_value_eur - a.total_value_eur)
     .slice(0, 10)
@@ -68,7 +71,7 @@ export default function ValueBySet({ data, currency }: ValueBySetProps) {
   if (sorted.length === 0) {
     return (
       <div className="flex items-center justify-center py-14 text-gray-500 text-sm">
-        No data available.
+        {t('analytics_no_data')}
       </div>
     )
   }

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
+import { useLocale } from '@/contexts/LocaleContext'
 
 export type FriendshipStatus =
   | 'none'
@@ -33,6 +34,7 @@ export default function FriendButton({
   initialFriendship,
   className,
 }: FriendButtonProps) {
+  const { t } = useLocale()
   const [friendship, setFriendship] = useState<FriendshipRow | null>(initialFriendship)
   const [loading, setLoading] = useState(false)
 
@@ -110,7 +112,7 @@ export default function FriendButton({
 
   async function handleRemove() {
     if (!friendship) return
-    if (!confirm('Remove this friend?')) return
+    if (!confirm(t('friends_remove_confirm'))) return
     setLoading(true)
     try {
       await fetch(`/api/friendships/${friendship.id}`, { method: 'DELETE' })
@@ -146,7 +148,7 @@ export default function FriendButton({
         disabled={loading}
         className={className}
       >
-        {loading ? 'Sending…' : '+ Add Friend'}
+        {loading ? t('friends_adding') : t('friends_add')}
       </Button>
     )
   }
@@ -155,16 +157,16 @@ export default function FriendButton({
     return (
       <div className={cn('flex items-center gap-2', className)}>
         <span className="text-xs text-muted px-3 py-1.5 rounded-lg bg-elevated border border-subtle">
-          Request Sent
+          {t('friends_request_sent')}
         </span>
         <button
           type="button"
           onClick={handleCancel}
           disabled={loading}
           className="text-xs text-muted hover:text-secondary transition-colors"
-          title="Cancel request"
+          title={t('friends_cancel_title')}
         >
-          Cancel
+          {t('friends_cancel')}
         </button>
       </div>
     )
@@ -173,14 +175,14 @@ export default function FriendButton({
   if (status === 'pending_incoming') {
     return (
       <div className={cn('flex items-center gap-2', className)}>
-        <span className="text-xs text-secondary font-medium">Wants to be friends</span>
+        <span className="text-xs text-secondary font-medium">{t('friends_wants_to_friend')}</span>
         <Button
           variant="primary"
           size="sm"
           onClick={handleAccept}
           disabled={loading}
         >
-          Accept
+          {t('friends_accept')}
         </Button>
         <Button
           variant="secondary"
@@ -188,7 +190,7 @@ export default function FriendButton({
           onClick={handleDecline}
           disabled={loading}
         >
-          Decline
+          {t('friends_decline')}
         </Button>
       </div>
     )
@@ -201,16 +203,16 @@ export default function FriendButton({
         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
         </svg>
-        Friends
+        {t('friends_friends_label')}
       </span>
       <button
         type="button"
         onClick={handleRemove}
         disabled={loading}
         className="text-xs text-muted hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
-        title="Remove friend"
+        title={t('friends_remove_title')}
       >
-        Remove
+        {t('friends_remove')}
       </button>
     </div>
   )

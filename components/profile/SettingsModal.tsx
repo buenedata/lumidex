@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import SettingsForm, { SettingsValues } from './SettingsForm'
 import { useIsPro } from '@/hooks/useProGate'
 import { ProBadge } from '@/components/upgrade/ProBadge'
+import { useLocale } from '@/contexts/LocaleContext'
 
 // ── Danger-zone confirmation sub-modal ───────────────────────────────────────
 
@@ -29,6 +30,7 @@ function ConfirmDangerModal({
   onConfirmed,
   isExecuting,
 }: ConfirmDangerModalProps) {
+  const { t } = useLocale()
   const [typed, setTyped] = useState('')
 
   // Reset input each time the sub-modal opens
@@ -39,12 +41,10 @@ function ConfirmDangerModal({
   if (!action) return null
 
   const isReset   = action === 'reset_collection'
-  const title     = isReset ? 'Reset Collection' : 'Delete Account'
-  const warning   = isReset
-    ? 'This will permanently delete ALL cards and sealed products from your collection. Your account, friends, and settings will remain intact. This cannot be undone.'
-    : 'This will permanently delete your account and all associated data — including your collection, friends list, and settings. You will be signed out immediately. This cannot be undone.'
-  const btnLabel  = isReset ? 'Yes, reset my collection' : 'Yes, delete my account'
-  const busyLabel = isReset ? 'Resetting…' : 'Deleting…'
+  const title     = isReset ? t('settings_reset_collection') : t('settings_delete_account')
+  const warning   = isReset ? t('settings_reset_warning') : t('settings_delete_warning')
+  const btnLabel  = isReset ? t('settings_confirm_reset') : t('settings_confirm_delete')
+  const busyLabel = isReset ? t('settings_resetting') : t('settings_deleting')
 
   const confirmed = typed.trim().toLowerCase() === username.toLowerCase()
 
@@ -59,8 +59,7 @@ function ConfirmDangerModal({
         {/* Typed username confirmation */}
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-medium text-secondary">
-            Type your username{' '}
-            <span className="font-bold text-primary">@{username}</span> to confirm
+            {t('settings_type_username', { handle: `@${username}` })}
           </label>
           <input
             type="text"
@@ -82,7 +81,7 @@ function ConfirmDangerModal({
         {/* Actions */}
         <div className="flex justify-end gap-3 pt-1">
           <Button variant="secondary" size="sm" onClick={onClose} disabled={isExecuting}>
-            Cancel
+            {t('settings_cancel')}
           </Button>
           <button
             type="button"
@@ -132,6 +131,7 @@ export default function SettingsModal({
 }: SettingsModalProps) {
   const router = useRouter()
   const isPro  = useIsPro()
+  const { t }  = useLocale()
 
   const [values,  setValues]  = useState<SettingsValues>(initialValues)
   const [saving,  setSaving]  = useState(false)
@@ -189,7 +189,7 @@ export default function SettingsModal({
     setSaving(false)
 
     if (!res.ok) {
-      setError('Failed to save settings. Please try again.')
+      setError(t('settings_save_error'))
       return
     }
 
@@ -209,18 +209,18 @@ export default function SettingsModal({
     try {
       if (action === 'reset_collection') {
         const res = await fetch('/api/user/collection', { method: 'DELETE' })
-        if (!res.ok) throw new Error('Failed to reset collection. Please try again.')
+        if (!res.ok) throw new Error(t('settings_save_error'))
         setDangerAction(null)
         onCollectionReset?.()
         onClose()
       } else {
         const res = await fetch('/api/user/account', { method: 'DELETE' })
-        if (!res.ok) throw new Error('Failed to delete account. Please try again.')
+        if (!res.ok) throw new Error(t('settings_save_error'))
         onAccountDeleted?.()
         router.push('/')
       }
     } catch (err) {
-      setDangerError(err instanceof Error ? err.message : 'Something went wrong.')
+      setDangerError(err instanceof Error ? err.message : t('settings_save_error'))
     } finally {
       setDangerExecuting(false)
     }
@@ -231,7 +231,7 @@ export default function SettingsModal({
     try {
       const res = await fetch('/api/stripe/portal', { method: 'POST' })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Failed to open billing portal')
+      if (!res.ok) throw new Error(data.error ?? t('settings_save_error'))
       window.location.href = data.url
     } catch {
       // Portal failure is non-critical — just stop loading
@@ -244,7 +244,7 @@ export default function SettingsModal({
       <Modal
         isOpen={isOpen}
         onClose={onClose}
-        title="Profile Settings"
+        title={t('settings_modal_title')}
         maxWidth="lg"
       >
         <div className="overflow-y-auto max-h-[60vh] pr-1">
@@ -257,7 +257,7 @@ export default function SettingsModal({
           {/* ── Subscription ─────────────────────────────────── */}
           <div className="mt-6 pt-6 border-t border-[#2a2a3d]">
             <h3 className="text-xs font-semibold text-[#9191b0] uppercase tracking-wider mb-3">
-              Subscription
+              {t('settings_section_subscription')}
             </h3>
             {isPro ? (
               <div className="flex items-center justify-between gap-4 bg-[rgba(109,95,255,0.08)] border border-[rgba(109,95,255,0.25)] rounded-xl px-4 py-3">
@@ -266,7 +266,7 @@ export default function SettingsModal({
                     <p className="text-sm font-medium text-white">Lumidex Pro</p>
                     <ProBadge size="sm" />
                   </div>
-                  <p className="text-xs text-[#9191b0] mt-0.5">All Pro features are active</p>
+                  <p className="text-xs text-[#9191b0] mt-0.5">{t('settings_pro_active')}</p>
                 </div>
                 <button
                   type="button"
@@ -274,15 +274,15 @@ export default function SettingsModal({
                   disabled={billingLoading}
                   className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold text-[#9191b0] border border-[#2a2a3d] hover:border-[#6d5fff] hover:text-white transition-all duration-150 disabled:opacity-60"
                 >
-                  {billingLoading ? 'Opening…' : 'Manage Billing'}
+                  {billingLoading ? t('settings_billing_opening') : t('settings_manage_billing')}
                 </button>
               </div>
             ) : (
               <div className="flex items-center justify-between gap-4 bg-[#111118] border border-[#2a2a3d] rounded-xl px-4 py-3">
                 <div>
-                  <p className="text-sm font-medium text-white">Free Plan</p>
+                  <p className="text-sm font-medium text-white">{t('settings_free_plan')}</p>
                   <p className="text-xs text-[#9191b0] mt-0.5">
-                    Upgrade to unlock price history, graded cards &amp; more
+                    {t('settings_upgrade_cta')}
                   </p>
                 </div>
                 <Link
@@ -293,7 +293,7 @@ export default function SettingsModal({
                     shadow-[0_0_10px_rgba(109,95,255,0.3)]
                     transition-all duration-150"
                 >
-                  Upgrade →
+                  {t('settings_upgrade_link')}
                 </Link>
               </div>
             )}
@@ -302,19 +302,19 @@ export default function SettingsModal({
           {/* ── Danger Zone ──────────────────────────────────── */}
           <div className="mt-8 pt-6 border-t border-red-500/20">
             <h3 className="text-xs font-semibold text-red-500 uppercase tracking-wider mb-1">
-              Danger Zone
+              {t('settings_section_danger')}
             </h3>
             <p className="text-xs text-muted mb-4 leading-snug">
-              These actions are permanent and cannot be undone.
+              {t('settings_danger_desc')}
             </p>
 
             <div className="flex flex-col gap-3">
               {/* Reset collection */}
               <div className="flex items-center justify-between gap-4 bg-red-500/5 border border-red-500/20 rounded-xl px-4 py-3">
                 <div>
-                  <p className="text-sm font-medium text-primary">Reset Collection</p>
+                  <p className="text-sm font-medium text-primary">{t('settings_reset_collection')}</p>
                   <p className="text-xs text-muted mt-0.5">
-                    Remove all cards and sealed products from your collection.
+                    {t('settings_reset_desc')}
                   </p>
                 </div>
                 <button
@@ -322,16 +322,16 @@ export default function SettingsModal({
                   onClick={() => { setDangerError(null); setDangerAction('reset_collection') }}
                   className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-400 border border-red-500/40 hover:bg-red-500/10 hover:border-red-500/60 transition-all duration-150"
                 >
-                  Reset
+                  {t('settings_reset_btn')}
                 </button>
               </div>
 
               {/* Delete account */}
               <div className="flex items-center justify-between gap-4 bg-red-500/5 border border-red-500/20 rounded-xl px-4 py-3">
                 <div>
-                  <p className="text-sm font-medium text-primary">Delete Account</p>
+                  <p className="text-sm font-medium text-primary">{t('settings_delete_account')}</p>
                   <p className="text-xs text-muted mt-0.5">
-                    Permanently delete your account and all associated data.
+                    {t('settings_delete_desc')}
                   </p>
                 </div>
                 <button
@@ -339,7 +339,7 @@ export default function SettingsModal({
                   onClick={() => { setDangerError(null); setDangerAction('delete_account') }}
                   className="shrink-0 px-3 py-1.5 rounded-lg text-xs font-semibold text-red-400 border border-red-500/40 hover:bg-red-500/10 hover:border-red-500/60 transition-all duration-150"
                 >
-                  Delete
+                  {t('settings_delete_btn')}
                 </button>
               </div>
             </div>
@@ -356,16 +356,16 @@ export default function SettingsModal({
             <p className="text-xs text-[var(--danger)]">{error}</p>
           )}
           {saved && !error && (
-            <p className="text-xs text-[var(--success)]">✓ Settings saved</p>
+            <p className="text-xs text-[var(--success)]">{t('settings_saved')}</p>
           )}
           {!error && !saved && <span />}
 
           <div className="flex gap-3">
             <Button variant="secondary" size="sm" onClick={onClose} disabled={saving}>
-              Cancel
+              {t('settings_cancel')}
             </Button>
             <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving…' : 'Save Changes'}
+              {saving ? t('settings_saving') : t('settings_save')}
             </Button>
           </div>
         </div>

@@ -18,6 +18,7 @@ import {
   Cell,
 } from 'recharts'
 import type { RarityBucket } from './types'
+import { useLocale } from '@/contexts/LocaleContext'
 
 // ── Rarity colour mapping ─────────────────────────────────────────────────────
 
@@ -49,12 +50,13 @@ interface CustomTooltipProps {
 }
 
 function CustomTooltip({ active, payload }: CustomTooltipProps) {
+  const { t } = useLocale()
   if (!active || !payload?.length) return null
   const d = payload[0].payload
   return (
     <div className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 shadow-lg text-xs">
       <p className="font-semibold text-white mb-1.5">{d.rarity}</p>
-      <p className="text-gray-400">{d.card_count.toLocaleString()} cards</p>
+      <p className="text-gray-400">{t('analytics_tooltip_cards', { count: d.card_count.toLocaleString() })}</p>
       <p className="text-violet-400 font-medium">€{d.total_value_eur.toFixed(2)}</p>
     </div>
   )
@@ -67,10 +69,11 @@ interface RarityBreakdownProps {
 }
 
 export default function RarityBreakdown({ data }: RarityBreakdownProps) {
+  const { t } = useLocale()
   if (data.length === 0) {
     return (
       <div className="flex items-center justify-center py-14 text-gray-500 text-sm">
-        No data available.
+        {t('analytics_no_data')}
       </div>
     )
   }
