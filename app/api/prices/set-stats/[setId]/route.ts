@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { createSupabaseServerClient } from '@/lib/supabaseServer'
 
 /**
  * GET /api/prices/set-stats/{setId}
  *
- * Returns aggregated pricing statistics for all cards in a set:
- *  - mostExpensive: the highest single-card EUR price in the set
- *  - mostExpensiveCard: card details (name, number, image, setName) for the priciest card
- *  - setValue: the sum of all known EUR normal-variant prices
+ * Returns aggregated pricing statistics for cards in a set that the
+ * authenticated user owns (user_card_variants.quantity > 0):
+ *  - mostExpensive: the highest single-card EUR price among owned cards
+ *  - mostExpensiveCard: card details (name, number, image, setName) for the priciest owned card
+ *  - setValue: the sum of EUR normal-variant prices for all owned cards
  *  - currency: always 'EUR'
  *
  * Uses item_prices with item_type='single' and variant='normal'.
- * Cards without a tcggo_id or without a price row are silently excluded.
+ * Cards without a tcggo_id, without a price row, or not owned are silently excluded.
  */
 export async function GET(
   _req: NextRequest,
@@ -19,10 +21,18 @@ export async function GET(
 ) {
   const { setId } = await params
 
-  // ── Step 1: collect card details + set name in parallel ──────────────────
+  // ── Authenticate the caller ───────────────────────────────────────────────
+  const serverClient = await createSupabaseServerClient()
+  const { data: { user } } = await serverClient.auth.getUser()
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  // ── Step 1: collect card details, set name, and owned card IDs in parallel ─
   const [
     { data: cardRows, error: cardError },
     { data: setRow },
+    { data: ownedRows },
   ] = await Promise.all([
     supabaseAdmin
       .from('cards')
@@ -34,6 +44,12 @@ export async function GET(
       .select('name')
       .eq('id', setId)
       .single(),
+    // Only cards the user actually owns (quantity > 0)
+    supabaseAdmin
+      .from('user_card_variants')
+      .select('card_id')
+      .eq('user_id', user.id)
+      .gt('quantity', 0),
   ])
 
   if (cardError) {
@@ -41,11 +57,18 @@ export async function GET(
     return NextResponse.json({ error: cardError.message }, { status: 500 })
   }
 
-  // Build a lookup map: tcggo_id string → card row (for O(1) resolution later)
+  // Build a set of card IDs the user owns for O(1) lookup
+  const ownedCardIds = new Set(
+    (ownedRows ?? []).map((r: { card_id: string }) => r.card_id),
+  )
+
+  // Build a lookup map: tcggo_id string → card row — only for owned cards
   interface CardRow { id: string; name: string | null; number: string | null; image: string | null; tcggo_id: number | null }
   const cardByTcggoId = new Map<string, CardRow>()
   ;(cardRows ?? []).forEach((r: CardRow) => {
-    if (r.tcggo_id != null) cardByTcggoId.set(String(r.tcggo_id), r)
+    if (r.tcggo_id != null && ownedCardIds.has(r.id)) {
+      cardByTcggoId.set(String(r.tcggo_id), r)
+    }
   })
 
   const tcggoIds = Array.from(cardByTcggoId.keys())
@@ -102,8 +125,8 @@ export async function GET(
     { mostExpensive, mostExpensiveCard, setValue, currency: 'EUR' },
     {
       headers: {
-        // Cache for 5 minutes — prices update hourly at most
-        'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=60',
+        // Response is user-specific — must not be shared in a public cache
+        'Cache-Control': 'private, no-store',
       },
     },
   )
