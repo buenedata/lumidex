@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
-import type { ActivityItem } from '@/app/api/users/[id]/last-activity/route'
+import type { ActivityItem, GradedCardActivityItem } from '@/app/api/users/[id]/last-activity/route'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -34,6 +34,18 @@ const VARIANT_COLORS: Record<string, string> = {
   holo:       'bg-purple-500',
   pokeball:   'bg-red-500',
   masterball: 'bg-yellow-500',
+}
+
+const GRADING_COMPANY_COLORS: Record<string, { badge: string; text: string }> = {
+  PSA:     { badge: 'bg-blue-600',   text: 'text-blue-300' },
+  BECKETT: { badge: 'bg-red-700',    text: 'text-red-300' },
+  CGC:     { badge: 'bg-orange-600', text: 'text-orange-300' },
+  TAG:     { badge: 'bg-slate-600',  text: 'text-slate-200' },
+  ACE:     { badge: 'bg-yellow-600', text: 'text-yellow-300' },
+}
+
+function gradingCompanyStyle(company: string): { badge: string; text: string } {
+  return GRADING_COMPANY_COLORS[company] ?? { badge: 'bg-gray-600', text: 'text-gray-300' }
 }
 
 const VARIANT_LABELS: Record<string, string> = {
@@ -175,6 +187,68 @@ function CardTile({ item }: { item: Extract<ActivityItem, { type: 'card' }> }) {
         {/* Delta badge */}
         <div className="flex justify-center pt-0.5">
           <DeltaBadge delta={item.quantity_delta} quantity={item.quantity} />
+        </div>
+        <p className="text-[10px] text-muted/60">{timeAgo(item.timestamp)}</p>
+      </div>
+    </Link>
+  )
+}
+
+/** A single graded-card activity tile */
+function GradedCardTile({ item }: { item: GradedCardActivityItem }) {
+  const [imgError, setImgError] = useState(false)
+  const imgSrc = (!item.card_image || imgError)
+    ? '/pokemon_card_backside.png'
+    : item.card_image
+
+  const companyStyle = gradingCompanyStyle(item.grading_company)
+
+  return (
+    <Link
+      href={`/set/${encodeURIComponent(item.set_id)}`}
+      className="group flex-none w-28 flex flex-col items-center gap-1.5 focus:outline-none"
+    >
+      {/* Card thumbnail */}
+      <div className="relative w-16 h-[88px] rounded-lg overflow-hidden shadow-md
+                      ring-1 ring-white/10
+                      group-hover:ring-accent group-hover:shadow-accent/20
+                      transition-all duration-200">
+        <img
+          src={imgSrc}
+          alt={item.card_name}
+          onError={() => setImgError(true)}
+          className="w-full h-full object-cover"
+        />
+        {/* Grading company badge */}
+        <span
+          className={`absolute bottom-1 left-1/2 -translate-x-1/2
+                      px-1 rounded text-[8px] font-bold leading-tight
+                      border border-black/30 shadow-sm whitespace-nowrap
+                      ${companyStyle.badge} text-white`}
+          title={`${item.grading_company} ${item.grade}`}
+        >
+          🏅 {item.grading_company}
+        </span>
+      </div>
+
+      {/* Text */}
+      <div className="w-full text-center space-y-0.5">
+        <p className="text-[11px] font-medium text-primary leading-tight line-clamp-1">
+          {item.card_name}
+        </p>
+        <p className={`text-[10px] font-semibold leading-tight line-clamp-1 ${companyStyle.text}`}>
+          {item.grade}
+        </p>
+        <p className="text-[10px] text-muted leading-tight line-clamp-1">
+          {item.set_name}
+        </p>
+        <div className="flex justify-center pt-0.5">
+          <span className="inline-flex items-center gap-0.5 text-[11px] font-bold text-green-400">
+            <svg className="w-3 h-3 flex-shrink-0" viewBox="0 0 12 12" fill="currentColor">
+              <path d="M6 1 L11 8 H7 V11 H5 V8 H1 Z" />
+            </svg>
+            ×{item.quantity}
+          </span>
         </div>
         <p className="text-[10px] text-muted/60">{timeAgo(item.timestamp)}</p>
       </div>
@@ -324,6 +398,8 @@ export default function LastActivitySection({
           {items.map((item, idx) =>
             item.type === 'card' ? (
               <CardTile key={`card-${item.card_id}-${idx}`} item={item} />
+            ) : item.type === 'graded_card' ? (
+              <GradedCardTile key={`graded-${item.card_id}-${item.grading_company}-${item.grade}-${idx}`} item={item} />
             ) : (
               <ProductTile key={`product-${item.product_id}-${idx}`} item={item} />
             )

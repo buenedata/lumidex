@@ -36,7 +36,27 @@ export type SealedProductActivityItem = {
   set_name: string
 }
 
-export type ActivityItem = CardActivityItem | SealedProductActivityItem
+export type GradedCardActivityItem = {
+  type: 'graded_card'
+  timestamp: string
+  /** ISO 8601 — used with timestamp to detect first-add vs quantity update */
+  created_at: string
+  card_id: string
+  card_name: string
+  card_number: string
+  card_image: string | null
+  card_type: string | null
+  variant_type: string | null
+  /** e.g. "PSA", "BECKETT", "CGC" */
+  grading_company: string
+  /** e.g. "GEM-MT 10", "Pristine 10" */
+  grade: string
+  quantity: number
+  set_id: string
+  set_name: string
+}
+
+export type ActivityItem = CardActivityItem | SealedProductActivityItem | GradedCardActivityItem
 
 // ── Route Handler ─────────────────────────────────────────────────────────────
 
@@ -79,7 +99,7 @@ export async function GET(
     }
 
     // ── 2. Fetch raw activity rows in parallel ────────────────────────────────
-    const [cardLogResult, sealedProductsResult] = await Promise.all([
+    const [cardLogResult, sealedProductsResult, gradedCardsResult] = await Promise.all([
       // Fetch more rows than we'll display so that rapid multi-click sessions
       // (which produce many rows for the same card+variant) can be merged
       // down to 10 unique card+variant events.
@@ -97,10 +117,20 @@ export async function GET(
         .eq('user_id', userId)
         .order('updated_at', { ascending: false })
         .limit(5),
+
+      // Graded cards use the current-state table (one row per unique
+      // user/card/variant/company/grade combination), ordered by updated_at
+      supabaseAdmin
+        .from('user_graded_cards')
+        .select('card_id, variant_id, grading_company, grade, quantity, created_at, updated_at')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
+        .limit(5),
     ])
 
-    const rawLogRows     = cardLogResult.data    ?? []
+    const rawLogRows     = cardLogResult.data      ?? []
     const sealedProducts = sealedProductsResult.data ?? []
+    const gradedCards    = gradedCardsResult.data    ?? []
 
     // ── 3. Merge rapid consecutive clicks into one session event ─────────────
     //
@@ -249,8 +279,69 @@ export async function GET(
       }
     }
 
-    // ── 5. Merge, sort by timestamp DESC, cap at 10 ───────────────────────────
-    const merged: ActivityItem[] = [...cardItems, ...productItems]
+    // ── 5. Enrich graded card rows ────────────────────────────────────────────
+    const gradedCardItems: GradedCardActivityItem[] = []
+
+    if (gradedCards.length > 0) {
+      const gradedCardIds    = [...new Set(gradedCards.map(g => g.card_id))]
+      const gradedVariantIds = [...new Set(gradedCards.map(g => g.variant_id).filter(Boolean))] as string[]
+
+      const [gradedCardsDataResult, gradedVariantsResult] = await Promise.all([
+        supabaseAdmin
+          .from('cards')
+          .select('id, name, number, image, type, set_id')
+          .in('id', gradedCardIds),
+        gradedVariantIds.length > 0
+          ? supabaseAdmin
+              .from('variants')
+              .select('id, key')
+              .in('id', gradedVariantIds)
+          : Promise.resolve({ data: [] as { id: string; key: string }[] }),
+      ])
+
+      const gradedCardsData    = gradedCardsDataResult.data ?? []
+      const gradedVariantsData = (gradedVariantsResult.data as { id: string; key: string }[] | null) ?? []
+
+      if (gradedCardsData.length > 0) {
+        const gradedSetIds = [...new Set(gradedCardsData.map(c => c.set_id).filter(Boolean))]
+
+        const { data: gradedSetsData } = await supabaseAdmin
+          .from('sets')
+          .select('set_id, name')
+          .in('set_id', gradedSetIds)
+
+        const gradedCardMap    = new Map(gradedCardsData.map(c    => [c.id, c]))
+        const gradedVariantMap = new Map(gradedVariantsData.map(v => [v.id, v]))
+        const gradedSetMap     = new Map((gradedSetsData ?? []).map(s => [s.set_id, s]))
+
+        for (const gc of gradedCards) {
+          const card    = gradedCardMap.get(gc.card_id)
+          if (!card) continue
+          const set     = gradedSetMap.get(card.set_id)
+          const variant = gc.variant_id ? gradedVariantMap.get(gc.variant_id) : null
+
+          gradedCardItems.push({
+            type:             'graded_card',
+            timestamp:        gc.updated_at,
+            created_at:       gc.created_at,
+            card_id:          card.id,
+            card_name:        card.name,
+            card_number:      card.number ?? '',
+            card_image:       card.image  ?? null,
+            card_type:        card.type   ?? null,
+            variant_type:     variant?.key ?? null,
+            grading_company:  gc.grading_company,
+            grade:            gc.grade,
+            quantity:         gc.quantity,
+            set_id:           card.set_id,
+            set_name:         set?.name ?? '',
+          })
+        }
+      }
+    }
+
+    // ── 6. Merge, sort by timestamp DESC, cap at 10 ───────────────────────────
+    const merged: ActivityItem[] = [...cardItems, ...productItems, ...gradedCardItems]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 10)
 

@@ -11,51 +11,72 @@ interface AchievementBadgeProps {
 
 export default function AchievementBadge({ achievement, unlocked, unlockedAt }: AchievementBadgeProps) {
   return (
-    <div
-      className={cn(
-        'relative flex flex-col items-center text-center gap-2 p-3',
-        'bg-surface rounded-xl transition-all duration-200',
-        unlocked
-          ? 'border border-[rgba(109,95,255,0.3)] hover:border-[rgba(109,95,255,0.5)]'
-          : 'border border-subtle opacity-40 grayscale'
-      )}
-    >
-      {/* Icon */}
-      <div className={cn(
-        'w-10 h-10 rounded-xl flex items-center justify-center text-xl',
-        unlocked ? 'bg-accent-dim' : 'bg-elevated'
-      )}>
+    <div className="relative group flex items-center justify-center">
+
+      {/* ── Badge icon ─────────────────────────────────────────────────────── */}
+      <div
+        className={cn(
+          'w-10 h-10 rounded-xl flex items-center justify-center text-xl select-none cursor-default',
+          'transition-all duration-200',
+          unlocked
+            ? 'bg-accent-dim border border-[rgba(109,95,255,0.4)] hover:border-[rgba(109,95,255,0.7)] hover:scale-110 hover:shadow-[0_0_10px_rgba(109,95,255,0.25)]'
+            : 'bg-elevated border border-subtle opacity-35 grayscale'
+        )}
+        role="img"
+        aria-label={`${achievement.name}${unlocked ? ' (earned)' : ' (locked)'}`}
+      >
         {achievement.icon}
       </div>
 
-      {/* Name */}
-      <h3 className={cn(
-        'text-xs font-semibold leading-tight',
-        unlocked ? 'text-primary' : 'text-secondary'
-      )}>
-        {achievement.name}
-      </h3>
+      {/* ── Tooltip (floats above on hover) ──────────────────────────────── */}
+      <div
+        className={cn(
+          'absolute bottom-full left-1/2 -translate-x-1/2 mb-2.5 z-50',
+          'w-48 p-3 rounded-xl',
+          'bg-elevated border border-subtle shadow-xl',
+          'pointer-events-none select-none',
+          'opacity-0 group-hover:opacity-100 scale-95 group-hover:scale-100',
+          'transition-all duration-150 origin-bottom'
+        )}
+      >
+        {/* Caret arrow */}
+        <div className="absolute -bottom-[5px] left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-elevated border-r border-b border-subtle rotate-45" />
 
-      {/* Description */}
-      <p className="text-[11px] text-muted leading-tight line-clamp-2">
-        {achievement.description}
-      </p>
+        {/* Header row: icon + name */}
+        <div className="flex items-start gap-2 mb-1.5">
+          <span className="text-base leading-none shrink-0">{achievement.icon}</span>
+          <p className={cn(
+            'text-xs font-semibold leading-tight',
+            unlocked ? 'text-primary' : 'text-secondary'
+          )}>
+            {achievement.name}
+            {unlocked && (
+              <span className="ml-1 text-[10px] text-accent font-bold">✓</span>
+            )}
+          </p>
+        </div>
 
-      {/* Unlock date */}
-      {unlocked && unlockedAt && (
-        <p className="text-[10px] text-accent">
-          {new Date(unlockedAt).toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric'
-          })}
+        {/* Description */}
+        <p className="text-[11px] text-muted leading-snug">
+          {achievement.description}
         </p>
-      )}
 
-      {/* Unlocked indicator dot */}
-      {unlocked && (
-        <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-accent" />
-      )}
+        {/* Unlock date (if known) */}
+        {unlocked && unlockedAt && (
+          <p className="text-[10px] text-accent mt-1.5 font-medium">
+            Earned {new Date(unlockedAt).toLocaleDateString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+            })}
+          </p>
+        )}
+
+        {/* Locked hint */}
+        {!unlocked && (
+          <p className="text-[10px] text-muted mt-1.5 italic">Not yet earned</p>
+        )}
+      </div>
     </div>
   )
 }
