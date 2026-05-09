@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useLocale } from '@/contexts/LocaleContext'
 
 interface QuickActionsProps {
   /** User ID — used to build the profile link */
@@ -28,19 +29,21 @@ function ActionPill({ label, emoji, href }: ActionPillProps) {
 }
 
 export default function QuickActions({ userId }: QuickActionsProps) {
+  const { t } = useLocale()
+
   return (
     <div className="mb-6">
       <p className="text-xs text-muted uppercase tracking-wider mb-3 font-medium">
-        Quick Actions
+        {t('quick_actions_title')}
       </p>
       {/* Horizontally scrollable on mobile, wraps on wider screens */}
       <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-        <ActionPill emoji="🔍" label="Find a Card"   href="/browse" />
-        <ActionPill emoji="📦" label="Browse Sets"   href="/sets" />
-        <ActionPill emoji="🗂️" label="My Collection" href="/collection" />
-        <ActionPill emoji="👤" label="My Profile"    href={`/profile/${userId}`} />
-        <ActionPill emoji="⭐" label="Wanted List"   href="/wanted" />
-        <ActionPill emoji="🔄" label="Wanted Board"  href="/wanted-board" />
+        <ActionPill emoji="🔍" label={t('quick_find_card')}    href="/browse" />
+        <ActionPill emoji="📦" label={t('quick_browse_sets')}  href="/sets" />
+        <ActionPill emoji="🗂️" label={t('quick_my_collection')} href="/collection" />
+        <ActionPill emoji="👤" label={t('quick_my_profile')}   href={`/profile/${userId}`} />
+        <ActionPill emoji="⭐" label={t('quick_wanted_list')}  href="/wanted" />
+        <ActionPill emoji="🔄" label={t('quick_wanted_board')} href="/wanted-board" />
       </div>
     </div>
   )

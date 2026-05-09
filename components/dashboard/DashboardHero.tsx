@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
 import { useProGate } from '@/hooks/useProGate'
 import { ProBadge } from '@/components/upgrade/ProBadge'
+import { useLocale } from '@/contexts/LocaleContext'
 
 interface DashboardHeroProps {
   totalCards: number
@@ -12,38 +13,35 @@ interface DashboardHeroProps {
   completedSets: number
 }
 
-function getGreeting(): string {
-  const hour = new Date().getHours()
-  if (hour < 12) return 'Good morning'
-  if (hour < 18) return 'Good afternoon'
-  return 'Good evening'
-}
-
 interface TrainerRank {
-  label: string
+  labelKey: 'rank_master' | 'rank_elite' | 'rank_veteran' | 'rank_rising' | 'rank_new'
   emoji: string
   colour: string
   bgColour: string
 }
 
 function getTrainerRank(totalCards: number): TrainerRank {
-  if (totalCards >= 1000) return { label: 'Master Trainer',  emoji: '🏆', colour: 'text-amber-400',  bgColour: 'bg-amber-400/10  border-amber-400/30'  }
-  if (totalCards >=  500) return { label: 'Elite Trainer',   emoji: '💎', colour: 'text-purple-400', bgColour: 'bg-purple-400/10 border-purple-400/30' }
-  if (totalCards >=  100) return { label: 'Veteran Trainer', emoji: '🔥', colour: 'text-orange-400', bgColour: 'bg-orange-400/10 border-orange-400/30' }
-  if (totalCards >=    1) return { label: 'Rising Trainer',  emoji: '⚡', colour: 'text-accent',     bgColour: 'bg-accent/10     border-accent/30'     }
-  return                         { label: 'New Trainer',     emoji: '🌱', colour: 'text-price',      bgColour: 'bg-price/10      border-price/30'      }
+  if (totalCards >= 1000) return { labelKey: 'rank_master',  emoji: '🏆', colour: 'text-amber-400',  bgColour: 'bg-amber-400/10  border-amber-400/30'  }
+  if (totalCards >=  500) return { labelKey: 'rank_elite',   emoji: '💎', colour: 'text-purple-400', bgColour: 'bg-purple-400/10 border-purple-400/30' }
+  if (totalCards >=  100) return { labelKey: 'rank_veteran', emoji: '🔥', colour: 'text-orange-400', bgColour: 'bg-orange-400/10 border-orange-400/30' }
+  if (totalCards >=    1) return { labelKey: 'rank_rising',  emoji: '⚡', colour: 'text-accent',     bgColour: 'bg-accent/10     border-accent/30'     }
+  return                         { labelKey: 'rank_new',     emoji: '🌱', colour: 'text-price',      bgColour: 'bg-price/10      border-price/30'      }
 }
 
 export default function DashboardHero({ totalCards, setsTracked, completedSets }: DashboardHeroProps) {
   const { user, profile } = useAuthStore()
   const { isPro } = useProGate()
+  const { t }     = useLocale()
 
   const displayName = profile?.display_name
     || (user as any)?.user_metadata?.username
     || (user as any)?.email?.split('@')[0]
     || 'Trainer'
 
-  const greeting  = getGreeting()
+  // Greeting based on time-of-day
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? t('greeting_morning') : hour < 18 ? t('greeting_afternoon') : t('greeting_evening')
+
   const rank      = getTrainerRank(totalCards)
   const avatarUrl = profile?.avatar_url ?? null
 
@@ -110,22 +108,22 @@ export default function DashboardHero({ totalCards, setsTracked, completedSets }
               className={`pill inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border ${rank.colour} ${rank.bgColour}`}
             >
               <span role="img" aria-label="rank">{rank.emoji}</span>
-              {rank.label}
+              {t(rank.labelKey)}
             </span>
 
             {totalCards > 0 && (
               <>
                 <span className="pill inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-surface border border-subtle text-secondary">
                   <span className="text-accent font-bold">{totalCards.toLocaleString()}</span>
-                  &nbsp;cards
+                  &nbsp;{totalCards === 1 ? t('hero_card_singular') : t('hero_card_plural')}
                 </span>
                 <span className="pill inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-surface border border-subtle text-secondary">
                   <span className="text-accent font-bold">{setsTracked}</span>
-                  &nbsp;{setsTracked === 1 ? 'set' : 'sets'}
+                  &nbsp;{setsTracked === 1 ? t('hero_set_singular') : t('hero_set_plural')}
                 </span>
                 <span className="pill inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-surface border border-subtle text-secondary">
                   <span className="text-price font-bold">{completedSets}</span>
-                  &nbsp;{completedSets === 1 ? 'set complete' : 'sets complete'}
+                  &nbsp;{completedSets === 1 ? t('hero_set_complete_singular') : t('hero_set_complete_plural')}
                 </span>
               </>
             )}
@@ -138,7 +136,7 @@ export default function DashboardHero({ totalCards, setsTracked, completedSets }
             href={`/profile/${user.id}`}
             className="shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-accent hover:bg-accent-light text-white text-sm font-semibold transition-colors duration-150 shadow-lg shadow-accent/20"
           >
-            View Profile
+            {t('hero_view_profile')}
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>

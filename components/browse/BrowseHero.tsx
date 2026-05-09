@@ -5,19 +5,7 @@ import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import BrowseTypeahead from './BrowseTypeahead'
 import type { SearchMode, CardSearchResult, ArtistResult, BrowseProduct } from './types'
-
-// ── Mode tab definitions ──────────────────────────────────────────────────────
-const MODES: { value: SearchMode; icon: string; label: string }[] = [
-  { value: 'cards',    icon: '🃏', label: 'Cards'    },
-  { value: 'artists',  icon: '🎨', label: 'Artists'  },
-  { value: 'products', icon: '📦', label: 'Products' },
-]
-
-const PLACEHOLDERS: Record<SearchMode, string> = {
-  cards:    'Search by card name or number…',
-  artists:  'Search artists…',
-  products: 'Search products…',
-}
+import { useLocale } from '@/contexts/LocaleContext'
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface BrowseHeroProps {
@@ -31,6 +19,20 @@ export default function BrowseHero({ mode, committedQuery, allProducts }: Browse
   const router     = useRouter()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const inputRef   = useRef<HTMLInputElement>(null)
+  const { t }      = useLocale()
+
+  // ── Translated mode definitions (built inside component to access t()) ──────
+  const MODES: { value: SearchMode; icon: string; label: string }[] = [
+    { value: 'cards',    icon: '🃏', label: t('browse_mode_cards')    },
+    { value: 'artists',  icon: '🎨', label: t('browse_mode_artists')  },
+    { value: 'products', icon: '📦', label: t('browse_mode_products') },
+  ]
+
+  const PLACEHOLDERS: Record<SearchMode, string> = {
+    cards:    t('browse_placeholder_cards'),
+    artists:  t('browse_placeholder_artists'),
+    products: t('browse_placeholder_products'),
+  }
 
   const [inputValue,       setInputValue]       = useState(committedQuery)
   const [typeaheadVisible, setTypeaheadVisible] = useState(false)
@@ -38,8 +40,8 @@ export default function BrowseHero({ mode, committedQuery, allProducts }: Browse
   // Debounced input that drives the typeahead API calls (200ms)
   const [debouncedInput, setDebouncedInput] = useState(committedQuery)
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedInput(inputValue), 200)
-    return () => clearTimeout(t)
+    const timer = setTimeout(() => setDebouncedInput(inputValue), 200)
+    return () => clearTimeout(timer)
   }, [inputValue])
 
   // Sync input when the committed query changes (e.g. browser back/forward)
@@ -157,10 +159,10 @@ export default function BrowseHero({ mode, committedQuery, allProducts }: Browse
           className="text-2xl sm:text-3xl font-bold text-primary text-center mb-2"
           style={{ fontFamily: 'var(--font-space-grotesk)' }}
         >
-          Find any card, artist or product
+          {t('browse_headline')}
         </h1>
         <p className="text-sm text-muted text-center mb-8">
-          Search the complete Pokémon TCG catalogue
+          {t('browse_subheadline')}
         </p>
 
         {/* Search input + typeahead (positioned relative wrapper) */}
@@ -184,7 +186,7 @@ export default function BrowseHero({ mode, committedQuery, allProducts }: Browse
               aria-expanded={typeaheadVisible}
               aria-autocomplete="list"
               aria-haspopup="listbox"
-              aria-label="Search cards, artists or products"
+              aria-label={t('browse_aria_search')}
               placeholder={PLACEHOLDERS[mode]}
               value={inputValue}
               onChange={handleInputChange}
@@ -198,7 +200,7 @@ export default function BrowseHero({ mode, committedQuery, allProducts }: Browse
             {inputValue && (
               <button
                 onClick={clearInput}
-                aria-label="Clear search"
+                aria-label={t('browse_aria_clear')}
                 className="absolute right-3.5 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-full text-muted hover:text-primary hover:bg-surface transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

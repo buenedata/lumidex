@@ -4,6 +4,7 @@ import './globals.css'
 import Navbar from '@/components/Navbar'
 import Footer from '@/components/Footer'
 import ScrollToTop from '@/components/ui/ScrollToTop'
+import LocaleProviderWrapper from '@/components/LocaleProviderWrapper'
 import { SpeedInsights } from '@vercel/speed-insights/next'
 
 const inter = Inter({
@@ -34,12 +35,14 @@ export default function RootLayout({
         <meta name="impact-site-verification" content="4d64ba63-a21a-464e-bf64-ebd720efc235" />
       </head>
       <body className="bg-base min-h-dvh flex flex-col">
-        <Navbar />
-        <main className="flex-1">
-          {children}
-        </main>
-        <Footer />
-        <ScrollToTop />
+        <LocaleProviderWrapper>
+          <Navbar />
+          <main className="flex-1">
+            {children}
+          </main>
+          <Footer />
+          <ScrollToTop />
+        </LocaleProviderWrapper>
         <SpeedInsights />
       </body>
     </html>

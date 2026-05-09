@@ -1,34 +1,41 @@
-import Link from 'next/link'
+'use client'
 
-const NAV_GROUPS = [
-  {
-    label: 'Explore',
-    links: [
-      { href: '/browse', label: 'Browse Cards' },
-      { href: '/sets', label: 'Sets' },
-      { href: '/dashboard', label: 'Dashboard' },
-      { href: '/wanted-board', label: 'Wanted Board' },
-    ],
-  },
-  {
-    label: 'My Account',
-    links: [
-      { href: '/collection', label: 'My Collection' },
-      { href: '/lists', label: 'My Lists' },
-      { href: '/profile', label: 'Profile' },
-    ],
-  },
-  {
-    label: 'Support',
-    links: [
-      { href: '/faq', label: 'FAQ' },
-      { href: 'https://discord.gg/J86x7tccbW', label: 'Discord', external: true },
-    ],
-  },
-]
+import Link from 'next/link'
+import { useLocale } from '@/contexts/LocaleContext'
 
 export default function Footer() {
+  const { t } = useLocale()
   const year = new Date().getFullYear()
+
+  const NAV_GROUPS = [
+    {
+      key: 'explore',
+      label: t('footer_explore'),
+      links: [
+        { href: '/browse',       label: t('footer_browse_cards') },
+        { href: '/sets',         label: t('footer_sets') },
+        { href: '/dashboard',    label: t('footer_dashboard') },
+        { href: '/wanted-board', label: t('footer_wanted_board') },
+      ],
+    },
+    {
+      key: 'my_account',
+      label: t('footer_my_account'),
+      links: [
+        { href: '/collection', label: t('footer_my_collection') },
+        { href: '/lists',      label: t('footer_my_lists') },
+        { href: '/profile',    label: t('footer_profile') },
+      ],
+    },
+    {
+      key: 'support',
+      label: t('footer_support'),
+      links: [
+        { href: '/faq',                        label: t('footer_faq') },
+        { href: 'https://discord.gg/J86x7tccbW', label: t('footer_discord'), external: true },
+      ],
+    },
+  ]
 
   return (
     <footer className="border-t border-subtle bg-[color:var(--color-bg-surface)] mt-auto">
@@ -43,7 +50,7 @@ export default function Footer() {
               <img src="/logo.svg" alt="Lumidex" className="h-8 w-auto" />
             </Link>
             <p className="text-sm text-muted leading-relaxed">
-              Your ultimate trading card collection tracker. Catalogue, track and showcase your Pokémon TCG collection with style.
+              {t('footer_brand_description')}
             </p>
             {/* Social icons */}
             <div className="flex items-center gap-3 mt-1">
@@ -89,7 +96,7 @@ export default function Footer() {
           {/* Nav link groups */}
           <div className="flex flex-wrap gap-10 sm:gap-16">
             {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="flex flex-col gap-3">
+              <div key={group.key} className="flex flex-col gap-3">
                 <span
                   className="text-xs font-semibold uppercase tracking-widest text-primary"
                   style={{ fontFamily: 'var(--font-space-grotesk)' }}
@@ -130,13 +137,13 @@ export default function Footer() {
         {/* Bottom: copyright + disclaimer */}
         <div className="mt-6 flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-muted">
-            © {year} Lumidex. All rights reserved.
+            {t('footer_copyright', { year })}
           </p>
           <p className="text-xs text-muted">
-            Not affiliated with Nintendo, The Pokémon Company, or any card game publishers.
+            {t('footer_disclaimer')}
           </p>
           <p className="text-xs text-muted">
-            Made by{' '}
+            {t('footer_made_by')}{' '}
             <a
               href="https://www.buenedata.no"
               target="_blank"

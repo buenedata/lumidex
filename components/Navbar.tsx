@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { useIsPro } from '@/hooks/useProGate'
 import { ProBadge } from '@/components/upgrade/ProBadge'
+import { useLocale } from '@/contexts/LocaleContext'
 
 interface NotifProposal {
   id: string
@@ -38,6 +39,7 @@ export default function Navbar() {
   const { user, profile, isLoading: isAuthLoading } = useAuthStore()
   const router = useRouter()
   const isPro  = useIsPro()
+  const { t }  = useLocale()
 
   const isAdmin = profile?.role === 'admin'
 
@@ -192,7 +194,7 @@ export default function Navbar() {
             </svg>
             <input
               type="text"
-              placeholder="Search cards..."
+              placeholder={t('nav_search_placeholder')}
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               onKeyDown={handleSearch}
@@ -216,15 +218,15 @@ export default function Navbar() {
           <>
             {/* Nav links */}
             <div className="flex items-center gap-1">
-              <Link href="/dashboard"            className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">Dashboard</Link>
-              <Link href={`/profile/${user.id}`} className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">Profile</Link>
-              <Link href="/sets"                 className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">Sets</Link>
-              <Link href="/collection"           className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">Collection</Link>
-              <Link href="/wanted-board"         className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">Wanted Board</Link>
-              <Link href="/faq"                  className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">FAQ</Link>
+              <Link href="/dashboard"            className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_dashboard')}</Link>
+              <Link href={`/profile/${user.id}`} className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_profile')}</Link>
+              <Link href="/sets"                 className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_sets')}</Link>
+              <Link href="/collection"           className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_collection')}</Link>
+              <Link href="/wanted-board"         className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_wanted_board')}</Link>
+              <Link href="/faq"                  className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_faq')}</Link>
               {isAdmin && (
                 <Link href="/admin" className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all" title="Admin Panel">
-                  🛠️ Admin
+                  {t('nav_admin')}
                 </Link>
               )}
               {/* Upgrade CTA — only shown to free users */}
@@ -237,7 +239,7 @@ export default function Navbar() {
                     hover:shadow-[0_0_14px_rgba(109,95,255,0.5)]
                     transition-all duration-200"
                 >
-                  💎 Upgrade
+                  {t('nav_upgrade')}
                 </Link>
               )}
             </div>
@@ -251,7 +253,7 @@ export default function Navbar() {
                     ? 'text-amber-400 hover:bg-elevated'
                     : 'text-muted hover:text-secondary hover:bg-elevated'
                 }`}
-                title={totalNotifCount > 0 ? `${totalNotifCount} notification${totalNotifCount !== 1 ? 's' : ''}` : 'Notifications'}
+                title={totalNotifCount > 0 ? t('nav_pending', { count: totalNotifCount }) : t('nav_notifications')}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
@@ -268,10 +270,10 @@ export default function Navbar() {
                 <div className="absolute right-0 top-full mt-2 w-80 bg-elevated border border-subtle rounded-2xl shadow-2xl overflow-hidden z-50">
                   {/* Header */}
                   <div className="px-4 py-3 border-b border-subtle flex items-center justify-between">
-                    <p className="text-sm font-semibold text-primary">Notifications</p>
+                    <p className="text-sm font-semibold text-primary">{t('nav_notifications')}</p>
                     {totalNotifCount > 0 && (
                       <span className="pill text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-400">
-                        {totalNotifCount} pending
+                        {t('nav_pending', { count: totalNotifCount })}
                       </span>
                     )}
                   </div>
@@ -280,7 +282,7 @@ export default function Navbar() {
                   {totalNotifCount === 0 ? (
                     <div className="px-4 py-8 text-center">
                       <p className="text-2xl mb-2">🔔</p>
-                      <p className="text-sm text-muted">No new notifications</p>
+                      <p className="text-sm text-muted">{t('nav_no_notifications')}</p>
                     </div>
                   ) : (
                     <div className="divide-y divide-subtle max-h-80 overflow-y-auto">
@@ -291,9 +293,9 @@ export default function Navbar() {
                         const timeStr = relTime(n.updated_at ?? n.created_at)
 
                         const label =
-                          n.type === 'received' ? `${name} sent you a friend request` :
-                          n.type === 'accepted' ? `${name} accepted your friend request` :
-                                                  `${name} declined your friend request`
+                          n.type === 'received' ? t('nav_friend_sent',     { name }) :
+                          n.type === 'accepted' ? t('nav_friend_accepted', { name }) :
+                                                  t('nav_friend_declined', { name })
 
                         const iconBg =
                           n.type === 'received' ? 'bg-blue-500/20 border-blue-500/30 text-blue-400' :
@@ -367,6 +369,9 @@ export default function Navbar() {
                       {/* ── Trade proposal notifications ── */}
                       {proposals.map(p => {
                         const name = p.otherUser?.display_name ?? p.otherUser?.username ?? 'Trainer'
+                        const cardLabel = p.offeringCount === 1
+                          ? t('nav_card_count_singular', { count: p.offeringCount })
+                          : t('nav_card_count_plural',   { count: p.offeringCount })
                         return (
                           <Link
                             key={p.id}
@@ -386,10 +391,10 @@ export default function Navbar() {
                             {/* Text */}
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-primary leading-tight truncate">
-                                {name} proposed a trade
+                                {t('nav_trade_proposed', { name })}
                               </p>
                               <p className="text-xs text-muted leading-tight">
-                                {p.offeringCount} card{p.offeringCount !== 1 ? 's' : ''} · {relTime(p.created_at)}
+                                {cardLabel} · {relTime(p.created_at)}
                               </p>
                             </div>
 
@@ -410,14 +415,14 @@ export default function Navbar() {
                       onClick={() => setShowNotif(false)}
                       className="text-xs text-accent hover:text-accent-light transition-colors font-medium"
                     >
-                      Friend requests →
+                      {t('nav_friend_requests_link')}
                     </Link>
                     <Link
                       href="/wanted-board"
                       onClick={() => setShowNotif(false)}
                       className="text-xs text-accent hover:text-accent-light transition-colors font-medium"
                     >
-                      Trade offers →
+                      {t('nav_trade_offers_link')}
                     </Link>
                   </div>
                 </div>
@@ -445,13 +450,13 @@ export default function Navbar() {
                 onClick={handleSignOut}
                 className="ml-1 px-3 py-1.5 text-xs text-secondary hover:text-primary hover:bg-elevated rounded-lg transition-all"
               >
-                Sign Out
+                {t('nav_sign_out')}
               </button>
             </div>
           </>
         ) : (
           <Link href="/login" className="h-9 px-4 text-sm font-medium rounded-lg bg-accent text-white hover:bg-accent-light transition-all glow-accent-sm inline-flex items-center">
-            Sign In
+            {t('nav_sign_in')}
           </Link>
         )}
       </div>

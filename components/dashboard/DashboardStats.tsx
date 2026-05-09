@@ -1,5 +1,7 @@
 'use client'
 
+import { useLocale } from '@/contexts/LocaleContext'
+
 interface DashboardStatsProps {
   totalCards: number
   uniqueCards: number
@@ -77,31 +79,32 @@ export default function DashboardStats({
   setsTracked,
   setsAvailable,
 }: DashboardStatsProps) {
+  const { t } = useLocale()
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       <StatCard
-        label="Cards Owned"
+        label={t('stat_cards_owned')}
         value={totalCards.toLocaleString()}
         textClass="text-accent"
         borderClass="border-l-2 border-l-accent"
         icon={<CardStackIcon />}
       />
       <StatCard
-        label="Unique Cards"
+        label={t('stat_unique_cards')}
         value={uniqueCards.toLocaleString()}
         textClass="text-purple-400"
         borderClass="border-l-2 border-l-purple-400"
         icon={<ChartIcon />}
       />
       <StatCard
-        label="Sets Tracked"
+        label={t('stat_sets_tracked')}
         value={setsTracked}
         textClass="text-accent"
         borderClass="border-l-2 border-l-accent"
         icon={<BoxIcon />}
       />
       <StatCard
-        label="Sets Available"
+        label={t('stat_sets_available')}
         value={setsAvailable}
         textClass="text-secondary"
         borderClass="border-l-2 border-l-subtle"

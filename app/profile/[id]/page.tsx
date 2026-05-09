@@ -375,11 +375,25 @@ export default function ProfilePage() {
           }
         : prev
     )
+    // Push the chosen preferred_language (and other prefs) into the Zustand
+    // store so LocaleProvider switches to the chosen language immediately.
+    if (profile) {
+      setProfile({
+        ...profile,
+        ...savedValues,
+        ...(newAvatarUrl ? { avatar_url: newAvatarUrl } : {}),
+      })
+    }
   }
 
   // ── Settings modal saved ──────────────────────────────────────────────────────
   function handleSettingsSaved(savedValues: SettingsValues) {
     setProfileUser(prev => (prev ? { ...prev, ...savedValues } : prev))
+    // Also update the Zustand auth store so LocaleProvider (and other store
+    // consumers) immediately see the new preferred_language / preferred_currency.
+    if (isOwnProfile && profile) {
+      setProfile({ ...profile, ...savedValues })
+    }
   }
 
   // ── Loading State ─────────────────────────────────────────────────────────────
