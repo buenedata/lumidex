@@ -174,7 +174,7 @@ function CardTileInner({
             className={`
               w-6 h-6 rounded flex items-center justify-center
               text-xs font-bold border border-black/30 shadow-sm
-              ${variant.card_id != null ? 'bg-gray-500' : (COLOR_MAP[variant.color as keyof typeof COLOR_MAP] || 'bg-zinc-500')}
+              ${COLOR_MAP[variant.color as keyof typeof COLOR_MAP] || 'bg-zinc-500'}
               ${variant.quantity > 0 ? '!text-black' : 'text-transparent'}
               hover:scale-110 transition-transform cursor-pointer
             `}
