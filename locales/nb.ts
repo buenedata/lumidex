@@ -14,7 +14,7 @@ const nb: TranslationDict = {
   nav_profile:             'Profil',
   nav_sets:                'Sett',
   nav_collection:          'Samling',
-  nav_wanted_board:        'Ønsketavle',
+  nav_wanted_board:        'Wanted Board',
   nav_faq:                 'Hjelp',
   nav_admin:               '🛠️ Admin',
   nav_upgrade:             '💎 Oppgrader',
@@ -39,7 +39,7 @@ const nb: TranslationDict = {
   footer_browse_cards:       'Bla gjennom kort',
   footer_sets:               'Sett',
   footer_dashboard:          'Dashbord',
-  footer_wanted_board:       'Ønsketavle',
+  footer_wanted_board:       'Wanted Board',
   footer_my_account:         'Min konto',
   footer_my_collection:      'Min samling',
   footer_my_lists:           'Mine lister',
@@ -81,7 +81,7 @@ const nb: TranslationDict = {
   quick_my_collection:       'Min samling',
   quick_my_profile:          'Min profil',
   quick_wanted_list:         'Ønskeliste',
-  quick_wanted_board:        'Ønsketavle',
+  quick_wanted_board:        'Wanted Board',
 
   // ── Browse Hero ─────────────────────────────────────────────────────────────
   browse_headline:            'Finn ethvert kort, kunstner eller produkt',
@@ -297,8 +297,8 @@ const nb: TranslationDict = {
   analytics_no_portfolio:        'Ingen porteføljedata ennå',
   analytics_not_enough_data:     'Ikke nok data ennå — kom tilbake i morgen!',
   analytics_this_period:         'denne perioden',
-  analytics_top_gainers:         'Topp vinnere',
-  analytics_biggest_drops:       'Størst fall',
+  analytics_top_gainers:         'Størst prisøkning',
+  analytics_biggest_drops:       'Størst prisfall',
   analytics_no_performer_data:   'Ingen data ennå',
   analytics_tooltip_cards:       '{count} kort',
 
@@ -323,7 +323,7 @@ const nb: TranslationDict = {
 
   // ── Coming Soon / Roadmap ────────────────────────────────────────────────────
   coming_soon_heading:         'Hva kommer til Lumidex',
-  coming_soon_badge:           'Veikart',
+  coming_soon_badge:           'Roadmap',
   coming_soon_label:           'Kommer snart',
   feature_trade_hub_title:     'Byttesentrum',
   feature_trade_hub_tagline:   'Bytt kort med venner',
@@ -333,7 +333,7 @@ const nb: TranslationDict = {
   feature_marketplace_desc:    'En dedikert kortmarkedsplass for å kjøpe, selge og prissjekke Pokémon-kort i din foretrukne lokale valuta.',
 
   // ── Wanted Board (dashboard widget) ──────────────────────────────────────────
-  wb_title:          'Ønsketavle',
+  wb_title:          'Wanted Board',
   wb_view_all:       'Se alle →',
   wb_match_single:   '{n} treff',
   wb_match_plural:   '{n} treff',
@@ -346,7 +346,7 @@ const nb: TranslationDict = {
   wb_no_matches:     'Ingen bytte-treff ennå',
   wb_empty_desc:     'Stjernemerker kort på ønskelisten din og koble til venner — når en venn eier et kort du ønsker (eller omvendt), vises et bytte-treff her.',
   wb_add_wanted:     '★ Legg til ønskede kort',
-  wb_view_board:     'Se ønsketavle →',
+  wb_view_board:     'Se Wanted Board →',
   wb_they_want:      'De vil ha fra deg',
   wb_you_want:       'Du vil ha fra dem',
   wb_mutual:         'GJENSIDIG',
