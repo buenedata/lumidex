@@ -13,7 +13,6 @@ import QuickActions   from '@/components/dashboard/QuickActions'
 
 // ── Below-the-fold components (lazy-loaded to reduce initial parse time) ─────
 const CollectionSpotlight = dynamic(() => import('@/components/dashboard/CollectionSpotlight'))
-const MostExpensiveOwned  = dynamic(() => import('@/components/dashboard/MostExpensiveOwned'))
 const WantedBoard         = dynamic(() => import('@/components/dashboard/WantedBoard'))
 const NewsStories          = dynamic(() => import('@/components/dashboard/NewsStories'))
 const ComingSoonFeatures   = dynamic(() => import('@/components/dashboard/ComingSoonFeatures'))
@@ -145,9 +144,6 @@ export default function DashboardPage() {
             totalCardsToComplete={totalCardsToComplete}
           />
         </div>
-
-        {/* ── Most Valuable Card Owned ─────────────────────────────────── */}
-        <MostExpensiveOwned />
 
         {/* ── Wanted Board (collapsed by default) ──────────────────────── */}
         <WantedBoard />
