@@ -24,6 +24,8 @@ interface Props {
   showImageStatus?: boolean
   /** When true, fetches card-count stats and renders ✅ / ❌ beside each set to indicate whether cards have been imported */
   showCardStatus?: boolean
+  /** Increment to trigger a re-fetch of the sets list (e.g. after a new set is added to the DB) */
+  refreshKey?: number
 }
 
 // ── Language badge ───────────────────────────────────────────────────────────
@@ -182,7 +184,7 @@ function CardStatusIcon({ stat }: { stat: SetImageStat | undefined }) {
 
 // ── Main component ───────────────────────────────────────────────────────────
 
-export function SetSelector({ onSetSelect, selectedSetId, showImageStatus = false, showCardStatus = false }: Props) {
+export function SetSelector({ onSetSelect, selectedSetId, showImageStatus = false, showCardStatus = false, refreshKey = 0 }: Props) {
   const [sets, setSets] = useState<PokemonSetOption[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -225,8 +227,7 @@ export function SetSelector({ onSetSelect, selectedSetId, showImageStatus = fals
 
     if (showImageStatus || showCardStatus) setStatsLoading(true)
     fetchData()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [refreshKey])
 
   const filtered = sets.filter(
     (s) =>

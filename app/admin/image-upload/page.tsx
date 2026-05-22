@@ -48,6 +48,7 @@ function CardImagesTab() {
   const [cardList, setCardList] = useState<CardGridItem[]>([])
   const [modalOpen, setModalOpen] = useState(false)
   const [gridRefreshKey, setGridRefreshKey] = useState(0)
+  const [selectorRefreshKey, setSelectorRefreshKey] = useState(0)
   /**
    * Cache-busted URLs returned by upload-card-image for cards that were just
    * uploaded.  Passed to CardImageGrid so the new image is shown instantly
@@ -112,14 +113,24 @@ function CardImagesTab() {
 
       {/* Step 1 — Choose a set */}
       <section className="mb-8">
-        <h2 className="text-base font-semibold mb-3 text-gray-200 flex items-center gap-2">
-          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-yellow-500 text-black text-xs font-bold">1</span>
-          Choose a set
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-semibold text-gray-200 flex items-center gap-2">
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-yellow-500 text-black text-xs font-bold">1</span>
+            Choose a set
+          </h2>
+          <button
+            onClick={() => setSelectorRefreshKey((k) => k + 1)}
+            className="text-xs text-gray-400 hover:text-yellow-400 transition-colors flex items-center gap-1"
+            title="Re-fetch the sets list from the database"
+          >
+            ↻ Refresh sets
+          </button>
+        </div>
         <SetSelector
           selectedSetId={selectedSetId}
           onSetSelect={handleSetSelect}
           showImageStatus
+          refreshKey={selectorRefreshKey}
         />
       </section>
 
@@ -234,18 +245,27 @@ function SetImagesTab() {
 
   return (
     <div>
-      <p className="text-gray-400 text-sm mb-6">
-        Click a set to open the upload modal, then drag the logo from{' '}
-        <a
-          href="https://www.pkmn.gg"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-yellow-400 hover:underline"
+      <div className="flex items-center justify-between mb-6">
+        <p className="text-gray-400 text-sm">
+          Click a set to open the upload modal, then drag the logo from{' '}
+          <a
+            href="https://www.pkmn.gg"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-yellow-400 hover:underline"
+          >
+            pkmn.gg
+          </a>{' '}
+          directly into the drop zone.
+        </p>
+        <button
+          onClick={() => setGridRefreshKey((k) => k + 1)}
+          className="ml-4 shrink-0 text-xs text-gray-400 hover:text-yellow-400 transition-colors flex items-center gap-1"
+          title="Re-fetch the set list from the database"
         >
-          pkmn.gg
-        </a>{' '}
-        directly into the drop zone.
-      </p>
+          ↻ Refresh sets
+        </button>
+      </div>
 
       <SetImageGrid
         onSetSelect={handleSetSelect}
@@ -341,6 +361,7 @@ function ProductImagesTab() {
   const [productList, setProductList]         = useState<ProductGridItem[]>([])
   const [modalOpen, setModalOpen]             = useState(false)
   const [gridRefreshKey, setGridRefreshKey]   = useState(0)
+  const [selectorRefreshKey, setSelectorRefreshKey] = useState(0)
   /**
    * Cache-busted URLs returned by upload-product-image for products that were
    * just uploaded.  Passed to ProductImageGrid so the new image is shown
@@ -411,9 +432,19 @@ function ProductImagesTab() {
       </p>
 
       <div className="mb-8">
+        <div className="flex justify-end mb-2">
+          <button
+            onClick={() => setSelectorRefreshKey((k) => k + 1)}
+            className="text-xs text-gray-400 hover:text-yellow-400 transition-colors flex items-center gap-1"
+            title="Re-fetch the sets list from the database"
+          >
+            ↻ Refresh sets
+          </button>
+        </div>
         <SetSelector
           onSetSelect={handleSetSelect}
           selectedSetId={selectedSetId}
+          refreshKey={selectorRefreshKey}
         />
       </div>
 
