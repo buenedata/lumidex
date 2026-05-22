@@ -63,7 +63,6 @@ export async function GET(req: NextRequest) {
   let setsSkipped     = 0
   let totalSingles    = 0
   let totalGradedRows = 0
-  const errors: Array<{ set_id: string; api_set_id: string; error: string }> = []
 
   for (const set of sets as Array<{ set_id: string; api_set_id: string }>) {
     try {
@@ -97,7 +96,6 @@ export async function GET(req: NextRequest) {
         ? `${err.message} | detail=${e.detail ?? ''} | httpStatus=${e.httpStatus ?? 'n/a'}`
         : String(err)
       console.error(`[cron/price-sync] Failed for set ${set.set_id} (api_set_id=${set.api_set_id}):`, msg)
-      errors.push({ set_id: set.set_id, api_set_id: set.api_set_id, error: msg })
       setsSkipped++
     }
   }
@@ -108,6 +106,5 @@ export async function GET(req: NextRequest) {
     sets_skipped:      setsSkipped,
     total_singles:     totalSingles,
     total_graded_rows: totalGradedRows,
-    errors,           // TEMP: remove once errors are resolved
   })
 }
