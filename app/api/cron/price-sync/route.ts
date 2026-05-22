@@ -22,8 +22,9 @@ import {
   batchUpsert,
 } from '../../admin/prices/sync-set/route'
 
-// Process this many sets per invocation — 5 sets ≈ 1.5–3 s, safe under 10 s.
-const SETS_PER_RUN = 5
+// Process 1 set per invocation — keeps the Vercel Hobby 10-second limit safe.
+// Run the cron every 30 minutes to cycle through sets quickly.
+const SETS_PER_RUN = 1
 
 export async function GET(req: NextRequest) {
   // ── Auth ────────────────────────────────────────────────────────────────────
@@ -62,6 +63,7 @@ export async function GET(req: NextRequest) {
   let setsSkipped     = 0
   let totalSingles    = 0
   let totalGradedRows = 0
+  const errors: Array<{ set_id: string; api_set_id: string; error: string }> = []
 
   for (const set of sets as Array<{ set_id: string; api_set_id: string }>) {
     try {
@@ -90,16 +92,22 @@ export async function GET(req: NextRequest) {
         `singles: ${singleRows.length}, graded rows: ${gradedRows.length}`,
       )
     } catch (err) {
-      console.error(`[cron/price-sync] Failed for set ${set.set_id}:`, err)
+      const e = err as unknown as Record<string, unknown>
+      const msg = err instanceof Error
+        ? `${err.message} | detail=${e.detail ?? ''} | httpStatus=${e.httpStatus ?? 'n/a'}`
+        : String(err)
+      console.error(`[cron/price-sync] Failed for set ${set.set_id} (api_set_id=${set.api_set_id}):`, msg)
+      errors.push({ set_id: set.set_id, api_set_id: set.api_set_id, error: msg })
       setsSkipped++
     }
   }
 
   return NextResponse.json({
-    success:          true,
-    sets_synced:      setsSynced,
-    sets_skipped:     setsSkipped,
-    total_singles:    totalSingles,
+    success:           true,
+    sets_synced:       setsSynced,
+    sets_skipped:      setsSkipped,
+    total_singles:     totalSingles,
     total_graded_rows: totalGradedRows,
+    errors,           // TEMP: remove once errors are resolved
   })
 }
