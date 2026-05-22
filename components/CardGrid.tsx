@@ -392,6 +392,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const [variantInputValues, setVariantInputValues]     = useState<Map<string, string>>(new Map())
   // Which variant row the user is currently hovering in the modal (drives image swap)
   const [hoveredVariantId, setHoveredVariantId]         = useState<string | null>(null)
+  // Mobile: which card's variant bottom sheet is open (null = closed)
+  const [mobileVariantCard, setMobileVariantCard]       = useState<{ cardId: string; cardName: string; variants: QuickAddVariant[] } | null>(null)
   // Admin: floating popup edit state for variant editing
   const [editingVariantId, setEditingVariantId]   = useState<string | null>(null)
   const [editForm,         setEditForm]            = useState({ name: '', description: '', color: 'gray', sortOrder: 0, isQuickAdd: false, shortLabel: '' })
@@ -417,6 +419,9 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const autoOpenedRef = useRef(false)
   // Used to distinguish single-click (open modal) from double-click (add default variant)
   const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Touch start position refs for swipe-to-navigate in the card detail modal
+  const modalSwipeTouchStartXRef = useRef(0)
+  const modalSwipeTouchStartYRef = useRef(0)
 
   // ── Modal price state ────────────────────────────────────────────────────
   // Current prices for all variants of the selected card (from item_prices via batch endpoint)
@@ -1384,31 +1389,6 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     }
   }, [userId, updateVariantQuantity])
 
-  // Touch quick-add — mirrors handleCardImageDblClick logic, exposed as a stable
-  // callback so CardTile can wire it to a long-press action sheet on mobile.
-  const handleTouchAdd = useCallback((card: PokemonCard) => {
-    if (!userId) return
-    const quick = cardVariantDotsRef.current.get(card.id) || []
-    const defaultVariant = card.default_variant_id
-      ? (quick.find(v => v.id === card.default_variant_id) ?? quick.find(v => v.is_quick_add) ?? quick[0])
-      : (quick.find(v => v.is_quick_add) ?? quick[0])
-    if (defaultVariant) {
-      updateVariantQuantity(card.id, defaultVariant.id, 1)
-    }
-  }, [userId, updateVariantQuantity])
-
-  // Touch quick-remove — decrements the quick-add variant by 1 (floor 0).
-  const handleTouchRemove = useCallback((card: PokemonCard) => {
-    if (!userId) return
-    const quick = cardVariantDotsRef.current.get(card.id) || []
-    const defaultVariant = card.default_variant_id
-      ? (quick.find(v => v.id === card.default_variant_id) ?? quick.find(v => v.is_quick_add) ?? quick[0])
-      : (quick.find(v => v.is_quick_add) ?? quick[0])
-    if (defaultVariant && defaultVariant.quantity > 0) {
-      updateVariantQuantity(card.id, defaultVariant.id, -1)
-    }
-  }, [userId, updateVariantQuantity])
-
   // Open card modal (right-click / context-menu on card image)
   const handleCardRightClick = useCallback((e: React.MouseEvent, card: PokemonCard) => {
     e.preventDefault()
@@ -1539,8 +1519,10 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
               onVariantClick={handleVariantClick}
               onVariantContextMenu={handleVariantClick}
               onVariantGrayClick={handleCardClick}
-              onTouchAdd={handleTouchAdd}
-              onTouchRemove={handleTouchRemove}
+              onMobileVariantOpen={() => {
+                const dots = cardVariantDotsRef.current.get(card.id) || []
+                setMobileVariantCard({ cardId: card.id, cardName: card.name ?? '', variants: dots })
+              }}
             />
           )
         })}
@@ -1571,7 +1553,29 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
         maxWidth="5xl"
       >
         {selectedCard && (
-          <div className="flex flex-col sm:flex-row gap-6">
+            <div
+              className="relative flex flex-col sm:flex-row gap-6"
+              onTouchStart={(e) => {
+                modalSwipeTouchStartXRef.current = e.touches[0].clientX
+                modalSwipeTouchStartYRef.current = e.touches[0].clientY
+              }}
+              onTouchEnd={(e) => {
+                const deltaX = e.changedTouches[0].clientX - modalSwipeTouchStartXRef.current
+                const deltaY = e.changedTouches[0].clientY - modalSwipeTouchStartYRef.current
+                if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY)) {
+                  if (deltaX < 0) navigateCard(1)
+                  else navigateCard(-1)
+                }
+              }}
+            >
+              {/* Absolute × close button — top-right corner of the modal panel */}
+              <button
+                onClick={() => { setSelectedCard(null); setHoveredVariantId(null) }}
+                aria-label="Close card details"
+                className="absolute top-3 right-3 z-10 w-9 h-9 rounded-full bg-slate-700/80 hover:bg-slate-600 flex items-center justify-center text-slate-300 hover:text-white transition-colors"
+              >
+                ✕
+              </button>
             {/* Left side - Card Image with holographic glare + artist */}
             <div className="flex-shrink-0 flex flex-col w-full sm:w-auto">
               <CardGlareImage
@@ -2495,6 +2499,110 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
         onClose={() => setShowUpgradeModal(false)}
         feature="Graded cards (PSA, BGS, CGC, TAG, ACE)"
       />
+
+      {/* ── Mobile variant bottom sheet ──────────────────────────────────────
+          Opens when the user taps the + button on a card tile.
+          Shows per-variant +/− controls; closes on "Done" or backdrop tap.  */}
+      {mobileVariantCard && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/60 z-40"
+            onClick={() => setMobileVariantCard(null)}
+            aria-hidden="true"
+          />
+          {/* Sheet */}
+          <div
+            className="fixed bottom-0 left-0 right-0 z-50 bg-slate-800 rounded-t-2xl translate-y-0 transition-transform duration-300"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-slate-700">
+              <h3 className="text-base font-bold text-white truncate pr-4">
+                {mobileVariantCard.cardName}
+              </h3>
+              <button
+                onClick={() => setMobileVariantCard(null)}
+                className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 hover:text-white shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Variant rows */}
+            <div className="px-5 py-3 space-y-3 max-h-[60vh] overflow-y-auto">
+              {mobileVariantCard.variants.length === 0 ? (
+                <p className="text-slate-400 text-sm text-center py-4">No variants loaded yet.</p>
+              ) : (
+                mobileVariantCard.variants.map(variant => (
+                  <div key={variant.id} className="flex items-center gap-3">
+                    {/* Color dot + name */}
+                    <div className={`w-3 h-3 rounded-full shrink-0 ${
+                      variant.color === 'green'  ? 'bg-green-500'  :
+                      variant.color === 'blue'   ? 'bg-blue-500'   :
+                      variant.color === 'purple' ? 'bg-purple-500' :
+                      variant.color === 'red'    ? 'bg-red-500'    :
+                      variant.color === 'pink'   ? 'bg-pink-500'   :
+                      variant.color === 'yellow' ? 'bg-yellow-500' :
+                      variant.color === 'orange' ? 'bg-orange-500' :
+                      variant.color === 'teal'   ? 'bg-teal-500'   :
+                      'bg-gray-500'
+                    }`} />
+                    <span className="flex-1 text-sm text-slate-200 truncate">{variant.name}</span>
+                    {/* Quantity controls */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => {
+                          if (variant.quantity > 0) {
+                            updateVariantQuantity(mobileVariantCard.cardId, variant.id, -1)
+                            setMobileVariantCard(prev => prev ? {
+                              ...prev,
+                              variants: prev.variants.map(v =>
+                                v.id === variant.id ? { ...v, quantity: Math.max(0, v.quantity - 1) } : v
+                              ),
+                            } : null)
+                          }
+                        }}
+                        disabled={variant.quantity === 0}
+                        className="w-9 h-9 rounded-full bg-slate-700 hover:bg-slate-600 disabled:opacity-30 flex items-center justify-center text-white text-xl font-bold transition-colors"
+                      >
+                        −
+                      </button>
+                      <span className="w-8 text-center text-sm font-bold text-white tabular-nums">
+                        {variant.quantity}
+                      </span>
+                      <button
+                        onClick={() => {
+                          updateVariantQuantity(mobileVariantCard.cardId, variant.id, 1)
+                          setMobileVariantCard(prev => prev ? {
+                            ...prev,
+                            variants: prev.variants.map(v =>
+                              v.id === variant.id ? { ...v, quantity: v.quantity + 1 } : v
+                            ),
+                          } : null)
+                        }}
+                        className="w-9 h-9 rounded-full bg-indigo-600 hover:bg-indigo-500 flex items-center justify-center text-white text-xl font-bold transition-colors"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Done button */}
+            <div className="px-5 pt-2 pb-4">
+              <button
+                onClick={() => setMobileVariantCard(null)}
+                className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </>
   )
 }

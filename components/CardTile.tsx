@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useState, useRef, useCallback } from 'react'
+import { memo } from 'react'
 import Link from 'next/link'
 import { PokemonCard, QuickAddVariant } from '@/types'
 import { useItemPrice } from '@/hooks/useItemPrice'
@@ -52,16 +52,9 @@ export interface CardTileProps {
   onVariantClick:           (e: React.MouseEvent, cardId: string, variantId: string) => void
   onVariantContextMenu:     (e: React.MouseEvent, cardId: string, variantId: string) => void
   onVariantGrayClick:       (card: PokemonCard) => void
-  /** Mobile long-press: add one copy of the quick-add variant */
-  onTouchAdd?:              (card: PokemonCard) => void
-  /** Mobile long-press: remove one copy of the quick-add variant */
-  onTouchRemove?:           (card: PokemonCard) => void
+  /** Mobile: tap the ⊕ button to open the variant bottom sheet */
+  onMobileVariantOpen?:     () => void
 }
-
-// Long-press threshold in milliseconds
-const LONG_PRESS_MS = 500
-// Movement threshold in pixels — cancel long-press if the finger drifts this far
-const MOVE_THRESHOLD_PX = 8
 
 // ── Inner component ─────────────────────────────────────────────────────────
 function CardTileInner({
@@ -80,8 +73,7 @@ function CardTileInner({
   onVariantClick,
   onVariantContextMenu,
   onVariantGrayClick,
-  onTouchAdd,
-  onTouchRemove,
+  onMobileVariantOpen,
 }: CardTileProps) {
   // Fetch CardMarket EUR price via item_prices — only when tcggo_id is present.
   // The hook returns { price: null, loading: false } when itemId is null/undefined,
@@ -92,50 +84,17 @@ function CardTileInner({
     'normal',
   )
 
-  // ── Long-press touch state ────────────────────────────────────────────────
-  const [showTouchMenu, setShowTouchMenu] = useState(false)
-  const pressTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const touchStartXRef  = useRef(0)
-  const touchStartYRef  = useRef(0)
 
-  const cancelLongPress = useCallback(() => {
-    if (pressTimerRef.current !== null) {
-      clearTimeout(pressTimerRef.current)
-      pressTimerRef.current = null
-    }
-  }, [])
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    const touch = e.touches[0]
-    touchStartXRef.current = touch.clientX
-    touchStartYRef.current = touch.clientY
-    pressTimerRef.current = setTimeout(() => {
-      pressTimerRef.current = null
-      setShowTouchMenu(true)
-    }, LONG_PRESS_MS)
-  }, [])
-
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (pressTimerRef.current === null) return
-    const touch = e.touches[0]
-    const dx = Math.abs(touch.clientX - touchStartXRef.current)
-    const dy = Math.abs(touch.clientY - touchStartYRef.current)
-    if (dx > MOVE_THRESHOLD_PX || dy > MOVE_THRESHOLD_PX) {
-      cancelLongPress()
-    }
-  }, [cancelLongPress])
-
-  const totalQuantity = variantDots.reduce((sum, v) => sum + v.quantity, 0)
-
-  const typeGlowClass   = getTypeGlowClass(card.type)
-  // Full grayscale for fully unowned cards only — partially owned cards skip this
-  // and instead get the diagonal overlay (rendered below the image).
-  const shouldGrey      = greyOutUnowned && !isOwned && !isPartiallyOwned
   // Show as dot if: globally-scoped (card_id == null) OR explicitly configured by admin
   // via the ⚙️ Variant Dot Display panel (is_configured_as_dot === true).
   // Card-specific variants that were NOT explicitly configured remain hidden here;
   // the +N badge on the card tile handles them instead.
   const buttonsToRender = variantDots.filter(v => v.card_id == null || v.is_configured_as_dot === true)
+
+  const typeGlowClass   = getTypeGlowClass(card.type)
+  // Full grayscale for fully unowned cards only — partially owned cards skip this
+  // and instead get the diagonal overlay (rendered below the image).
+  const shouldGrey      = greyOutUnowned && !isOwned && !isPartiallyOwned
 
   return (
     <div
@@ -158,13 +117,10 @@ function CardTileInner({
         className={`relative w-full aspect-[5/7] rounded-lg overflow-hidden border transition-all duration-200 cursor-pointer ${typeGlowClass} ${
           isOwned ? 'border-accent shadow-lg glow-accent-sm' : 'border-subtle'
         }`}
+        style={{ userSelect: 'none', WebkitUserSelect: 'none' } as React.CSSProperties}
         onClick={() => onCardImageClick(card)}
         onDoubleClick={(e) => onCardImageDblClick(e, card)}
         onContextMenu={(e) => { e.preventDefault(); onCardContextMenu(card) }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={cancelLongPress}
-        onTouchCancel={cancelLongPress}
       >
         <img
           src={card.image_url ?? card.image ?? '/pokemon_card_backside.png'}
@@ -192,79 +148,20 @@ function CardTileInner({
         )}
         {/* Hover overlay */}
         <div className="absolute inset-0 z-10" />
-      </div>
 
-      {/* ── Long-press touch action sheet overlay ─────────────────────────── */}
-      {/* Shown on mobile when the user holds down on the card image for ≥ 500 ms.
-          Presents +/− controls and the current total quantity.
-          Desktop double-click / right-click behaviour is unchanged. */}
-      {showTouchMenu && (
-        <>
-          {/* Fixed transparent backdrop — closes the sheet on outside tap */}
-          <div
-            className="fixed inset-0 z-30"
-            onTouchEnd={(e) => { e.preventDefault(); setShowTouchMenu(false) }}
-            onClick={() => setShowTouchMenu(false)}
-            aria-hidden="true"
-          />
-          {/* Action sheet — absolutely positioned over this card tile */}
-          <div
-            className="absolute inset-x-0 top-0 z-40 w-full aspect-[5/7] rounded-lg flex flex-col items-center justify-center gap-3 bg-black/75"
-            onClick={(e) => e.stopPropagation()}
-            onTouchEnd={(e) => e.stopPropagation()}
+        {/* ── Mobile variant picker button ─────────────────────────────────
+            Tapping this opens the variant bottom sheet in CardGrid.
+            Shown on all devices — small and unobtrusive in the corner.     */}
+        {onMobileVariantOpen && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onMobileVariantOpen() }}
+            aria-label="Pick variant to add"
+            className="absolute bottom-1 right-1 z-20 w-8 h-8 rounded-full bg-indigo-600/90 text-white text-lg font-bold flex items-center justify-center shadow-lg leading-none"
           >
-            {/* Current total quantity */}
-            <span className="text-3xl font-bold text-white tabular-nums leading-none">
-              {totalQuantity}
-            </span>
-
-            {/* +/− row */}
-            <div className="flex items-center gap-5">
-              {/* Remove button — disabled at 0 */}
-              <button
-                onTouchEnd={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  if (onTouchRemove && totalQuantity > 0) {
-                    onTouchRemove(card)
-                  }
-                }}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (onTouchRemove && totalQuantity > 0) {
-                    onTouchRemove(card)
-                  }
-                }}
-                disabled={totalQuantity === 0}
-                aria-label="Remove one from collection"
-                className="w-14 h-14 rounded-full bg-white/20 active:bg-white/40 disabled:opacity-30 flex items-center justify-center text-white text-3xl font-bold transition-colors select-none"
-              >
-                −
-              </button>
-
-              {/* Add button */}
-              <button
-                onTouchEnd={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  if (onTouchAdd) onTouchAdd(card)
-                }}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (onTouchAdd) onTouchAdd(card)
-                }}
-                aria-label="Add one to collection"
-                className="w-14 h-14 rounded-full bg-white/20 active:bg-white/40 flex items-center justify-center text-white text-3xl font-bold transition-colors select-none"
-              >
-                +
-              </button>
-            </div>
-
-            {/* Dismiss hint */}
-            <p className="text-white/50 text-xs select-none">Tap outside to close</p>
-          </div>
-        </>
-      )}
+            +
+          </button>
+        )}
+      </div>
 
       {/* ── Variant dots row — always rendered so text aligns consistently ── */}
       <div

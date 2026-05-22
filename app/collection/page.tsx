@@ -196,6 +196,9 @@ export default function CollectionPage() {
             {/* ── Last Activity ────────────────────────────────────────── */}
             <LastActivitySection userId={user.id} isOwnProfile compact />
 
+            {/* ── Analytics ────────────────────────────────────────────── */}
+            <AnalyticsSection />
+
             {/* ── Search / Filter ──────────────────────────────────────── */}
             <div className="mb-6">
               <Input
@@ -295,8 +298,6 @@ export default function CollectionPage() {
           </div>
         )}
 
-        {/* ── Pro Analytics Section ─────────────────────────────────── */}
-        {userPokemonSets.length > 0 && <AnalyticsSection />}
       </div>
     </div>
   )
