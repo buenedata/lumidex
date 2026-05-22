@@ -422,6 +422,10 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   // Touch start position refs for swipe-to-navigate in the card detail modal
   const modalSwipeTouchStartXRef = useRef(0)
   const modalSwipeTouchStartYRef = useRef(0)
+  // Swipe animation states — 'left'/'right' drives the exit slide;
+  // 'from-left'/'from-right' briefly applied on the new card to trigger the entrance slide.
+  const [swipeAnim, setSwipeAnim] = useState<'left' | 'right' | null>(null)
+  const [enterAnim, setEnterAnim] = useState<'from-left' | 'from-right' | null>(null)
 
   // ── Modal price state ────────────────────────────────────────────────────
   // Current prices for all variants of the selected card (from item_prices via batch endpoint)
@@ -1554,7 +1558,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       >
         {selectedCard && (
             <div
-              className="relative flex flex-col sm:flex-row gap-6"
+              className="relative overflow-hidden"
               onTouchStart={(e) => {
                 modalSwipeTouchStartXRef.current = e.touches[0].clientX
                 modalSwipeTouchStartYRef.current = e.touches[0].clientY
@@ -1563,19 +1567,46 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                 const deltaX = e.changedTouches[0].clientX - modalSwipeTouchStartXRef.current
                 const deltaY = e.changedTouches[0].clientY - modalSwipeTouchStartYRef.current
                 if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY)) {
-                  if (deltaX < 0) navigateCard(1)
-                  else navigateCard(-1)
+                  // Fix 1: animate the current card out, then navigate to the new one.
+                  // The exit animation plays for 250 ms before navigateCard fires so the
+                  // card visually flies out before the content swaps.
+                  const dir = deltaX < 0 ? 'left' as const : 'right' as const
+                  setSwipeAnim(dir)
+                  setTimeout(() => {
+                    navigateCard(deltaX < 0 ? 1 : -1)
+                    // Prime the entrance from the opposite side, then clear on the
+                    // next two rAF ticks so the browser commits the initial translate
+                    // before the transition-all kicks in and slides to translate-x-0.
+                    const enterDir = dir === 'left' ? 'from-right' as const : 'from-left' as const
+                    setEnterAnim(enterDir)
+                    setSwipeAnim(null)
+                    requestAnimationFrame(() => requestAnimationFrame(() => setEnterAnim(null)))
+                  }, 250)
                 }
               }}
             >
-              {/* Absolute × close button — top-right corner of the modal panel */}
+              {/* Fix 3: × close button lives on the outer overflow-hidden container so it is
+                  never clipped by the card image column and stays in the top-right corner
+                  of the entire modal panel on both mobile (flex-col) and desktop (flex-row). */}
               <button
                 onClick={() => { setSelectedCard(null); setHoveredVariantId(null) }}
                 aria-label="Close card details"
-                className="absolute top-3 right-3 z-10 w-9 h-9 rounded-full bg-slate-700/80 hover:bg-slate-600 flex items-center justify-center text-slate-300 hover:text-white transition-colors"
+                className="absolute top-2 right-2 z-10 w-9 h-9 rounded-full bg-slate-700/80 hover:bg-slate-600 flex items-center justify-center text-slate-300 hover:text-white transition-colors"
               >
                 ✕
               </button>
+              {/* Animated content wrapper — translates on exit/entrance driven by swipeAnim / enterAnim.
+                  The overflow-hidden on the parent clips the flying-out card so it doesn't escape the panel. */}
+              <div
+                className={[
+                  'flex flex-col sm:flex-row gap-6 transform-gpu transition-all duration-[250ms]',
+                  swipeAnim === 'left'       ? 'translate-x-[-100%] opacity-0' :
+                  swipeAnim === 'right'      ? 'translate-x-[100%] opacity-0'  :
+                  enterAnim === 'from-left'  ? 'translate-x-[-100%] opacity-0' :
+                  enterAnim === 'from-right' ? 'translate-x-[100%] opacity-0'  :
+                  'translate-x-0 opacity-100',
+                ].join(' ')}
+              >
             {/* Left side - Card Image with holographic glare + artist */}
             <div className="flex-shrink-0 flex flex-col w-full sm:w-auto">
               <CardGlareImage
@@ -2471,6 +2502,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                 </div>
               )}
             </div>
+              </div>{/* end animated content wrapper (Fix 1) */}
           </div>
         )}
       </Modal>
