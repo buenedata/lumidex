@@ -79,8 +79,14 @@ export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
   const cronSecret = process.env.CRON_SECRET
 
+  // TEMP DEBUG — visible in Vercel Function Logs
+  const expected = cronSecret ? `Bearer ${cronSecret}` : '(CRON_SECRET not set)'
+  console.log('[price-sync:auth] received header  :', JSON.stringify(authHeader))
+  console.log('[price-sync:auth] expected header  :', JSON.stringify(expected))
+  console.log('[price-sync:auth] match            :', authHeader === expected)
+
   if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return NextResponse.json({ error: 'Unauthorized', debug: { headerReceived: authHeader?.slice(0, 40) ?? null, cronSecretSet: !!cronSecret } }, { status: 401 })
   }
 
   const { checked, updated, skipped, failed } = await runDailyPriceSync()
