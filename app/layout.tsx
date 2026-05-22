@@ -6,6 +6,7 @@ import Footer from '@/components/Footer'
 import ScrollToTop from '@/components/ui/ScrollToTop'
 import LocaleProviderWrapper from '@/components/LocaleProviderWrapper'
 import { SpeedInsights } from '@vercel/speed-insights/next'
+import PwaRegister from '@/components/PwaRegister'
 
 const inter = Inter({
   subsets: ['latin'],
@@ -32,7 +33,14 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable}`}>
       <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="impact-site-verification" content="4d64ba63-a21a-464e-bf64-ebd720efc235" />
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#6366f1" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Lumidex" />
+        <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
       </head>
       <body className="bg-base min-h-dvh flex flex-col">
         <LocaleProviderWrapper>
@@ -44,6 +52,7 @@ export default function RootLayout({
           <ScrollToTop />
         </LocaleProviderWrapper>
         <SpeedInsights />
+        <PwaRegister />
       </body>
     </html>
   )

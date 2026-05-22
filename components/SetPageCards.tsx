@@ -434,7 +434,7 @@ export default function SetPageCards({
       {/* ── Search bar ───────────────────────────────────────────── */}
       {showSearch && (
         <div className="max-w-screen-2xl mx-auto px-6 py-4 flex items-center gap-3 flex-wrap">
-          <div className="relative">
+          <div className="relative w-full sm:w-auto">
             <svg
               className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted"
               fill="none"
@@ -453,14 +453,14 @@ export default function SetPageCards({
               placeholder="Name or Number..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-52 h-9 bg-surface border border-subtle rounded-lg pl-9 pr-3 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
+              className="w-full sm:w-52 min-h-[44px] h-11 bg-surface border border-subtle rounded-lg pl-9 pr-3 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
             />
           </div>
         </div>
       )}
 
       {/* ── Sort pills ───────────────────────────────────────────── */}
-      <div className="max-w-screen-2xl mx-auto px-6 py-2.5 border-b border-subtle">
+      <div className="max-w-screen-2xl mx-auto px-6 py-2 border-b border-subtle">
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-xs text-muted uppercase tracking-wider select-none mr-1.5">Sort</span>
           {sortOptions.map(opt => {
@@ -481,7 +481,7 @@ export default function SetPageCards({
                   ? (sortDirection === 'asc' ? 'Ascending — click to sort descending' : 'Descending — click to sort ascending')
                   : `Sort by ${opt.label}`}
                 className={cn(
-                  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 select-none cursor-pointer',
+                  'inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-all duration-150 select-none cursor-pointer min-h-[44px]',
                   isActive
                     ? 'bg-accent text-white shadow-sm'
                     : 'text-secondary hover:text-primary hover:bg-surface border border-transparent hover:border-subtle'
@@ -503,13 +503,13 @@ export default function SetPageCards({
 
       {/* ── Filter tabs ──────────────────────────────────────────── */}
       <div className="max-w-screen-2xl mx-auto px-6">
-        <div className="flex items-center gap-0 border-b border-subtle">
+        <div className="flex items-center gap-0 border-b border-subtle overflow-x-auto">
           {tabs.map(tab => (
             <button
               key={tab.value}
               onClick={() => setActiveFilter(tab.value)}
               className={cn(
-                'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-all duration-150 -mb-px',
+                'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-all duration-150 -mb-px shrink-0 min-h-[44px]',
                 safeFilter === tab.value ? 'tab-active' : 'tab-inactive'
               )}
             >

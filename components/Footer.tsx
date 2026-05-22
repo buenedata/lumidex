@@ -111,14 +111,14 @@ export default function Footer() {
                           href={link.href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-sm text-secondary hover:text-accent transition-colors"
+                          className="text-sm text-secondary hover:text-accent transition-colors min-h-[44px] flex items-center"
                         >
                           {link.label}
                         </a>
                       ) : (
                         <Link
                           href={link.href}
-                          className="text-sm text-secondary hover:text-accent transition-colors"
+                          className="text-sm text-secondary hover:text-accent transition-colors min-h-[44px] flex items-center"
                         >
                           {link.label}
                         </Link>

@@ -192,7 +192,6 @@ export default function BrowseHero({ mode, committedQuery, allProducts }: Browse
               onChange={handleInputChange}
               onKeyDown={handleInputKeyDown}
               onFocus={handleInputFocus}
-              autoFocus
               className="w-full h-12 bg-elevated border border-subtle rounded-xl pl-12 pr-12 text-base text-primary placeholder:text-muted focus:outline-none focus:border-accent/60 focus:ring-2 focus:ring-accent/20 transition-all shadow-sm"
             />
 

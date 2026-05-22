@@ -91,7 +91,7 @@ export default function CardResults({ cards, query, artistName }: CardResultsPro
 
       {/* Flat card grid — ~220px cards matching the set detail pages.
           Fewer columns = larger cards = same visual weight as set page. */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-7 gap-3">
         {cards.map(card => (
           <div key={card.id} className="group flex flex-col cursor-pointer">
             {/*

@@ -50,8 +50,8 @@ export default function FriendsList({
 
   return (
     <div className={cn('flex flex-col gap-3', className)}>
-      {/* Friend cards grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+      {/* Friend cards grid — 1-col list on mobile, multi-col card grid on sm+ */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
         {friends.map(friend => {
           const displayName = friend.display_name || friend.username || 'Unknown'
           const initials = (friend.username ?? 'U').slice(0, 2).toUpperCase()
@@ -62,7 +62,7 @@ export default function FriendsList({
               type="button"
               onClick={() => router.push(`/profile/${friend.user_id}`)}
               className={cn(
-                'flex flex-col items-center gap-2 p-3 rounded-xl text-center',
+                'flex flex-row sm:flex-col items-center gap-3 sm:gap-2 p-3 rounded-xl text-left sm:text-center w-full',
                 'bg-surface border border-subtle',
                 'hover:border-[rgba(109,95,255,0.4)] hover:bg-elevated',
                 'transition-all duration-150 group'
@@ -83,8 +83,8 @@ export default function FriendsList({
                 )}
               </div>
 
-              {/* Name */}
-              <div className="w-full">
+              {/* Name — flex-1 on mobile row, full-width on sm+ card */}
+              <div className="flex-1 min-w-0 sm:w-full">
                 <p className="text-xs font-medium text-primary truncate leading-tight">
                   {displayName}
                 </p>
@@ -104,13 +104,13 @@ export default function FriendsList({
             type="button"
             onClick={onFindFriends}
             className={cn(
-              'flex flex-col items-center justify-center gap-2 p-3 rounded-xl text-center',
+              'flex flex-row sm:flex-col items-center justify-start sm:justify-center gap-3 sm:gap-2 p-3 rounded-xl text-left sm:text-center w-full',
               'bg-surface border border-dashed border-subtle',
               'hover:border-[rgba(109,95,255,0.4)] hover:bg-elevated',
               'transition-all duration-150 group'
             )}
           >
-            <div className="w-12 h-12 rounded-full bg-accent-dim flex items-center justify-center text-xl group-hover:bg-accent/20 transition-colors">
+            <div className="w-12 h-12 rounded-full bg-accent-dim flex items-center justify-center text-xl shrink-0 group-hover:bg-accent/20 transition-colors">
               +
             </div>
             <p className="text-xs font-medium text-muted group-hover:text-accent transition-colors leading-tight">

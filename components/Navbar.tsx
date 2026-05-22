@@ -48,6 +48,7 @@ export default function Navbar() {
   const [friendNotifs,   setFriendNotifs]   = useState<NotifFriend[]>([])
   const [seenFriendIds,  setSeenFriendIds]  = useState<Set<string>>(new Set())
   const [showNotif,      setShowNotif]      = useState(false)
+  const [mobileOpen,     setMobileOpen]     = useState(false)
   const notifRef = useRef<HTMLDivElement>(null)
 
   // Load dismissed friend notification IDs from localStorage
@@ -136,7 +137,7 @@ export default function Navbar() {
     return () => clearInterval(id)
   }, [user])
 
-  // Close dropdown on outside click
+  // Close notification dropdown on outside click
   useEffect(() => {
     if (!showNotif) return
     function handleClick(e: MouseEvent) {
@@ -147,6 +148,16 @@ export default function Navbar() {
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [showNotif])
+
+  // Close mobile drawer on Escape key
+  useEffect(() => {
+    if (!mobileOpen) return
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setMobileOpen(false)
+    }
+    document.addEventListener('keydown', handleKey)
+    return () => document.removeEventListener('keydown', handleKey)
+  }, [mobileOpen])
 
   // Friend notifications that are still "unread":
   //   - 'received' ones always show until the user acts (they vanish from the API when actioned)
@@ -177,17 +188,379 @@ export default function Navbar() {
     }
   }
 
+  const handleMobileSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && searchQuery.trim()) {
+      router.push(`/browse?q=${encodeURIComponent(searchQuery.trim())}&mode=cards`)
+      setSearchQuery('')
+      setMobileOpen(false)
+    }
+  }
+
   return (
-    <nav className="sticky top-0 z-50 h-14 bg-[color:var(--color-bg-surface)]/90 backdrop-blur-xl border-b border-subtle">
-      <div className="max-w-screen-2xl mx-auto h-full px-4 flex items-center gap-4">
+    <>
+      <nav className="sticky top-0 z-50 bg-[color:var(--color-bg-surface)]/90 backdrop-blur-xl border-b border-subtle pt-[env(safe-area-inset-top)]">
+        <div className="max-w-screen-2xl mx-auto h-14 px-4 flex items-center gap-4">
 
-        {/* Logo */}
-        <Link href="/dashboard" className="flex items-center shrink-0 mr-2">
-          <img src="/logo.svg" alt="Lumidex" className="h-9 w-auto" />
-        </Link>
+          {/* Logo */}
+          <Link href="/dashboard" className="flex items-center shrink-0 mr-2">
+            <img src="/logo.svg" alt="Lumidex" className="h-9 w-auto" />
+          </Link>
 
-        {/* Search */}
-        <div className="flex-1 max-w-sm">
+          {/* Search — desktop only */}
+          <div className="hidden lg:block flex-1 max-w-sm">
+            <div className="relative">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                placeholder={t('nav_search_placeholder')}
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={handleSearch}
+                className="w-full h-9 bg-elevated border border-subtle rounded-lg pl-9 pr-3 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
+              />
+            </div>
+          </div>
+
+          {/* Spacer — desktop only */}
+          <div className="hidden lg:block flex-1" />
+
+          {/* Desktop nav links + user section — hidden on mobile */}
+          <div className="hidden lg:flex items-center gap-4">
+            {isAuthLoading ? (
+              /* Skeleton while Supabase session is resolving — prevents the Sign-In
+                 button from flashing then disappearing for logged-in users. */
+              <div className="flex items-center gap-2 animate-pulse">
+                <div className="w-7 h-7 rounded-full bg-elevated" />
+                <div className="w-16 h-3.5 bg-elevated rounded" />
+              </div>
+            ) : user ? (
+              <>
+                {/* Nav links */}
+                <div className="flex items-center gap-1">
+                  <Link href="/dashboard"            className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_dashboard')}</Link>
+                  <Link href={`/profile/${user.id}`} className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_profile')}</Link>
+                  <Link href="/sets"                 className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_sets')}</Link>
+                  <Link href="/collection"           className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_collection')}</Link>
+                  <Link href="/wanted-board"         className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_wanted_board')}</Link>
+                  <Link href="/faq"                  className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_faq')}</Link>
+                  {isAdmin && (
+                    <Link href="/admin" className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all" title="Admin Panel">
+                      {t('nav_admin')}
+                    </Link>
+                  )}
+                  {/* Upgrade CTA — only shown to free users */}
+                  {!isPro && (
+                    <Link
+                      href="/upgrade"
+                      className="ml-1 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-white
+                        bg-[#6d5fff] hover:bg-[#8577ff]
+                        shadow-[0_0_10px_rgba(109,95,255,0.35)]
+                        hover:shadow-[0_0_14px_rgba(109,95,255,0.5)]
+                        transition-all duration-200"
+                    >
+                      {t('nav_upgrade')}
+                    </Link>
+                  )}
+                </div>
+
+                {/* ── Notification bell ── */}
+                <div className="relative" ref={notifRef}>
+                  <button
+                    onClick={() => setShowNotif(v => !v)}
+                    className={`relative p-2 rounded-lg transition-all ${
+                      totalNotifCount > 0
+                        ? 'text-amber-400 hover:bg-elevated'
+                        : 'text-muted hover:text-secondary hover:bg-elevated'
+                    }`}
+                    title={totalNotifCount > 0 ? t('nav_pending', { count: totalNotifCount }) : t('nav_notifications')}
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                    {totalNotifCount > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none px-0.5">
+                        {totalNotifCount > 9 ? '9+' : totalNotifCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {/* Notification dropdown */}
+                  {showNotif && (
+                    <div className="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-1rem)] bg-elevated border border-subtle rounded-2xl shadow-2xl overflow-hidden z-50">
+                      {/* Header */}
+                      <div className="px-4 py-3 border-b border-subtle flex items-center justify-between">
+                        <p className="text-sm font-semibold text-primary">{t('nav_notifications')}</p>
+                        {totalNotifCount > 0 && (
+                          <span className="pill text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-400">
+                            {t('nav_pending', { count: totalNotifCount })}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Body */}
+                      {totalNotifCount === 0 ? (
+                        <div className="px-4 py-8 text-center">
+                          <p className="text-2xl mb-2">🔔</p>
+                          <p className="text-sm text-muted">{t('nav_no_notifications')}</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-subtle max-h-80 overflow-y-auto">
+
+                          {/* ── Friend notifications ── */}
+                          {visibleFriendNotifs.map(n => {
+                            const name = n.otherUser.display_name ?? n.otherUser.username ?? 'Trainer'
+                            const timeStr = relTime(n.updated_at ?? n.created_at)
+
+                            const label =
+                              n.type === 'received' ? t('nav_friend_sent',     { name }) :
+                              n.type === 'accepted' ? t('nav_friend_accepted', { name }) :
+                                                      t('nav_friend_declined', { name })
+
+                            const iconBg =
+                              n.type === 'received' ? 'bg-blue-500/20 border-blue-500/30 text-blue-400' :
+                              n.type === 'accepted' ? 'bg-green-500/20 border-green-500/30 text-green-400' :
+                                                      'bg-red-500/20   border-red-500/30   text-red-400'
+
+                            const icon =
+                              n.type === 'received' ? (
+                                // Person / add-friend icon
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+                                </svg>
+                              ) : n.type === 'accepted' ? (
+                                // Checkmark icon
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                              ) : (
+                                // X icon
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              )
+
+                            return (
+                              <div key={n.id} className="flex items-center gap-3 px-4 py-3 hover:bg-surface transition-colors group">
+                                {/* Avatar or icon badge */}
+                                <div className="relative shrink-0">
+                                  <div className="w-9 h-9 rounded-full overflow-hidden bg-surface border border-subtle flex items-center justify-center">
+                                    {n.otherUser.avatar_url ? (
+                                      <Image src={n.otherUser.avatar_url} alt={name} width={36} height={36} className="object-cover w-full h-full" unoptimized />
+                                    ) : (
+                                      <span className="text-sm font-bold text-accent">{name[0].toUpperCase()}</span>
+                                    )}
+                                  </div>
+                                  {/* Type badge overlaid on avatar */}
+                                  <span className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border flex items-center justify-center ${iconBg}`}>
+                                    {icon}
+                                  </span>
+                                </div>
+
+                                {/* Text — clicking navigates to the other user's profile */}
+                                <Link
+                                  href={`/profile/${n.otherUser.id}`}
+                                  onClick={() => {
+                                    setShowNotif(false)
+                                    if (n.type !== 'received') dismissFriend(n.id)
+                                  }}
+                                  className="flex-1 min-w-0"
+                                >
+                                  <p className="text-sm font-medium text-primary leading-tight">{label}</p>
+                                  <p className="text-xs text-muted leading-tight">{timeStr}</p>
+                                </Link>
+
+                                {/* Dismiss button for accepted / declined (not for received — those need action) */}
+                                {n.type !== 'received' && (
+                                  <button
+                                    onClick={() => dismissFriend(n.id)}
+                                    className="shrink-0 p-1 rounded text-muted hover:text-primary hover:bg-elevated transition-colors"
+                                    title="Dismiss"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
+                            )
+                          })}
+
+                          {/* ── Trade proposal notifications ── */}
+                          {proposals.map(p => {
+                            const name = p.otherUser?.display_name ?? p.otherUser?.username ?? 'Trainer'
+                            const cardLabel = p.offeringCount === 1
+                              ? t('nav_card_count_singular', { count: p.offeringCount })
+                              : t('nav_card_count_plural',   { count: p.offeringCount })
+                            return (
+                              <Link
+                                key={p.id}
+                                href="/wanted-board"
+                                onClick={() => setShowNotif(false)}
+                                className="flex items-center gap-3 px-4 py-3 hover:bg-surface transition-colors group"
+                              >
+                                {/* Avatar */}
+                                <div className="w-9 h-9 rounded-full overflow-hidden bg-surface border border-subtle shrink-0 flex items-center justify-center">
+                                  {p.otherUser?.avatar_url ? (
+                                    <Image src={p.otherUser.avatar_url} alt={name} width={36} height={36} className="object-cover w-full h-full" unoptimized />
+                                  ) : (
+                                    <span className="text-sm font-bold text-accent">{name[0].toUpperCase()}</span>
+                                  )}
+                                </div>
+
+                                {/* Text */}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-primary leading-tight truncate">
+                                    {t('nav_trade_proposed', { name })}
+                                  </p>
+                                  <p className="text-xs text-muted leading-tight">
+                                    {cardLabel} · {relTime(p.created_at)}
+                                  </p>
+                                </div>
+
+                                {/* Arrow */}
+                                <svg className="w-4 h-4 text-muted group-hover:text-accent transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                              </Link>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      {/* Footer */}
+                      <div className="px-4 py-2.5 border-t border-subtle flex items-center justify-between">
+                        <Link
+                          href={`/profile/${user.id}`}
+                          onClick={() => setShowNotif(false)}
+                          className="text-xs text-accent hover:text-accent-light transition-colors font-medium"
+                        >
+                          {t('nav_friend_requests_link')}
+                        </Link>
+                        <Link
+                          href="/wanted-board"
+                          onClick={() => setShowNotif(false)}
+                          className="text-xs text-accent hover:text-accent-light transition-colors font-medium"
+                        >
+                          {t('nav_trade_offers_link')}
+                        </Link>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* User section */}
+                <div className="flex items-center gap-2 pl-2 border-l border-subtle">
+                  <Link href={`/profile/${user.id}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+                    {profile?.avatar_url ? (
+                      <img src={profile.avatar_url} alt="Profile" className="w-7 h-7 rounded-full ring-1 ring-accent/30" />
+                    ) : (
+                      <div className="w-7 h-7 rounded-full bg-accent-dim border border-accent/30 flex items-center justify-center shrink-0">
+                        <span className="text-accent text-xs font-semibold uppercase">
+                          {(profile?.username || user.email || 'U')[0]}
+                        </span>
+                      </div>
+                    )}
+                    <span className="text-sm font-medium text-primary hidden sm:block">
+                      {profile?.username || 'User'}
+                    </span>
+                    {isPro && <ProBadge size="sm" className="hidden sm:inline-flex" />}
+                  </Link>
+                  <button
+                    onClick={handleSignOut}
+                    className="ml-1 px-3 py-1.5 text-xs text-secondary hover:text-primary hover:bg-elevated rounded-lg transition-all"
+                  >
+                    {t('nav_sign_out')}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <Link href="/login" className="h-9 px-4 text-sm font-medium rounded-lg bg-accent text-white hover:bg-accent-light transition-all glow-accent-sm inline-flex items-center">
+                {t('nav_sign_in')}
+              </Link>
+            )}
+          </div>
+
+          {/* ── Mobile right section — visible only on < lg ── */}
+          <div className="flex lg:hidden items-center gap-2 ml-auto">
+            {isAuthLoading ? (
+              <div className="w-7 h-7 rounded-full bg-elevated animate-pulse" />
+            ) : user ? (
+              <button
+                onClick={() => setMobileOpen(v => !v)}
+                className="p-2 rounded-lg text-muted hover:text-primary hover:bg-elevated transition-all"
+                aria-label="Open navigation menu"
+              >
+                {/* Hamburger icon */}
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            ) : (
+              <Link href="/login" className="h-9 px-4 text-sm font-medium rounded-lg bg-accent text-white hover:bg-accent-light transition-all glow-accent-sm inline-flex items-center">
+                {t('nav_sign_in')}
+              </Link>
+            )}
+          </div>
+
+        </div>
+      </nav>
+
+      {/* ── Mobile drawer backdrop ── */}
+      <div
+        className={`fixed inset-0 z-40 bg-black/60 lg:hidden transition-opacity duration-300 ${
+          mobileOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+        }`}
+        onClick={() => setMobileOpen(false)}
+        aria-hidden="true"
+      />
+
+      {/* ── Mobile slide-in drawer ── */}
+      <div
+        className={`fixed top-0 right-0 z-50 h-screen w-72 max-w-[calc(100vw-3rem)] bg-[color:var(--color-bg-elevated)] border-l border-subtle flex flex-col lg:hidden transform transition-transform duration-300 ease-in-out ${
+          mobileOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+        aria-modal="true"
+        role="dialog"
+      >
+        {/* Drawer header — user avatar + name + close button */}
+        <div className="flex items-center gap-3 px-4 py-4 border-b border-subtle">
+          {user && (
+            <Link
+              href={`/profile/${user.id}`}
+              onClick={() => setMobileOpen(false)}
+              className="flex items-center gap-2.5 flex-1 min-w-0 hover:opacity-80 transition-opacity"
+            >
+              {profile?.avatar_url ? (
+                <img src={profile.avatar_url} alt="Profile" className="w-10 h-10 rounded-full ring-1 ring-accent/30 shrink-0" />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-accent-dim border border-accent/30 flex items-center justify-center shrink-0">
+                  <span className="text-accent text-sm font-semibold uppercase">
+                    {(profile?.username || user?.email || 'U')[0]}
+                  </span>
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-primary truncate">{profile?.username || 'User'}</p>
+                {isPro && <ProBadge size="sm" />}
+              </div>
+            </Link>
+          )}
+          {/* Close button */}
+          <button
+            onClick={() => setMobileOpen(false)}
+            className="shrink-0 p-2 rounded-lg text-muted hover:text-primary hover:bg-surface transition-all"
+            aria-label="Close menu"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Search bar inside drawer */}
+        <div className="px-4 py-3 border-b border-subtle">
           <div className="relative">
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -197,269 +570,91 @@ export default function Navbar() {
               placeholder={t('nav_search_placeholder')}
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              onKeyDown={handleSearch}
-              className="w-full h-9 bg-elevated border border-subtle rounded-lg pl-9 pr-3 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
+              onKeyDown={handleMobileSearch}
+              className="w-full h-10 bg-[color:var(--color-bg-surface)] border border-subtle rounded-lg pl-9 pr-3 text-sm text-primary placeholder:text-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors"
             />
           </div>
         </div>
 
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        {/* Nav links + user section */}
-        {isAuthLoading ? (
-          /* Skeleton while Supabase session is resolving — prevents the Sign-In
-             button from flashing then disappearing for logged-in users. */
-          <div className="flex items-center gap-2 animate-pulse">
-            <div className="w-7 h-7 rounded-full bg-elevated" />
-            <div className="w-16 h-3.5 bg-elevated rounded hidden sm:block" />
-          </div>
-        ) : user ? (
-          <>
-            {/* Nav links */}
-            <div className="flex items-center gap-1">
-              <Link href="/dashboard"            className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_dashboard')}</Link>
-              <Link href={`/profile/${user.id}`} className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_profile')}</Link>
-              <Link href="/sets"                 className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_sets')}</Link>
-              <Link href="/collection"           className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_collection')}</Link>
-              <Link href="/wanted-board"         className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_wanted_board')}</Link>
-              <Link href="/faq"                  className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_faq')}</Link>
-              {isAdmin && (
-                <Link href="/admin" className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all" title="Admin Panel">
-                  {t('nav_admin')}
-                </Link>
-              )}
-              {/* Upgrade CTA — only shown to free users */}
-              {!isPro && (
-                <Link
-                  href="/upgrade"
-                  className="ml-1 inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-white
-                    bg-[#6d5fff] hover:bg-[#8577ff]
-                    shadow-[0_0_10px_rgba(109,95,255,0.35)]
-                    hover:shadow-[0_0_14px_rgba(109,95,255,0.5)]
-                    transition-all duration-200"
-                >
-                  {t('nav_upgrade')}
-                </Link>
-              )}
-            </div>
-
-            {/* ── Notification bell ── */}
-            <div className="relative" ref={notifRef}>
-              <button
-                onClick={() => setShowNotif(v => !v)}
-                className={`relative p-2 rounded-lg transition-all ${
-                  totalNotifCount > 0
-                    ? 'text-amber-400 hover:bg-elevated'
-                    : 'text-muted hover:text-secondary hover:bg-elevated'
-                }`}
-                title={totalNotifCount > 0 ? t('nav_pending', { count: totalNotifCount }) : t('nav_notifications')}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-                {totalNotifCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none px-0.5">
-                    {totalNotifCount > 9 ? '9+' : totalNotifCount}
-                  </span>
-                )}
-              </button>
-
-              {/* Dropdown */}
-              {showNotif && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-elevated border border-subtle rounded-2xl shadow-2xl overflow-hidden z-50">
-                  {/* Header */}
-                  <div className="px-4 py-3 border-b border-subtle flex items-center justify-between">
-                    <p className="text-sm font-semibold text-primary">{t('nav_notifications')}</p>
-                    {totalNotifCount > 0 && (
-                      <span className="pill text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-400">
-                        {t('nav_pending', { count: totalNotifCount })}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Body */}
-                  {totalNotifCount === 0 ? (
-                    <div className="px-4 py-8 text-center">
-                      <p className="text-2xl mb-2">🔔</p>
-                      <p className="text-sm text-muted">{t('nav_no_notifications')}</p>
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-subtle max-h-80 overflow-y-auto">
-
-                      {/* ── Friend notifications ── */}
-                      {visibleFriendNotifs.map(n => {
-                        const name = n.otherUser.display_name ?? n.otherUser.username ?? 'Trainer'
-                        const timeStr = relTime(n.updated_at ?? n.created_at)
-
-                        const label =
-                          n.type === 'received' ? t('nav_friend_sent',     { name }) :
-                          n.type === 'accepted' ? t('nav_friend_accepted', { name }) :
-                                                  t('nav_friend_declined', { name })
-
-                        const iconBg =
-                          n.type === 'received' ? 'bg-blue-500/20 border-blue-500/30 text-blue-400' :
-                          n.type === 'accepted' ? 'bg-green-500/20 border-green-500/30 text-green-400' :
-                                                  'bg-red-500/20   border-red-500/30   text-red-400'
-
-                        const icon =
-                          n.type === 'received' ? (
-                            // Person / add-friend icon
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-                            </svg>
-                          ) : n.type === 'accepted' ? (
-                            // Checkmark icon
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          ) : (
-                            // X icon
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          )
-
-                        return (
-                          <div key={n.id} className="flex items-center gap-3 px-4 py-3 hover:bg-surface transition-colors group">
-                            {/* Avatar or icon badge */}
-                            <div className="relative shrink-0">
-                              <div className="w-9 h-9 rounded-full overflow-hidden bg-surface border border-subtle flex items-center justify-center">
-                                {n.otherUser.avatar_url ? (
-                                  <Image src={n.otherUser.avatar_url} alt={name} width={36} height={36} className="object-cover w-full h-full" unoptimized />
-                                ) : (
-                                  <span className="text-sm font-bold text-accent">{name[0].toUpperCase()}</span>
-                                )}
-                              </div>
-                              {/* Type badge overlaid on avatar */}
-                              <span className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full border flex items-center justify-center ${iconBg}`}>
-                                {icon}
-                              </span>
-                            </div>
-
-                            {/* Text — clicking navigates to the other user's profile */}
-                            <Link
-                              href={`/profile/${n.otherUser.id}`}
-                              onClick={() => {
-                                setShowNotif(false)
-                                if (n.type !== 'received') dismissFriend(n.id)
-                              }}
-                              className="flex-1 min-w-0"
-                            >
-                              <p className="text-sm font-medium text-primary leading-tight">{label}</p>
-                              <p className="text-xs text-muted leading-tight">{timeStr}</p>
-                            </Link>
-
-                            {/* Dismiss button for accepted / declined (not for received — those need action) */}
-                            {n.type !== 'received' && (
-                              <button
-                                onClick={() => dismissFriend(n.id)}
-                                className="shrink-0 p-1 rounded text-muted hover:text-primary hover:bg-elevated transition-colors"
-                                title="Dismiss"
-                              >
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                              </button>
-                            )}
-                          </div>
-                        )
-                      })}
-
-                      {/* ── Trade proposal notifications ── */}
-                      {proposals.map(p => {
-                        const name = p.otherUser?.display_name ?? p.otherUser?.username ?? 'Trainer'
-                        const cardLabel = p.offeringCount === 1
-                          ? t('nav_card_count_singular', { count: p.offeringCount })
-                          : t('nav_card_count_plural',   { count: p.offeringCount })
-                        return (
-                          <Link
-                            key={p.id}
-                            href="/wanted-board"
-                            onClick={() => setShowNotif(false)}
-                            className="flex items-center gap-3 px-4 py-3 hover:bg-surface transition-colors group"
-                          >
-                            {/* Avatar */}
-                            <div className="w-9 h-9 rounded-full overflow-hidden bg-surface border border-subtle shrink-0 flex items-center justify-center">
-                              {p.otherUser?.avatar_url ? (
-                                <Image src={p.otherUser.avatar_url} alt={name} width={36} height={36} className="object-cover w-full h-full" unoptimized />
-                              ) : (
-                                <span className="text-sm font-bold text-accent">{name[0].toUpperCase()}</span>
-                              )}
-                            </div>
-
-                            {/* Text */}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-primary leading-tight truncate">
-                                {t('nav_trade_proposed', { name })}
-                              </p>
-                              <p className="text-xs text-muted leading-tight">
-                                {cardLabel} · {relTime(p.created_at)}
-                              </p>
-                            </div>
-
-                            {/* Arrow */}
-                            <svg className="w-4 h-4 text-muted group-hover:text-accent transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </Link>
-                        )
-                      })}
-                    </div>
-                  )}
-
-                  {/* Footer */}
-                  <div className="px-4 py-2.5 border-t border-subtle flex items-center justify-between">
-                    <Link
-                      href={`/profile/${user.id}`}
-                      onClick={() => setShowNotif(false)}
-                      className="text-xs text-accent hover:text-accent-light transition-colors font-medium"
-                    >
-                      {t('nav_friend_requests_link')}
-                    </Link>
-                    <Link
-                      href="/wanted-board"
-                      onClick={() => setShowNotif(false)}
-                      className="text-xs text-accent hover:text-accent-light transition-colors font-medium"
-                    >
-                      {t('nav_trade_offers_link')}
-                    </Link>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* User section */}
-            <div className="flex items-center gap-2 pl-2 border-l border-subtle">
-              <Link href={`/profile/${user.id}`} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-                {profile?.avatar_url ? (
-                  <img src={profile.avatar_url} alt="Profile" className="w-7 h-7 rounded-full ring-1 ring-accent/30" />
-                ) : (
-                  <div className="w-7 h-7 rounded-full bg-accent-dim border border-accent/30 flex items-center justify-center shrink-0">
-                    <span className="text-accent text-xs font-semibold uppercase">
-                      {(profile?.username || user.email || 'U')[0]}
-                    </span>
-                  </div>
-                )}
-                <span className="text-sm font-medium text-primary hidden sm:block">
-                  {profile?.username || 'User'}
-                </span>
-                {isPro && <ProBadge size="sm" className="hidden sm:inline-flex" />}
-              </Link>
-              <button
-                onClick={handleSignOut}
-                className="ml-1 px-3 py-1.5 text-xs text-secondary hover:text-primary hover:bg-elevated rounded-lg transition-all"
-              >
-                {t('nav_sign_out')}
-              </button>
-            </div>
-          </>
-        ) : (
-          <Link href="/login" className="h-9 px-4 text-sm font-medium rounded-lg bg-accent text-white hover:bg-accent-light transition-all glow-accent-sm inline-flex items-center">
-            {t('nav_sign_in')}
+        {/* Nav links — scrollable */}
+        <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
+          <Link
+            href="/dashboard"
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center gap-3 px-3 py-2.5 text-sm text-secondary hover:text-accent hover:bg-surface rounded-lg transition-all"
+          >
+            {t('nav_dashboard')}
           </Link>
-        )}
+          {user && (
+            <Link
+              href={`/profile/${user.id}`}
+              onClick={() => setMobileOpen(false)}
+              className="flex items-center gap-3 px-3 py-2.5 text-sm text-secondary hover:text-accent hover:bg-surface rounded-lg transition-all"
+            >
+              {t('nav_profile')}
+            </Link>
+          )}
+          <Link
+            href="/sets"
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center gap-3 px-3 py-2.5 text-sm text-secondary hover:text-accent hover:bg-surface rounded-lg transition-all"
+          >
+            {t('nav_sets')}
+          </Link>
+          <Link
+            href="/collection"
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center gap-3 px-3 py-2.5 text-sm text-secondary hover:text-accent hover:bg-surface rounded-lg transition-all"
+          >
+            {t('nav_collection')}
+          </Link>
+          <Link
+            href="/wanted-board"
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center gap-3 px-3 py-2.5 text-sm text-secondary hover:text-accent hover:bg-surface rounded-lg transition-all"
+          >
+            {t('nav_wanted_board')}
+          </Link>
+          <Link
+            href="/faq"
+            onClick={() => setMobileOpen(false)}
+            className="flex items-center gap-3 px-3 py-2.5 text-sm text-secondary hover:text-accent hover:bg-surface rounded-lg transition-all"
+          >
+            {t('nav_faq')}
+          </Link>
+          {isAdmin && (
+            <Link
+              href="/admin"
+              onClick={() => setMobileOpen(false)}
+              className="flex items-center gap-3 px-3 py-2.5 text-sm text-secondary hover:text-accent hover:bg-surface rounded-lg transition-all"
+            >
+              {t('nav_admin')}
+            </Link>
+          )}
+          {!isPro && (
+            <Link
+              href="/upgrade"
+              onClick={() => setMobileOpen(false)}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-bold text-white
+                bg-[#6d5fff] hover:bg-[#8577ff]
+                shadow-[0_0_10px_rgba(109,95,255,0.35)]
+                transition-all duration-200 mt-2"
+            >
+              {t('nav_upgrade')}
+            </Link>
+          )}
+        </nav>
+
+        {/* Drawer footer — sign out */}
+        <div className="px-3 py-3 border-t border-subtle">
+          <button
+            onClick={() => { setMobileOpen(false); handleSignOut() }}
+            className="w-full px-3 py-2.5 text-sm text-secondary hover:text-primary hover:bg-surface rounded-lg transition-all text-left"
+          >
+            {t('nav_sign_out')}
+          </button>
+        </div>
       </div>
-    </nav>
+    </>
   )
 }

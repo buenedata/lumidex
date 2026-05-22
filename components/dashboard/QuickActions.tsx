@@ -16,9 +16,9 @@ interface ActionPillProps {
 
 function ActionPill({ label, emoji, href }: ActionPillProps) {
   const base =
-    'inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-surface border border-subtle ' +
+    'flex items-center gap-2 px-4 py-3 rounded-xl bg-surface border border-subtle ' +
     'text-sm font-medium text-secondary hover:text-primary hover:border-accent/50 hover:bg-elevated ' +
-    'transition-all duration-150 cursor-pointer shrink-0'
+    'transition-all duration-150 cursor-pointer w-full'
 
   return (
     <Link href={href} className={base}>
@@ -36,8 +36,8 @@ export default function QuickActions({ userId }: QuickActionsProps) {
       <p className="text-xs text-muted uppercase tracking-wider mb-3 font-medium">
         {t('quick_actions_title')}
       </p>
-      {/* Horizontally scrollable on mobile, wraps on wider screens */}
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+      {/* 2-col grid on mobile → 3 on sm → 4 on md */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
         <ActionPill emoji="🔍" label={t('quick_find_card')}    href="/browse" />
         <ActionPill emoji="📦" label={t('quick_browse_sets')}  href="/sets" />
         <ActionPill emoji="🗂️" label={t('quick_my_collection')} href="/collection" />

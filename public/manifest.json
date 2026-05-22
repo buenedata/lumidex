@@ -1,0 +1,39 @@
+{
+  "name": "Lumidex",
+  "short_name": "Lumidex",
+  "description": "Track, manage and value your Pokémon card collection",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#6366f1",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "categories": ["games", "entertainment", "utilities"],
+  "shortcuts": [
+    {
+      "name": "My Collection",
+      "url": "/collection",
+      "description": "View your Pokémon card collection"
+    },
+    {
+      "name": "Browse Cards",
+      "url": "/browse",
+      "description": "Browse and search all Pokémon cards"
+    }
+  ]
+}

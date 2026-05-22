@@ -36,11 +36,14 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+    -webkit-tap-highlight-color: transparent;
   }
 
   html {
     font-size: 16px;
     scroll-behavior: smooth;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
   }
 
   body {
@@ -50,6 +53,10 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     min-height: 100dvh;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+    /* iOS safe-area: prevent content hiding behind home indicator */
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   /* ── Custom scrollbar ─────────────────────────── */
@@ -97,6 +104,16 @@
     max-width: 100%;
     height: auto;
     display: block;
+  }
+}
+
+@layer base {
+  /* ── Mobile tap feedback — instant visual response on touch ──────── */
+  button:active,
+  a:active,
+  [role="button"]:active {
+    transform: scale(0.97);
+    transition: transform 0.1s ease;
   }
 }
 

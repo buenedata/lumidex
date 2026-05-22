@@ -21,7 +21,7 @@ function SetCard({ set, progress, onRemove, isFavorited, onFavorite }: SetCardPr
     : false
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full w-full">
       <Link
         href={`/set/${encodeURIComponent(set.id)}`}
         className={cn(

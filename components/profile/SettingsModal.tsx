@@ -247,7 +247,7 @@ export default function SettingsModal({
         title={t('settings_modal_title')}
         maxWidth="lg"
       >
-        <div className="overflow-y-auto max-h-[60vh] pr-1">
+        <div className="overflow-y-auto max-h-[90vh] pr-1">
           <SettingsForm
             values={values}
             onChange={handleChange}

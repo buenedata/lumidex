@@ -24,7 +24,7 @@ function NewsStoryCard({ story }: { story: StorySummary }) {
     <Link
       href={`/news/${story.slug}`}
       className="group relative flex flex-col overflow-hidden rounded-2xl cursor-pointer
-                 min-w-[220px] sm:min-w-0 h-64
+                 w-full h-64
                  transition-transform duration-200 hover:scale-[1.025]"
       style={{ background: story.gradient }}
     >
@@ -87,7 +87,7 @@ function NewsStoryCard({ story }: { story: StorySummary }) {
 // ── Skeleton ──────────────────────────────────────────────────────────────────
 
 function StoryCardSkeleton() {
-  return <div className="min-w-[220px] sm:min-w-0 h-64 rounded-2xl bg-white/5 animate-pulse" />
+  return <div className="w-full h-64 rounded-2xl bg-white/5 animate-pulse" />
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -136,28 +136,15 @@ export default function NewsStories() {
         </Link>
       </div>
 
-      {/* ── Card strip ───────────────────────────────────────────────────── */}
-      {/*  Mobile: horizontal scroll  |  Desktop: 4-column grid            */}
-      <div
-        className="
-          flex gap-3 overflow-x-auto pb-2
-          sm:grid sm:grid-cols-2 sm:overflow-visible sm:pb-0
-          lg:grid-cols-4
-          snap-x snap-mandatory sm:snap-none
-          scrollbar-none
-        "
-        style={{ scrollbarWidth: 'none' }}
-      >
+      {/* ── Card grid ────────────────────────────────────────────────────── */}
+      {/*  1-col on mobile → 2-col on sm → 3-col on lg                     */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {loading
           ? Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="snap-start shrink-0 w-[220px] sm:w-auto">
-                <StoryCardSkeleton />
-              </div>
+              <StoryCardSkeleton key={i} />
             ))
           : stories.map(story => (
-              <div key={story.id} className="snap-start shrink-0 w-[220px] sm:w-auto">
-                <NewsStoryCard story={story} />
-              </div>
+              <NewsStoryCard key={story.id} story={story} />
             ))
         }
       </div>

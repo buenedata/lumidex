@@ -206,14 +206,15 @@ function CardGlareImage({
 
   return (
     <div
+      className="w-full sm:w-auto flex justify-center"
       style={{ padding: 20, flexShrink: 0 }}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
       <div
         ref={cardRef}
-        className="w-[389px] h-[543px] bg-elevated rounded-xl overflow-hidden relative cursor-crosshair"
-        style={{ willChange: 'transform' }}
+        className="w-full sm:w-[389px] bg-elevated rounded-xl overflow-hidden relative cursor-crosshair"
+        style={{ willChange: 'transform', aspectRatio: '389/543' }}
       >
         {/* Base image — served directly from Cloudflare R2 (already WebP-compressed CDN) */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1383,6 +1384,31 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     }
   }, [userId, updateVariantQuantity])
 
+  // Touch quick-add — mirrors handleCardImageDblClick logic, exposed as a stable
+  // callback so CardTile can wire it to a long-press action sheet on mobile.
+  const handleTouchAdd = useCallback((card: PokemonCard) => {
+    if (!userId) return
+    const quick = cardVariantDotsRef.current.get(card.id) || []
+    const defaultVariant = card.default_variant_id
+      ? (quick.find(v => v.id === card.default_variant_id) ?? quick.find(v => v.is_quick_add) ?? quick[0])
+      : (quick.find(v => v.is_quick_add) ?? quick[0])
+    if (defaultVariant) {
+      updateVariantQuantity(card.id, defaultVariant.id, 1)
+    }
+  }, [userId, updateVariantQuantity])
+
+  // Touch quick-remove — decrements the quick-add variant by 1 (floor 0).
+  const handleTouchRemove = useCallback((card: PokemonCard) => {
+    if (!userId) return
+    const quick = cardVariantDotsRef.current.get(card.id) || []
+    const defaultVariant = card.default_variant_id
+      ? (quick.find(v => v.id === card.default_variant_id) ?? quick.find(v => v.is_quick_add) ?? quick[0])
+      : (quick.find(v => v.is_quick_add) ?? quick[0])
+    if (defaultVariant && defaultVariant.quantity > 0) {
+      updateVariantQuantity(card.id, defaultVariant.id, -1)
+    }
+  }, [userId, updateVariantQuantity])
+
   // Open card modal (right-click / context-menu on card image)
   const handleCardRightClick = useCallback((e: React.MouseEvent, card: PokemonCard) => {
     e.preventDefault()
@@ -1459,7 +1485,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
 
   return (
     <>
-      <div className="flex flex-wrap gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
         {filteredCards.map(card => {
           const userCard    = userCards.get(card.id)
           // variantDots: same array reference for unchanged cards → React.memo skips re-render
@@ -1513,6 +1539,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
               onVariantClick={handleVariantClick}
               onVariantContextMenu={handleVariantClick}
               onVariantGrayClick={handleCardClick}
+              onTouchAdd={handleTouchAdd}
+              onTouchRemove={handleTouchRemove}
             />
           )
         })}
@@ -1543,9 +1571,9 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
         maxWidth="5xl"
       >
         {selectedCard && (
-          <div className="flex gap-6">
+          <div className="flex flex-col sm:flex-row gap-6">
             {/* Left side - Card Image with holographic glare + artist */}
-            <div className="flex-shrink-0 flex flex-col">
+            <div className="flex-shrink-0 flex flex-col w-full sm:w-auto">
               <CardGlareImage
                 src={selectedCard.image ?? selectedCard.image_url}
                 variantSrc={variantImageSrc}
@@ -1571,7 +1599,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
             </div>
 
             {/* Right side - Card Details */}
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 w-full">
               {/* Header */}
               <div className="flex justify-between items-start mb-4">
                 <div>

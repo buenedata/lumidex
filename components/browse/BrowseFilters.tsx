@@ -46,90 +46,92 @@ export default function BrowseFilters({ filters, onChange }: BrowseFiltersProps)
 
   return (
     <div className="border-b border-subtle" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
-      <div className="max-w-screen-2xl mx-auto px-6 py-3 flex flex-wrap items-center gap-2">
+      <div className="max-w-screen-2xl mx-auto px-6 py-2 overflow-x-auto">
+        <div className="flex items-center gap-2 flex-nowrap min-w-max py-1">
 
-        {/* ── Supertype toggles ─────────────────────────────────────── */}
-        {SUPERTYPES.map(st => {
-          const active = filters.supertype === st
-          const icon = st === 'Pokémon' ? '🔴' : st === 'Trainer' ? '🟡' : '⚡'
-          return (
-            <button
-              key={st}
-              onClick={() => onChange('supertype', active ? '' : st)}
+          {/* ── Supertype toggles ─────────────────────────────────────── */}
+          {SUPERTYPES.map(st => {
+            const active = filters.supertype === st
+            const icon = st === 'Pokémon' ? '🔴' : st === 'Trainer' ? '🟡' : '⚡'
+            return (
+              <button
+                key={st}
+                onClick={() => onChange('supertype', active ? '' : st)}
+                className={cn(
+                  'pill px-3 py-2 rounded-full text-xs font-medium border transition-all min-h-[44px] shrink-0',
+                  active
+                    ? 'bg-accent/15 text-accent border-accent/50'
+                    : 'bg-elevated text-secondary border-subtle hover:border-accent/30 hover:text-primary',
+                )}
+              >
+                {icon} {st}
+              </button>
+            )
+          })}
+
+          {/* Divider */}
+          <div className="w-px h-5 bg-border mx-1 shrink-0" />
+
+          {/* ── Type select ───────────────────────────────────────────── */}
+          <div className="relative shrink-0">
+            <select
+              value={filters.type}
+              onChange={e => onChange('type', e.target.value)}
               className={cn(
-                'pill px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
-                active
-                  ? 'bg-accent/15 text-accent border-accent/50'
-                  : 'bg-elevated text-secondary border-subtle hover:border-accent/30 hover:text-primary',
+                'pill appearance-none min-h-[44px] h-11 pl-3 pr-7 rounded-full text-xs font-medium border cursor-pointer transition-all focus:outline-none focus:ring-1 focus:ring-accent/30',
+                filters.type
+                  ? typeActive
+                  : 'bg-elevated text-secondary border-subtle hover:border-accent/30',
               )}
             >
-              {icon} {st}
+              <option value="">Type</option>
+              {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <svg
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted"
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+
+          {/* ── Rarity select ─────────────────────────────────────────── */}
+          <div className="relative shrink-0">
+            <select
+              value={filters.rarity}
+              onChange={e => onChange('rarity', e.target.value)}
+              className={cn(
+                'pill appearance-none min-h-[44px] h-11 pl-3 pr-7 rounded-full text-xs font-medium border cursor-pointer transition-all focus:outline-none focus:ring-1 focus:ring-accent/30',
+                filters.rarity
+                  ? rarityActive
+                  : 'bg-elevated text-secondary border-subtle hover:border-accent/30',
+              )}
+            >
+              <option value="">Rarity</option>
+              {RARITIES.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <svg
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted"
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+
+          {/* ── Clear all ─────────────────────────────────────────────── */}
+          {hasAny && (
+            <button
+              onClick={() => {
+                onChange('type', '')
+                onChange('rarity', '')
+                onChange('supertype', '')
+              }}
+              className="ml-2 shrink-0 text-xs text-muted hover:text-danger transition-colors min-h-[44px] px-2"
+            >
+              Clear all
             </button>
-          )
-        })}
-
-        {/* Divider */}
-        <div className="w-px h-5 bg-border mx-1 shrink-0" />
-
-        {/* ── Type select ───────────────────────────────────────────── */}
-        <div className="relative">
-          <select
-            value={filters.type}
-            onChange={e => onChange('type', e.target.value)}
-            className={cn(
-              'pill appearance-none h-7 pl-3 pr-7 rounded-full text-xs font-medium border cursor-pointer transition-all focus:outline-none focus:ring-1 focus:ring-accent/30',
-              filters.type
-                ? typeActive
-                : 'bg-elevated text-secondary border-subtle hover:border-accent/30',
-            )}
-          >
-            <option value="">Type</option>
-            {TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <svg
-            className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted"
-            fill="none" stroke="currentColor" viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
+          )}
         </div>
-
-        {/* ── Rarity select ─────────────────────────────────────────── */}
-        <div className="relative">
-          <select
-            value={filters.rarity}
-            onChange={e => onChange('rarity', e.target.value)}
-            className={cn(
-              'pill appearance-none h-7 pl-3 pr-7 rounded-full text-xs font-medium border cursor-pointer transition-all focus:outline-none focus:ring-1 focus:ring-accent/30',
-              filters.rarity
-                ? rarityActive
-                : 'bg-elevated text-secondary border-subtle hover:border-accent/30',
-            )}
-          >
-            <option value="">Rarity</option>
-            {RARITIES.map(r => <option key={r} value={r}>{r}</option>)}
-          </select>
-          <svg
-            className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted"
-            fill="none" stroke="currentColor" viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </div>
-
-        {/* ── Clear all ─────────────────────────────────────────────── */}
-        {hasAny && (
-          <button
-            onClick={() => {
-              onChange('type', '')
-              onChange('rarity', '')
-              onChange('supertype', '')
-            }}
-            className="ml-auto text-xs text-muted hover:text-danger transition-colors"
-          >
-            Clear all
-          </button>
-        )}
       </div>
     </div>
   )
