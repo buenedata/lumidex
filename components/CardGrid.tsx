@@ -1591,7 +1591,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
               <button
                 onClick={() => { setSelectedCard(null); setHoveredVariantId(null) }}
                 aria-label="Close card details"
-                className="absolute top-2 right-2 z-10 w-9 h-9 rounded-full bg-slate-700/80 hover:bg-slate-600 flex items-center justify-center text-slate-300 hover:text-white transition-colors"
+                className="absolute top-2 right-2 z-10 w-9 h-9 rounded-full bg-slate-700/80 hover:bg-slate-600 flex items-center justify-center text-slate-300 hover:text-white transition-colors md:hidden"
               >
                 ✕
               </button>
