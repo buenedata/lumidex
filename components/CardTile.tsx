@@ -151,12 +151,12 @@ function CardTileInner({
 
         {/* ── Mobile variant picker button ─────────────────────────────────
             Tapping this opens the variant bottom sheet in CardGrid.
-            Shown on all devices — small and unobtrusive in the corner.     */}
+            Hidden on desktop (md:hidden) — only visible on touch/mobile.   */}
         {onMobileVariantOpen && (
           <button
             onClick={(e) => { e.stopPropagation(); onMobileVariantOpen() }}
             aria-label="Pick variant to add"
-            className="absolute bottom-1 right-1 z-20 w-8 h-8 rounded-full bg-indigo-600/90 text-white text-lg font-bold flex items-center justify-center shadow-lg leading-none"
+            className="absolute bottom-1 right-1 z-20 w-8 h-8 rounded-full bg-indigo-600/90 text-white text-lg font-bold flex items-center justify-center shadow-lg leading-none md:hidden"
           >
             +
           </button>
@@ -166,7 +166,6 @@ function CardTileInner({
       {/* ── Variant dots row — always rendered so text aligns consistently ── */}
       <div
         className="w-full flex gap-1 flex-wrap justify-center px-2 pt-1.5 min-h-[28px]"
-        onClick={e => e.stopPropagation()}
       >
         {buttonsToRender.map(variant => (
           <button
