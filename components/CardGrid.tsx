@@ -20,12 +20,24 @@ import type { PriceChartRange } from '@/components/PriceChart'
 const PriceChart = dynamic(() => import('@/components/PriceChart'), { ssr: false })
 
 /**
- * Maps a Lumidex variant name to the Cardmarket price variant key used in item_prices.
- * Cardmarket only distinguishes 'normal' and 'reverse_holo'.
- * All other variants (holo, jumbo, metal_card, cosmos_holo, etc.) map to 'normal'.
+ * Maps a Lumidex variant key to the item_prices.variant key used in the DB.
+ *
+ * Rules:
+ *  - 'reverse'  → 'reverse_holo'   Lumidex stores the Reverse Holo key as 'reverse';
+ *                                   item_prices uses 'reverse_holo'.
+ *  - 'holo'     → 'normal'          CardMarket has no separate holo listing for Holo Rare
+ *                                   cards — their single standard CM price is stored as
+ *                                   'normal' in item_prices.
+ *  - everything else → key as-is    Card-specific variants (e.g. 'cosmos_holo', 'confetti',
+ *                                   'holiday', 'pokeball', 'masterball') are each stored
+ *                                   under their own key in item_prices. If no price row
+ *                                   exists for that key the display shows '—' rather than
+ *                                   incorrectly falling back to the Normal price.
  */
 function toPriceVariant(lumidexVariant: string): string {
-  return lumidexVariant === 'reverse_holo' ? 'reverse_holo' : 'normal'
+  if (lumidexVariant === 'reverse') return 'reverse_holo'
+  if (lumidexVariant === 'holo')    return 'normal'
+  return lumidexVariant
 }
 
 type ModalTab = 'card' | 'price' | 'friends'
@@ -1830,6 +1842,9 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                                 const price = isPro
                                   ? (modalGradedPrices?.[key] ?? null)
                                   : PLACEHOLDER[i]
+
+                                // For Pro users, skip rows that have no price data
+                                if (isPro && price == null) return null
 
                                 const companyColor =
                                   company === 'PSA' ? 'text-blue-400'   :
