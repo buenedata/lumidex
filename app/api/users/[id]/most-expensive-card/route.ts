@@ -5,15 +5,14 @@ import { supabaseAdmin } from '@/lib/supabase'
  * GET /api/users/[id]/most-expensive-card
  *
  * Returns the single highest-priced card the user actually owns (quantity ≥ 1).
- * Uses the same dual-path price lookup as /api/users/[id]/portfolio-value:
  *
- *   Path A — TCGGO: item_id = cards.tcggo_id (as text)
- *   Path B — CM:    item_id = cards.id (UUID), source = 'cardmarket'
+ * Price lookup uses the same proven dual-path strategy as
+ * /api/prices/set-stats/[setId] (commit eb28ee8):
+ *
+ *   Path A — TCGGO: item_id = String(cards.tcggo_id)
+ *   Path B — CM:    item_id = cards.id (UUID), for cards without a tcggo_id
  *
  * Only cards present in user_card_variants with quantity > 0 are considered.
- * The `set-stats` endpoint is intentionally ownership-agnostic (it returns the
- * globally most expensive card in a set). This dedicated endpoint exists so the
- * dashboard "MOST EXPENSIVE" widget shows the priciest card the user actually owns.
  *
  * Response:
  *   { name, number, image, setName, price, currency: 'EUR' }
@@ -45,9 +44,8 @@ export async function GET(
     return NextResponse.json({ price: null, currency: 'EUR' })
   }
 
-  // Deduplicate card IDs (a card may have multiple variant rows for different variants)
-  const cardIdSet = new Set<string>(ownedVariants.map((v) => v.card_id as string))
-  const cardIds   = Array.from(cardIdSet)
+  // Deduplicate: one entry per unique card_id
+  const cardIds = [...new Set(ownedVariants.map((v) => v.card_id as string))]
 
   // ── Step 2: Fetch card details for all owned cards ────────────────────────
   const { data: cardRows, error: cardError } = await supabaseAdmin
@@ -64,28 +62,7 @@ export async function GET(
     return NextResponse.json({ price: null, currency: 'EUR' })
   }
 
-  // ── Step 3: Resolve set names in one query ────────────────────────────────
-  const setIdSet = new Set<string>(
-    cardRows
-      .map((c) => c.set_id as string | null)
-      .filter((id): id is string => id != null),
-  )
-
-  const { data: setRows, error: setError } = await supabaseAdmin
-    .from('sets')
-    .select('set_id, name')
-    .in('set_id', Array.from(setIdSet))
-
-  if (setError) {
-    // Non-fatal — widget will just omit the set name
-    console.error('[most-expensive-card] set name fetch error:', setError)
-  }
-
-  const setNameMap = new Map<string, string>(
-    (setRows ?? []).map((s) => [s.set_id as string, s.name as string]),
-  )
-
-  // ── Step 4: Build dual-path lookup maps ───────────────────────────────────
+  // ── Step 3: Build dual-path lookup maps (mirrors set-stats exactly) ───────
   interface CardMeta {
     id: string
     name: string | null
@@ -107,18 +84,38 @@ export async function GET(
     }
   }
 
-  const tcggoItemIds = Array.from(cardByTcggoId.keys())
-  const cardUUIDs    = Array.from(cardByUUID.keys())
+  const tcggoIds  = Array.from(cardByTcggoId.keys())
+  const cardUUIDs = Array.from(cardByUUID.keys())
 
-  // ── Step 5: Fetch prices via both paths in parallel ───────────────────────
+  if (tcggoIds.length === 0 && cardUUIDs.length === 0) {
+    return NextResponse.json({ price: null, currency: 'EUR' })
+  }
+
+  // ── Step 4: Resolve set names ─────────────────────────────────────────────
+  const setIdSet = new Set(
+    (cardRows as CardMeta[])
+      .map((c) => c.set_id)
+      .filter((id): id is string => id != null),
+  )
+
+  const { data: setRows } = await supabaseAdmin
+    .from('sets')
+    .select('set_id, name')
+    .in('set_id', Array.from(setIdSet))
+
+  const setNameMap = new Map<string, string>(
+    (setRows ?? []).map((s) => [s.set_id as string, s.name as string]),
+  )
+
+  // ── Step 5: Fetch prices via both paths in parallel (mirrors set-stats) ───
   interface PriceRow { item_id: string; price: number }
 
   const [tcggoPriceResult, cmPriceResult] = await Promise.all([
-    tcggoItemIds.length > 0
+    tcggoIds.length > 0
       ? supabaseAdmin
           .from('item_prices')
           .select('item_id, price')
-          .in('item_id', tcggoItemIds)
+          .in('item_id', tcggoIds)
           .eq('item_type', 'single')
           .eq('variant', 'normal')
           .not('price', 'is', null)
@@ -144,34 +141,36 @@ export async function GET(
     return NextResponse.json({ error: 'Price lookup failed' }, { status: 500 })
   }
 
-  // ── Step 6: Find the most expensive owned card ────────────────────────────
+  // ── Step 6: Merge results into a priced-card list (mirrors set-stats) ─────
   interface PricedCard { card: CardMeta; price: number }
-  let best: PricedCard | null = null
+  const pricedCards: PricedCard[] = []
 
-  for (const row of (tcggoPriceResult.data ?? []) as PriceRow[]) {
-    const card = cardByTcggoId.get(row.item_id)
-    if (card && (best === null || row.price > best.price)) {
-      best = { card, price: row.price }
-    }
+  for (const r of (tcggoPriceResult.data ?? []) as PriceRow[]) {
+    const card = cardByTcggoId.get(r.item_id)
+    if (card) pricedCards.push({ card, price: r.price })
   }
-  for (const row of (cmPriceResult.data ?? []) as PriceRow[]) {
-    const card = cardByUUID.get(row.item_id)
-    if (card && (best === null || row.price > best.price)) {
-      best = { card, price: row.price }
-    }
+  for (const r of (cmPriceResult.data ?? []) as PriceRow[]) {
+    const card = cardByUUID.get(r.item_id)
+    if (card) pricedCards.push({ card, price: r.price })
   }
 
-  if (!best) {
+  if (pricedCards.length === 0) {
     return NextResponse.json({ price: null, currency: 'EUR' })
   }
 
+  // ── Step 7: Pick the highest-priced card ─────────────────────────────────
+  const best = pricedCards.reduce<PricedCard>(
+    (max, pc) => (pc.price > max.price ? pc : max),
+    pricedCards[0],
+  )
+
   return NextResponse.json(
     {
-      name:     best.card.name   ?? null,
-      number:   best.card.number ?? null,
-      image:    best.card.image  ?? null,
-      setName:  best.card.set_id ? (setNameMap.get(best.card.set_id) ?? null) : null,
-      price:    best.price,
+      name:    best.card.name   ?? null,
+      number:  best.card.number ?? null,
+      image:   best.card.image  ?? null,
+      setName: best.card.set_id ? (setNameMap.get(best.card.set_id) ?? null) : null,
+      price:   best.price,
       currency: 'EUR',
     },
     { headers: { 'Cache-Control': 'private, no-cache' } },
