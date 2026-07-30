@@ -110,6 +110,9 @@ export const getSets = unstable_cache(
       .from('sets')
       .select('id:set_id, name, series, total:setTotal, setComplete, release_date, logo_url, symbol_url, created_at, language')
       .order('release_date', { ascending: false })
+      // Explicit high limit to bypass PostgREST's default max_rows cap (typically 1 000).
+      // Raise this ceiling if the catalogue ever exceeds 2 000 sets.
+      .limit(2000)
 
     if (error) {
       console.error('Error fetching sets:', error)

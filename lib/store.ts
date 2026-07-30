@@ -69,9 +69,20 @@ interface CollectionState {
   /**
    * Total count of distinct (card_id, variant_id) rows owned with quantity > 0.
    * Each variant type is counted once regardless of how many duplicate copies exist.
-   * Used for the "Cards Collected" display on the dashboard hero.
    */
   totalCardVariantCount: number
+  /**
+   * DB-aggregated SUM of all quantity values across every user_card_variants row.
+   * Computed server-side via get_user_collection_stats RPC to avoid PostgREST's
+   * default max_rows cap (1 000) truncating large collections.
+   */
+  cardsOwned: number
+  /**
+   * DB-aggregated COUNT of distinct card_id values the user owns (quantity > 0).
+   * One card always counts as 1 regardless of how many variants or copies are tracked.
+   * Computed server-side via get_user_collection_stats RPC.
+   */
+  distinctCardsOwned: number
   pokemonSets: Map<string, PokemonSet>
   pokemonCards: Map<string, PokemonCard[]>
   /** True while a fetchPokemonSets request is in-flight — prevents duplicate concurrent calls. */
@@ -101,6 +112,8 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
   userCards: new Map(),
   userCardCountBySet: new Map(),
   totalCardVariantCount: 0,
+  cardsOwned: 0,
+  distinctCardsOwned: 0,
   pokemonSets: new Map(),
   pokemonCards: new Map(),
   isFetchingSets: false,
@@ -224,24 +237,31 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
     const { user } = useAuthStore.getState()
     if (!user) return
 
-    // Read from user_card_variants (new source of truth) and aggregate
-    // total quantities per card. The legacy user_cards table can diverge
-    // from user_card_variants when variants are removed without going
-    // through the legacy update path, so we no longer rely on it here.
-    // Add an explicit limit well above any realistic collection size to bypass
-    // Supabase/PostgREST's default 1 000-row cap. Without this, users with
-    // > 1 000 variant rows (e.g. 2 698 rows) get a truncated card map.
-    const { data, error } = await supabase
-      .from('user_card_variants')
-      .select('card_id, quantity')
-      .eq('user_id', user.id)
-      .gt('quantity', 0)
-      .limit(10000)
-
-    // Fetch per-set owned card counts via the RPC (one row per set,
-    // far cheaper than joining every variant row in JS).
-    const { data: setCounts, error: setCountError } = await supabase
-      .rpc('get_user_card_counts_by_set', { p_user_id: user.id })
+    // Fire all three reads in parallel for speed.
+    //
+    // 1. Raw variant rows — used to build the local card map for set-level UI.
+    //    .limit(10000) is a best-effort guard; PostgREST's server-side max_rows
+    //    may still cap this at 1 000 on some projects, which is why totals for
+    //    dashboard stats come from the aggregate RPC instead (see #3 below).
+    //
+    // 2. Per-set card counts via RPC — powers set-completion progress rings.
+    //
+    // 3. Aggregate stats RPC — returns SUM(quantity) and COUNT(DISTINCT card_id)
+    //    in a single row, bypassing the row-count cap entirely.
+    const [
+      { data, error },
+      { data: setCounts, error: setCountError },
+      { data: statsData, error: statsError },
+    ] = await Promise.all([
+      supabase
+        .from('user_card_variants')
+        .select('card_id, quantity')
+        .eq('user_id', user.id)
+        .gt('quantity', 0)
+        .limit(10000),
+      supabase.rpc('get_user_card_counts_by_set', { p_user_id: user.id }),
+      supabase.rpc('get_user_collection_stats',   { p_user_id: user.id }),
+    ])
 
     if (data && !error) {
       const cardMap = new Map<string, { id: string; user_id: string; card_id: string; quantity: number; maxVariantQty: number; duplicateCount: number }>()
@@ -277,7 +297,21 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
         console.error('Error fetching user card counts by set:', setCountError)
       }
 
-      set({ userCards: cardMap, userCardCountBySet: countBySet, totalCardVariantCount: data.length })
+      // Aggregate stats from the server-side RPC (accurate, no row-cap risk)
+      const stats = statsData?.[0]
+      const cardsOwned      = stats ? Number(stats.total_quantity) : 0
+      const distinctCardsOwned = stats ? Number(stats.distinct_cards) : 0
+      if (statsError) {
+        console.error('Error fetching collection stats:', statsError)
+      }
+
+      set({
+        userCards: cardMap,
+        userCardCountBySet: countBySet,
+        totalCardVariantCount: data.length,
+        cardsOwned,
+        distinctCardsOwned,
+      })
     }
   },
 
