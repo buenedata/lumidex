@@ -35,7 +35,8 @@ export default function CollectionSpotlight({
 }: CollectionSpotlightProps) {
   const { profile } = useAuthStore()
   const { t } = useLocale()
-  const currency = (profile as any)?.preferred_currency ?? 'USD'
+  const currency   = (profile as any)?.preferred_currency ?? 'USD'
+  const profileId  = (profile as any)?.id as string | undefined
 
   const [mostExpensiveInfo,   setMostExpensiveInfo]   = useState<MostExpensiveInfo | null>(null)
   const [collectionValueEur,  setCollectionValueEur]  = useState<number | null>(null)
@@ -43,48 +44,57 @@ export default function CollectionSpotlight({
 
   useEffect(() => {
     if (sets.length === 0) return
+    if (!profileId) return
     let cancelled = false
 
     setPricesLoaded(false)
 
-    Promise.all(
+    // Fetch set-stats for collection value + most-expensive-card for ownership-aware widget
+    const setStatsPromise = Promise.all(
       sets.map(set =>
         fetch(`/api/prices/set-stats/${set.id}`)
           .then(r => (r.ok ? r.json() : null))
           .catch(() => null),
       ),
-    ).then(results => {
+    )
+
+    const mostExpensivePromise = fetch(`/api/users/${profileId}/most-expensive-card`)
+      .then(r => (r.ok ? r.json() : null))
+      .catch(() => null)
+
+    Promise.all([setStatsPromise, mostExpensivePromise]).then(([setResults, meData]) => {
       if (cancelled) return
+
+      // Aggregate collection value from set-stats (unchanged logic)
       let totalValue = 0
-      let maxPrice   = 0
-      let bestCard: MostExpensiveInfo | null = null
-      let hasData    = false
-
-      for (const data of results) {
+      let hasSetData = false
+      for (const data of setResults) {
         if (!data) continue
-        if (data.setValue    != null) { totalValue += data.setValue; hasData = true }
-        if ((data.mostExpensive ?? 0) > maxPrice) {
-          maxPrice = data.mostExpensive
-          hasData  = true
-          bestCard = {
-            price:   data.mostExpensive,
-            name:    data.mostExpensiveCard?.name    ?? null,
-            number:  data.mostExpensiveCard?.number  ?? null,
-            image:   data.mostExpensiveCard?.image   ?? null,
-            setName: data.mostExpensiveCard?.setName ?? null,
-          }
-        }
+        if (data.setValue != null) { totalValue += data.setValue; hasSetData = true }
+      }
+      if (hasSetData) {
+        setCollectionValueEur(totalValue > 0 ? totalValue : null)
       }
 
-      if (hasData) {
-        setCollectionValueEur(totalValue > 0 ? totalValue : null)
-        setMostExpensiveInfo(maxPrice > 0 ? bestCard : null)
+      // Most expensive card comes exclusively from the user-scoped endpoint
+      // so it only reflects cards the user actually owns.
+      if (meData && meData.price != null) {
+        setMostExpensiveInfo({
+          price:   meData.price,
+          name:    meData.name    ?? null,
+          number:  meData.number  ?? null,
+          image:   meData.image   ?? null,
+          setName: meData.setName ?? null,
+        })
+      } else {
+        setMostExpensiveInfo(null)
       }
+
       setPricesLoaded(true)
     })
 
     return () => { cancelled = true }
-  }, [sets.length])
+  }, [sets.length, profileId])
 
   if (sets.length === 0) return null
 
