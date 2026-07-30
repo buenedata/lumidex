@@ -16,9 +16,9 @@ export default function CollectionPage() {
   const { user, isLoading: authLoading, profile } = useAuthStore()
   const {
     userSets,
-    userCards,
     pokemonSets,
     userCardCountBySet,
+    cardsOwned,
     fetchUserSets,
     fetchUserCards,
     fetchPokemonSets,
@@ -45,35 +45,26 @@ export default function CollectionPage() {
     if (userCardCountBySet.size === 0) fetchUserCards()
   }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch collection value from set-stats once we know which sets the user has.
-  // Uses userSets (store state) directly so this effect can be declared before
-  // the derived userPokemonSets variable below.
+  // Fetch collection value — price × quantity for all owned cards via the
+  // portfolio-value endpoint. Replaces the old set-stats approach that summed
+  // market prices for every card in each set without considering ownership or qty.
   useEffect(() => {
-    const setIds = userSets.map(us => us.set_id)
-    if (setIds.length === 0) return
+    if (!user) return
     let cancelled = false
 
-    Promise.all(
-      setIds.map(setId =>
-        fetch(`/api/prices/set-stats/${setId}`)
-          .then(r => (r.ok ? r.json() : null))
-          .catch(() => null),
-      ),
-    ).then(results => {
-      if (cancelled) return
-      let total   = 0
-      let hasData = false
-      for (const data of results) {
-        if (data?.setValue != null) { total += data.setValue; hasData = true }
-      }
-      if (hasData) {
-        const cur = (profile as any)?.preferred_currency ?? 'USD'
-        setCollectionValue(fmtCardPrice({ eur: total, usd: null }, cur))
-      }
-    })
+    fetch(`/api/users/${user.id}/portfolio-value`)
+      .then(r => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then(data => {
+        if (cancelled) return
+        if (data?.value != null) {
+          const cur = (profile as any)?.preferred_currency ?? 'USD'
+          setCollectionValue(fmtCardPrice({ eur: data.value, usd: null }, cur))
+        }
+      })
 
     return () => { cancelled = true }
-  }, [userSets.length, profile]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user?.id, profile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Derive set progress from the store ──────────────────────────────────
   const buildProgress = (setId: string): SetProgress => {
@@ -90,11 +81,8 @@ export default function CollectionPage() {
     userSetIds.has(set.id)
   )
 
-  // Sum all variant quantities — matches dashboard and profile "Cards Owned" count
-  const totalOwnedCards = Array.from(userCards.values()).reduce(
-    (sum, uc) => sum + uc.quantity,
-    0
-  )
+  // cardsOwned from the store is SUM(quantity) via get_user_collection_stats RPC —
+  // accurate for any collection size, identical to the dashboard "Cards Owned" stat.
 
   const avgCompletion =
     userPokemonSets.length > 0
@@ -183,7 +171,7 @@ export default function CollectionPage() {
               </div>
               <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
                 <span className="text-xs text-muted uppercase tracking-wider">Cards Owned</span>
-                <span className="text-2xl font-bold text-primary">{totalOwnedCards.toLocaleString()}</span>
+                <span className="text-2xl font-bold text-primary">{cardsOwned.toLocaleString()}</span>
               </div>
               <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1 col-span-2 md:col-span-1">
                 <span className="text-xs text-muted uppercase tracking-wider">Collection Value</span>

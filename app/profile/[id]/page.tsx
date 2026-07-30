@@ -220,36 +220,23 @@ export default function ProfilePage() {
         setAllAchievements(allAchievementsData as Achievement[])
       }
 
-      // Count distinct (card, variant) pairs owned — each variant type is counted once
-      // regardless of how many duplicate copies the user holds.
-      // Uses PostgREST count=exact (HEAD request) which bypasses the 1 000-row cap.
-      const { count: _variantCount } = await supabase
-        .from('user_card_variants')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', userId)
-        .gt('quantity', 0)
-      const totalCards: number = _variantCount ?? 0
+      // Use RPC for accurate SUM(quantity) — same source as the dashboard "Cards Owned" stat.
+      // The old approach used COUNT(*) of variant rows which gave a row count, not quantity sum.
+      const { data: collectionStats } = await supabase.rpc('get_user_collection_stats', { p_user_id: userId })
+      const totalCards: number = collectionStats?.[0] ? Number(collectionStats[0].total_quantity) : 0
 
-      // Fetch portfolio value — aggregate set-stats for every set the user has started.
-      if ((setsInfo ?? []).length > 0) {
-        Promise.all(
-          (setsInfo ?? []).map(set =>
-            fetch(`/api/prices/set-stats/${set.id}`)
-              .then(r => (r.ok ? r.json() : null))
-              .catch(() => null),
-          ),
-        ).then(results => {
-          let total   = 0
-          let hasData = false
-          for (const data of results) {
-            if (data?.setValue != null) { total += data.setValue; hasData = true }
-          }
-          if (hasData) {
+      // Fetch portfolio value — price × quantity for each owned card.
+      // Replaces the old set-stats approach that summed all cards in each set
+      // regardless of ownership and without multiplying by the user's quantity.
+      fetch(`/api/users/${userId}/portfolio-value`)
+        .then(r => (r.ok ? r.json() : null))
+        .catch(() => null)
+        .then(data => {
+          if (data?.value != null) {
             const cur = userData?.preferred_currency ?? 'USD'
-            setPortfolioValue(fmtCardPrice({ eur: total, usd: null }, cur))
+            setPortfolioValue(fmtCardPrice({ eur: data.value, usd: null }, cur))
           }
         })
-      }
 
       // completedSets — derived from the already-fetched setsInfo + cardCounts (no extra queries)
       const completedSets = (setsInfo ?? []).filter(set => {
