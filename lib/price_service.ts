@@ -59,6 +59,14 @@ function extractGradedPrice(graded: TcggoGradedPricesMap, variant: string): numb
  * @param itemType 'single' | 'graded' | 'product'
  * @param variant  'normal' | 'reverse_holo' | grade key (e.g. 'psa10')
  */
+// ── Supported single-variant keys ─────────────────────────────────────────────
+// TCGGO / CardMarket only provide separate pricing for these two single variants.
+// Special card variants (cosmos_holo, holiday, confetti, pokeball, masterball…)
+// share the same TCGGO lowest_near_mint response, so calling getItemPrice() for
+// them would write the Normal price under a wrong key.  We block those writes
+// early and return null so the display correctly shows '—'.
+const SUPPORTED_SINGLE_VARIANTS = new Set(['normal', 'reverse_holo'])
+
 export async function getItemPrice(
   itemId: string,
   itemType: ItemType,
@@ -69,6 +77,14 @@ export async function getItemPrice(
     throw new Error(`[price_service] Invalid itemType: "${itemType}"`)
   }
   if (typeof variant !== 'string' || !variant) variant = 'normal'
+
+  // Singles: only 'normal' and 'reverse_holo' map to real TCGGO/CardMarket data.
+  // For any other variant key, return null immediately — no DB read, no TCGGO
+  // fetch, no write.  This prevents stale Normal prices from being cached under
+  // variant keys like 'cosmos_holo', 'holiday', 'confetti', etc.
+  if (itemType === 'single' && !SUPPORTED_SINGLE_VARIANTS.has(variant)) {
+    return { price: null, currency: 'EUR', updated_at: new Date().toISOString() }
+  }
 
   // Step 2: check DB cache
   const { data: cached } = await db
@@ -86,6 +102,9 @@ export async function getItemPrice(
   // Step 3: fetch from TCGGO
   let price: number | null = null
   let source: 'tcggo' | 'cardmarket' = 'tcggo'
+  // Trend averages — populated only for 'single' item type; null for graded / product.
+  let cm_30d_avg_eur: number | null = null
+  let cm_7d_avg_eur:  number | null = null
 
   try {
     const endpoint =
@@ -109,7 +128,9 @@ export async function getItemPrice(
     // Step 4: extract price by item type
     if (itemType === 'single') {
       const card = item as TcggoCardResponse
-      price  = card.prices.cardmarket?.lowest_near_mint ?? card.prices.tcg_player?.market_price ?? null
+      price          = card.prices.cardmarket?.lowest_near_mint ?? card.prices.tcg_player?.market_price ?? null
+      cm_30d_avg_eur = card.prices.cardmarket?.["30d_average"] ?? null
+      cm_7d_avg_eur  = card.prices.cardmarket?.["7d_average"]  ?? null
       source = 'tcggo'
     } else if (itemType === 'graded') {
       const card   = item as TcggoCardResponse
@@ -149,7 +170,17 @@ export async function getItemPrice(
   // Step 6: upsert into DB cache
   const now = new Date().toISOString()
   await db.from('item_prices').upsert(
-    { item_id: itemId, item_type: itemType, variant, price, currency: 'EUR', source, updated_at: now },
+    {
+      item_id:        itemId,
+      item_type:      itemType,
+      variant,
+      price,
+      currency:       'EUR',
+      source,
+      updated_at:     now,
+      cm_30d_avg_eur,
+      cm_7d_avg_eur,
+    },
     { onConflict: 'item_id,item_type,variant' },
   )
 

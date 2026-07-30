@@ -36,6 +36,10 @@ export interface ItemPriceRow {
   currency: string;
   source: 'tcggo' | 'cardmarket';
   updated_at: string;
+  /** CardMarket 30-day rolling average (EUR). Non-null only on item_type='single', variant='normal' rows. */
+  cm_30d_avg_eur: number | null;
+  /** CardMarket 7-day rolling average (EUR). Non-null only on item_type='single', variant='normal' rows. */
+  cm_7d_avg_eur: number | null;
 }
 
 // TCGGO API response shape (partial — only price-relevant fields)
@@ -43,6 +47,10 @@ export interface TcggoCardPrices {
   cardmarket?: {
     currency: string;
     lowest_near_mint?: number | null;
+    /** 30-day rolling average price (EUR) */
+    "30d_average"?: number | null;
+    /** 7-day rolling average price (EUR) */
+    "7d_average"?: number | null;
     graded?: TcggoGradedPricesMap | TcggoGradedPricesMap[];
   };
   tcg_player?: {

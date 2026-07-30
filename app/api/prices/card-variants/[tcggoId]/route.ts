@@ -18,6 +18,16 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 
+// ── Singles variant allow-list ─────────────────────────────────────────────────
+// TCGGO / CardMarket only provide reliable pricing for these two single variants.
+// Any other variant key in item_prices (e.g. 'cosmos_holo', 'holiday', 'confetti')
+// was written incorrectly — the TCGGO API returned the Normal lowest_near_mint
+// under that key because it is variant-blind for singles.  Filtering here means
+// the display immediately shows '—' for those variants even while stale DB rows
+// still exist (no migration required).
+// When proper per-variant CardMarket scraping is added, expand this set.
+const SUPPORTED_SINGLE_VARIANTS = new Set(['normal', 'reverse_holo'])
+
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ tcggoId: string }> },
@@ -46,7 +56,12 @@ export async function GET(
 
   for (const row of data ?? []) {
     if (row.item_type === 'single') {
-      variants[row.variant] = row.price ?? null
+      // Only include variants that have genuine TCGGO/CardMarket price data.
+      // Unsupported keys (cosmos_holo, holiday, confetti, …) are suppressed so
+      // the card modal shows '—' rather than a misleading Normal price.
+      if (SUPPORTED_SINGLE_VARIANTS.has(row.variant)) {
+        variants[row.variant] = row.price ?? null
+      }
     } else if (row.item_type === 'graded') {
       graded[row.variant] = row.price ?? null
     }

@@ -31,6 +31,10 @@ interface TcggoCardEntry {
   prices: {
     cardmarket?: {
       lowest_near_mint?: number | null
+      /** 30-day rolling average price (EUR) */
+      "30d_average"?: number | null
+      /** 7-day rolling average price (EUR) */
+      "7d_average"?: number | null
       graded?: TcggoGradedPrices | unknown[] | null
       currency?: string
     } | null
@@ -71,20 +75,45 @@ export function buildPriceRows(card: TcggoCardEntry, now: string) {
     currency: string
     source: string
     updated_at: string
+    cm_30d_avg_eur: number | null
+    cm_7d_avg_eur:  number | null
   }> = []
 
-  // Singles row
+  // Singles row — Normal
+  // cm_30d_avg_eur / cm_7d_avg_eur are card-level CardMarket averages; they are
+  // attached to this row only (not to reverse_holo or graded rows).
   rows.push({
-    item_id:    String(card.id),
-    item_type:  'single',
-    variant:    'normal',
-    price:      card.prices?.cardmarket?.lowest_near_mint ?? null,
-    currency:   'EUR',
-    source:     'tcggo',
-    updated_at: now,
+    item_id:        String(card.id),
+    item_type:      'single',
+    variant:        'normal',
+    price:          card.prices?.cardmarket?.lowest_near_mint ?? null,
+    currency:       'EUR',
+    source:         'tcggo',
+    updated_at:     now,
+    cm_30d_avg_eur: card.prices?.cardmarket?.["30d_average"] ?? null,
+    cm_7d_avg_eur:  card.prices?.cardmarket?.["7d_average"]  ?? null,
+  })
+
+  // Singles row — Reverse Holo
+  // The TCGGO bulk episode-cards endpoint does not expose a separate Reverse Holo
+  // price; we store the same lowest_near_mint as a best-effort approximation.
+  // When per-card CardMarket scraping (using buildCardmarketUrl + ?isReverseHolo=Y)
+  // is implemented, those individual calls will overwrite this row with the real value.
+  // Trend averages are not variant-specific so they remain null here.
+  rows.push({
+    item_id:        String(card.id),
+    item_type:      'single',
+    variant:        'reverse_holo',
+    price:          card.prices?.cardmarket?.lowest_near_mint ?? null,
+    currency:       'EUR',
+    source:         'tcggo',
+    updated_at:     now,
+    cm_30d_avg_eur: null,
+    cm_7d_avg_eur:  null,
   })
 
   // Graded rows — only when graded is a plain object (not an array)
+  // Trend averages are card-level (not per-grade), so they are null on all graded rows.
   const graded = card.prices?.cardmarket?.graded
   if (graded !== null && graded !== undefined && !Array.isArray(graded)) {
     const g = graded as TcggoGradedPrices
@@ -92,13 +121,15 @@ export function buildPriceRows(card: TcggoCardEntry, now: string) {
       const price = extract(g)
       if (price !== undefined) {
         rows.push({
-          item_id:    String(card.id),
-          item_type:  'graded',
-          variant:    key,
-          price:      price ?? null,
-          currency:   'EUR',
-          source:     'cardmarket',
-          updated_at: now,
+          item_id:        String(card.id),
+          item_type:      'graded',
+          variant:        key,
+          price:          price ?? null,
+          currency:       'EUR',
+          source:         'cardmarket',
+          updated_at:     now,
+          cm_30d_avg_eur: null,
+          cm_7d_avg_eur:  null,
         })
       }
     }
@@ -151,7 +182,25 @@ export async function fetchEpisodeCards(episodeId: string): Promise<TcggoCardEnt
 
     if (!res.ok) {
       const detail = await res.text()
-      throw Object.assign(new Error('TCGGO fetch failed'), { httpStatus: res.status, detail })
+
+      // Translate well-known RapidAPI subscription/auth failure codes into
+      // human-readable messages so they surface clearly in logs and response bodies.
+      let message = 'TCGGO fetch failed'
+      if (res.status === 403) {
+        message =
+          'RapidAPI returned 403 — subscription may be cancelled or the RAPIDAPI_KEY is invalid. ' +
+          'Check your RapidAPI dashboard for the cardmarket-api-tcg subscription status.'
+      } else if (res.status === 401) {
+        message =
+          'RapidAPI returned 401 — RAPIDAPI_KEY is missing or rejected. ' +
+          'Verify the RAPIDAPI_KEY environment variable is set correctly in production.'
+      } else if (res.status === 429) {
+        message =
+          'RapidAPI returned 429 — monthly quota or rate limit exceeded. ' +
+          'Check your RapidAPI usage dashboard and consider upgrading the plan.'
+      }
+
+      throw Object.assign(new Error(message), { httpStatus: res.status, detail })
     }
 
     const json     = (await res.json()) as TcggoEpisodeCardsResponse

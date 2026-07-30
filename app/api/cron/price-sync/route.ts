@@ -35,6 +35,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  // ── Guard: RAPIDAPI_KEY must be present ─────────────────────────────────────
+  if (!process.env.RAPIDAPI_KEY) {
+    console.error('[cron/price-sync] RAPIDAPI_KEY env var is not set — aborting')
+    return NextResponse.json(
+      { error: 'Server misconfiguration', detail: 'RAPIDAPI_KEY env var is missing' },
+      { status: 500 },
+    )
+  }
+
   // ── Pick the most-overdue sets ───────────────────────────────────────────────
   const { data: sets, error: setsError } = await supabaseAdmin
     .from('sets')
@@ -73,17 +82,24 @@ export async function GET(req: NextRequest) {
       const singleRows = allRows.filter((r) => r.item_type === 'single')
       const gradedRows = allRows.filter((r) => r.item_type === 'graded')
 
-      await batchUpsert(singleRows)
-      await batchUpsert(gradedRows)
+      // Bug 3 fix: capture actual written counts from batchUpsert rather than
+      // using the attempt counts (singleRows.length / gradedRows.length).
+      const { synced: singlesSynced } = await batchUpsert(singleRows)
+      const { synced: gradedSynced }  = await batchUpsert(gradedRows)
 
       // Stamp the set so it moves to the back of the queue
-      await supabaseAdmin
+      // Bug 1 fix: capture the update error and log it instead of silently
+      // discarding it — a failed stamp must not abort the run, just be visible.
+      const { error: stampError } = await supabaseAdmin
         .from('sets')
         .update({ prices_last_synced_at: now })
         .eq('set_id', set.set_id)
+      if (stampError) {
+        console.error('[cron/price-sync] Failed to stamp prices_last_synced_at for set', set.set_id, stampError)
+      }
 
-      totalSingles    += singleRows.length
-      totalGradedRows += gradedRows.length
+      totalSingles    += singlesSynced
+      totalGradedRows += gradedSynced
       setsSynced++
 
       console.log(
@@ -96,7 +112,20 @@ export async function GET(req: NextRequest) {
         ? `${err.message} | detail=${e.detail ?? ''} | httpStatus=${e.httpStatus ?? 'n/a'}`
         : String(err)
       console.error(`[cron/price-sync] Failed for set ${set.set_id} (api_set_id=${set.api_set_id}):`, msg)
-      setsSkipped++
+      // Surface the error so it is visible in the cron-jobs.org response body,
+      // not just buried in Vercel function logs.
+      return NextResponse.json(
+        {
+          success:      false,
+          sets_synced:  setsSynced,
+          sets_skipped: ++setsSkipped,
+          error:        'Sync failed for set',
+          failed_set:   set.set_id,
+          api_set_id:   set.api_set_id,
+          detail:       msg,
+        },
+        { status: 500 },
+      )
     }
   }
 
