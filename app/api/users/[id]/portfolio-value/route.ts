@@ -26,18 +26,25 @@ export async function GET(
   }
 
   // ── Step 1: All owned card variants with quantities ───────────────────────
+  // .limit(10000) mirrors the pattern used in lib/store.ts fetchUserCards —
+  // without it PostgREST may silently cap results at 1 000 rows on some
+  // Supabase projects, causing large collections to be partially evaluated.
   const { data: ownedVariants, error: variantError } = await supabaseAdmin
     .from('user_card_variants')
     .select('card_id, quantity')
     .eq('user_id', userId)
     .gt('quantity', 0)
+    .limit(10000)
 
   if (variantError) {
     console.error('[portfolio-value] variant fetch error:', variantError)
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
 
+  console.log(`[portfolio-value] ownedVariants count: ${ownedVariants?.length ?? 0} for user ${userId}`)
+
   if (!ownedVariants || ownedVariants.length === 0) {
+    console.log(`[portfolio-value] No owned variants found — returning value: 0`)
     return NextResponse.json({ value: 0, currency: 'EUR' })
   }
 
@@ -65,6 +72,8 @@ export async function GET(
   const tcggoItemIds: string[] = []
   const cardUUIDs: string[]    = []
 
+  console.log(`[portfolio-value] cardIds: ${cardIds.length}, cardRows: ${cardRows?.length ?? 0}`)
+
   for (const c of (cardRows ?? [])) {
     if (c.tcggo_id != null) {
       const t = String(c.tcggo_id)
@@ -75,6 +84,8 @@ export async function GET(
       cardUUIDs.push(c.id)
     }
   }
+
+  console.log(`[portfolio-value] tcggoItemIds: ${tcggoItemIds.length}, cardUUIDs: ${cardUUIDs.length}`)
 
   interface PriceRow { item_id: string; price: number }
 
@@ -101,6 +112,16 @@ export async function GET(
       : Promise.resolve({ data: [] as PriceRow[], error: null }),
   ])
 
+  if (tcggoPriceResult.error) {
+    console.error('[portfolio-value] TCGGO price query error:', tcggoPriceResult.error)
+    return NextResponse.json({ error: 'Price lookup failed' }, { status: 500 })
+  }
+  if (cmPriceResult.error) {
+    console.error('[portfolio-value] CM price query error:', cmPriceResult.error)
+    return NextResponse.json({ error: 'Price lookup failed' }, { status: 500 })
+  }
+  console.log(`[portfolio-value] TCGGO price rows: ${tcggoPriceResult.data?.length ?? 0}, CM price rows: ${cmPriceResult.data?.length ?? 0}`)
+
   // ── Step 4: Sum price × quantity ──────────────────────────────────────────
   let totalValue = 0
   let hasData    = false
@@ -119,6 +140,8 @@ export async function GET(
       hasData = true
     }
   }
+
+  console.log(`[portfolio-value] hasData: ${hasData}, totalValue: ${totalValue}`)
 
   return NextResponse.json(
     { value: hasData ? totalValue : null, currency: 'EUR' },
