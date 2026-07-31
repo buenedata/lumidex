@@ -23,6 +23,7 @@
 import { NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { requireSessionPro, ProRequiredError } from '@/lib/subscription'
+import { GRADED_VARIANT_KEY } from '@/lib/analytics'
 import type {
   TopCard,
   RarityBucket,
@@ -50,6 +51,28 @@ interface OwnedCardRow {
 interface PriceRow {
   item_id: string
   price: number
+}
+
+interface GradedPriceRow {
+  item_id: string
+  variant: string
+  price: number
+}
+
+interface OwnedGradedRow {
+  card_id: string
+  grading_company: string
+  grade: string
+  quantity: number
+  cards: {
+    id: string
+    name: string
+    rarity: string | null
+    set_id: string
+    tcggo_id: number | null
+    image: string | null
+    sets: { name: string } | null
+  } | null
 }
 
 interface HistoryRow {
@@ -186,6 +209,106 @@ export async function GET() {
       cardCount: sBucket.cardCount + 1,
       totalValueEur: sBucket.totalValueEur + rowValue,
     })
+  }
+
+  // ── 4b-graded. Incorporate graded card value ──────────────────────────────
+  // Fetch the user's graded copies alongside their card metadata so we can
+  // merge the graded value directly into the same aggregation maps.
+  const { data: gradedOwnedRaw, error: gradedOwnedError } = await supabaseAdmin
+    .from('user_graded_cards')
+    .select(`
+      card_id,
+      grading_company,
+      grade,
+      quantity,
+      cards (
+        id,
+        name,
+        rarity,
+        set_id,
+        tcggo_id,
+        image,
+        sets ( name )
+      )
+    `)
+    .eq('user_id', user.id)
+    .gt('quantity', 0)
+
+  if (gradedOwnedError) {
+    console.error('[analytics/collection] graded owned query failed:', gradedOwnedError)
+  } else {
+    const gradedOwned = (gradedOwnedRaw ?? []) as unknown as OwnedGradedRow[]
+
+    // Fetch graded EUR prices from item_prices (item_type='graded')
+    const gradedTcggoIds = [
+      ...new Set(
+        gradedOwned
+          .map((g) => g.cards?.tcggo_id)
+          .filter((id): id is number => id != null)
+          .map(String),
+      ),
+    ]
+
+    let gradedPriceMap = new Map<string, number>() // key: `${tcggo_id}:${variant_key}`
+
+    if (gradedTcggoIds.length > 0) {
+      const { data: gradedPriceRows, error: gradedPriceError } = await supabaseAdmin
+        .from('item_prices')
+        .select('item_id, variant, price')
+        .in('item_id', gradedTcggoIds)
+        .eq('item_type', 'graded')
+        .not('price', 'is', null)
+
+      if (gradedPriceError) {
+        console.error('[analytics/collection] graded prices query failed:', gradedPriceError)
+      } else {
+        for (const row of (gradedPriceRows ?? []) as unknown as GradedPriceRow[]) {
+          gradedPriceMap.set(`${row.item_id}:${row.variant}`, row.price)
+        }
+      }
+    }
+
+    // Merge graded cards into the existing aggregation maps.
+    // Cards present in both user_card_variants and user_graded_cards are
+    // counted separately: regular copy at single price, graded copy at graded price.
+    for (const g of gradedOwned) {
+      const card = g.cards
+      if (!card) continue
+
+      const tcggoKey = card.tcggo_id != null ? String(card.tcggo_id) : null
+      const variantKey = GRADED_VARIANT_KEY[g.grading_company]?.[g.grade] ?? null
+      const priceEur = (tcggoKey && variantKey)
+        ? (gradedPriceMap.get(`${tcggoKey}:${variantKey}`) ?? 0)
+        : 0
+      const rowValue = priceEur * g.quantity
+      const rarity   = card.rarity ?? 'Unknown'
+      const setName  = card.sets?.name ?? 'Unknown Set'
+
+      if (tcggoKey) cardToTcggo.set(g.card_id, tcggoKey)
+
+      const existing = cardAgg.get(g.card_id)
+      if (existing) {
+        existing.quantity      += g.quantity
+        existing.totalValueEur += rowValue
+        // Prefer the higher per-unit price (graded > single in most cases)
+        if (priceEur > existing.priceEur) existing.priceEur = priceEur
+      } else {
+        cardAgg.set(g.card_id, { card, priceEur, quantity: g.quantity, totalValueEur: rowValue })
+      }
+
+      const rBucket = rarityAgg.get(rarity) ?? { cardCount: 0, totalValueEur: 0 }
+      rarityAgg.set(rarity, {
+        cardCount:     rBucket.cardCount + 1,
+        totalValueEur: rBucket.totalValueEur + rowValue,
+      })
+
+      const sBucket = setAgg.get(card.set_id) ?? { setName, cardCount: 0, totalValueEur: 0 }
+      setAgg.set(card.set_id, {
+        setName,
+        cardCount:     sBucket.cardCount + 1,
+        totalValueEur: sBucket.totalValueEur + rowValue,
+      })
+    }
   }
 
   // 4a. Top 10 cards by totalValueEur

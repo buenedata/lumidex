@@ -109,6 +109,44 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
 
+  // ── Sync user_cards.quantity (Bug fix: graded add was not incrementing quantity) ──
+  // Recompute the grand total (all graded copies + all regular variants) for this
+  // user+card and upsert user_cards, mirroring what updateCardQuantity() does in
+  // the client store after a regular variant add.
+  const [{ data: allGraded }, { data: allVariants }] = await Promise.all([
+    supabaseAdmin
+      .from('user_graded_cards')
+      .select('quantity')
+      .eq('user_id', user.id)
+      .eq('card_id', cardId),
+    supabaseAdmin
+      .from('user_card_variants')
+      .select('quantity')
+      .eq('user_id', user.id)
+      .eq('card_id', cardId)
+      .gt('quantity', 0),
+  ])
+
+  const totalQty =
+    (allGraded ?? []).reduce((s: number, r: { quantity: number }) => s + (r.quantity ?? 0), 0) +
+    (allVariants ?? []).reduce((s: number, r: { quantity: number }) => s + (r.quantity ?? 0), 0)
+
+  if (totalQty > 0) {
+    await supabaseAdmin
+      .from('user_cards')
+      .upsert(
+        { user_id: user.id, card_id: cardId, quantity: totalQty },
+        { onConflict: 'user_id,card_id' },
+      )
+  } else {
+    // Should not happen on a fresh add, but guard: remove orphan row
+    await supabaseAdmin
+      .from('user_cards')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('card_id', cardId)
+  }
+
   // Auto-add set to user_sets (fire-and-forget; non-fatal if it fails)
   supabaseAdmin
     .from('user_sets')

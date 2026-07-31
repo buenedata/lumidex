@@ -91,6 +91,51 @@ interface OwnedVariantRow {
   } | null
 }
 
+interface GradedCardRow {
+  card_id: string
+  grading_company: string
+  grade: string
+  quantity: number
+  cards: {
+    tcggo_id: number | null
+    set_id: string
+  } | null
+}
+
+/**
+ * Maps (grading company, grade label text) → item_prices.variant key for
+ * `item_type = 'graded'` rows in the item_prices table.
+ *
+ * Only the grade labels that have a corresponding TCGGO market price entry are
+ * included. Grades not listed here (e.g. PSA 7, ACE, TAG) contribute €0 to
+ * collection value because no matching price row exists.
+ *
+ * Exported so the analytics/collection route can reuse the same mapping.
+ */
+export const GRADED_VARIANT_KEY: Record<string, Record<string, string>> = {
+  PSA: {
+    'GEM-MT 10':  'psa10',
+    'MINT 9':     'psa9',
+    'NM-MT 8':    'psa8',
+    'NM-MT+ 8.5': 'psa8',
+  },
+  BECKETT: {
+    'Black Label 10': 'bgs10pristine',
+    'Pristine 10':    'bgs10',
+    'Gem Mint 9.5':   'bgs9',
+    'NM-MT 8':        'bgs8',
+    'NM-MT+ 8.5':     'bgs8',
+  },
+  CGC: {
+    'Pristine 10':   'cgc10',
+    'Gem Mint 10':   'cgc10',
+    'Mint+ 9.5':     'cgc9',
+    'Mint 9':        'cgc9',
+    'NM/Mint 8':     'cgc8',
+    'NM/Mint+ 8.5':  'cgc8',
+  },
+}
+
 // ─── Core helper ─────────────────────────────────────────────────────────────
 
 /**
@@ -160,7 +205,53 @@ export async function computeCollectionSnapshot(
     }
   }
 
-  // ── 3. Aggregate totals ───────────────────────────────────────────────────
+  // ── 2b. Fetch user's graded copies and their EUR market prices ─────────────
+  const { data: gradedVariantRows } = await supabaseAdmin
+    .from('user_graded_cards')
+    .select('card_id, grading_company, grade, quantity, cards(tcggo_id, set_id)')
+    .eq('user_id', userId)
+    .gt('quantity', 0)
+
+  const gradedRows = (gradedVariantRows ?? []) as unknown as GradedCardRow[]
+
+  // Build a price map for graded items: key = `${tcggo_id}:${variant_key}`
+  let gradedPriceMap = new Map<string, number>()
+
+  if (gradedRows.length > 0) {
+    const gradedTcggoIds = [
+      ...new Set(
+        gradedRows
+          .map((g) => g.cards?.tcggo_id)
+          .filter((id): id is number => id != null)
+          .map(String),
+      ),
+    ]
+
+    if (gradedTcggoIds.length > 0) {
+      const { data: gradedPriceRows, error: gradedPriceError } = await supabaseAdmin
+        .from('item_prices')
+        .select('item_id, variant, price')
+        .in('item_id', gradedTcggoIds)
+        .eq('item_type', 'graded')
+        .not('price', 'is', null)
+
+      if (gradedPriceError) {
+        console.error(
+          '[analytics] computeCollectionSnapshot — graded prices query failed:',
+          gradedPriceError,
+        )
+      } else {
+        for (const row of gradedPriceRows ?? []) {
+          gradedPriceMap.set(
+            `${row.item_id as string}:${row.variant as string}`,
+            row.price as number,
+          )
+        }
+      }
+    }
+  }
+
+  // ── 3. Aggregate totals: regular variants ────────────────────────────────
   let totalValueEur = 0
   const uniqueCards = new Set<string>()
   const uniqueSets = new Set<string>()
@@ -172,6 +263,22 @@ export async function computeCollectionSnapshot(
     const tcggoId = v.cards?.tcggo_id != null ? String(v.cards.tcggo_id) : null
     if (tcggoId && priceMap.has(tcggoId)) {
       totalValueEur += priceMap.get(tcggoId)! * v.quantity
+    }
+  }
+
+  // 3b. Aggregate graded card value using their graded market price (EUR).
+  //     A card in both user_card_variants AND user_graded_cards is counted
+  //     twice (once at regular price, once at graded price) which is correct:
+  //     the user owns distinct physical copies of different types.
+  for (const g of gradedRows) {
+    uniqueCards.add(g.card_id)
+    if (g.cards?.set_id) uniqueSets.add(g.cards.set_id)
+
+    const tcggoId = g.cards?.tcggo_id != null ? String(g.cards.tcggo_id) : null
+    const variantKey = GRADED_VARIANT_KEY[g.grading_company]?.[g.grade] ?? null
+    if (tcggoId && variantKey) {
+      const price = gradedPriceMap.get(`${tcggoId}:${variantKey}`) ?? 0
+      totalValueEur += price * g.quantity
     }
   }
 
