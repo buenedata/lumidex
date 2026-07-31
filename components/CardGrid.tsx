@@ -725,13 +725,15 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
       const userCard      = userCards.get(card.id)
       const dots = cardVariantDots.get(card.id)
 
-      // Basic ownership: prefer dots (updated optimistically on every variant click)
-      // when they are loaded and non-empty. Fall back to the Zustand store aggregate for
-      // promo/card-specific-variant-only cards (dots is [] even after loading) and
-      // before the batch fetch.
-      const anyOwned = (dots && dots.length > 0)
-        ? dots.some(v => v.quantity > 0)
-        : !!(userCard && userCard.quantity > 0)
+      // Use OR instead of ternary so graded-only cards are not hidden.
+      // With the old ternary, if dots is non-empty (card has standard variant types)
+      // but all dot quantities are 0 (user only has a graded copy, no user_card_variants
+      // rows), anyOwned would be false and the userCard fallback unreachable.
+      // fetchUserCards() now merges user_graded_cards into the store Map, so
+      // userCard.quantity > 0 correctly detects ownership for graded-only cards.
+      const anyOwned =
+        (dots ? dots.some(v => v.quantity > 0) : false) ||
+        !!(userCard && userCard.quantity > 0)
 
       // isOwned for normal goal = anyOwned.
       // Masterset: only GLOBAL (non-card-specific) variants must all be qty > 0.
@@ -806,9 +808,10 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     for (const card of source) {
       const userCard = userCards.get(card.id)
       const dots     = cardVariantDots.get(card.id)
-      const anyOwned = dots && dots.length > 0
-        ? dots.some(v => v.quantity > 0)
-        : !!(userCard && userCard.quantity > 0)
+      // Same OR logic as the filter path above — see comment there for rationale.
+      const anyOwned =
+        (dots ? dots.some(v => v.quantity > 0) : false) ||
+        !!(userCard && userCard.quantity > 0)
 
       let owned: boolean
       if (collectionGoal === 'masterset') {
@@ -1487,10 +1490,13 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
           // variantDots: same array reference for unchanged cards → React.memo skips re-render
           const variantDots = cardVariantDots.get(card.id) || []
 
-          // anyOwned: at least one variant owned (or userCard fallback before batch fetch)
-          const anyOwned = variantDots.length > 0
-            ? variantDots.some(v => v.quantity > 0)
-            : !!(userCard && userCard.quantity > 0)
+          // anyOwned: at least one variant owned OR userCard.quantity > 0 (covers
+          // graded-only cards where all variantDots quantities are 0 but the store
+          // Map entry — populated by fetchUserCards merging user_graded_cards —
+          // carries the correct non-zero total quantity).
+          const anyOwned =
+            variantDots.some(v => v.quantity > 0) ||
+            !!(userCard && userCard.quantity > 0)
 
           // isOwned: mirrors filteredCards logic so the green border / grey-out
           // exactly matches the Have/Need tab counts.

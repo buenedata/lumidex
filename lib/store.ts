@@ -252,6 +252,7 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
       { data, error },
       { data: setCounts, error: setCountError },
       { data: statsData, error: statsError },
+      { data: gradedData, error: gradedError },
     ] = await Promise.all([
       supabase
         .from('user_card_variants')
@@ -261,6 +262,13 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
         .limit(10000),
       supabase.rpc('get_user_card_counts_by_set', { p_user_id: user.id }),
       supabase.rpc('get_user_collection_stats',   { p_user_id: user.id }),
+      // Also fetch graded cards so graded-only entries (no user_card_variants rows)
+      // are visible in the store and show as owned in the UI.
+      supabase
+        .from('user_graded_cards')
+        .select('card_id, quantity')
+        .eq('user_id', user.id)
+        .gt('quantity', 0),
     ])
 
     if (data && !error) {
@@ -287,6 +295,36 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
           })
         }
       })
+
+      // ── Merge graded-card quantities ─────────────────────────────────────────
+      // Graded-only cards (no user_card_variants rows) are otherwise absent from
+      // the Map and invisible to all "owned / Have" logic in CardGrid.
+      // For each card_id in user_graded_cards, sum the quantities and either add
+      // them to an existing variant-based entry or create a new entry.
+      if (gradedData && !gradedError) {
+        gradedData.forEach((graded: { card_id: string; quantity: number }) => {
+          const extraGraded = Math.max(0, graded.quantity - 1)
+          const existing = cardMap.get(graded.card_id)
+          if (existing) {
+            existing.quantity      += graded.quantity
+            existing.duplicateCount += extraGraded
+            if (graded.quantity > existing.maxVariantQty) {
+              existing.maxVariantQty = graded.quantity
+            }
+          } else {
+            cardMap.set(graded.card_id, {
+              id:             '',
+              user_id:        user.id,
+              card_id:        graded.card_id,
+              quantity:       graded.quantity,
+              maxVariantQty:  graded.quantity,
+              duplicateCount: extraGraded,
+            })
+          }
+        })
+      } else if (gradedError) {
+        console.error('[fetchUserCards] graded cards fetch error:', gradedError)
+      }
 
       const countBySet = new Map<string, number>()
       if (setCounts && !setCountError) {
