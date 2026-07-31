@@ -271,9 +271,6 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
         .gt('quantity', 0),
     ])
 
-    console.log('[fetchUserCards] variants data:', data?.length ?? 'null', 'error:', error?.message ?? null)
-    console.log('[fetchUserCards] gradedData:', gradedData?.length ?? 'null', 'gradedError:', gradedError?.message ?? null)
-
     if (data && !error) {
       const cardMap = new Map<string, { id: string; user_id: string; card_id: string; quantity: number; maxVariantQty: number; duplicateCount: number }>()
       data.forEach(variant => {
@@ -328,8 +325,6 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
       } else if (gradedError) {
         console.error('[fetchUserCards] graded cards fetch error:', gradedError)
       }
-
-      console.log('[fetchUserCards] cardMap size after merge:', cardMap.size, '— graded entries merged:', gradedData?.length ?? 0)
 
       const countBySet = new Map<string, number>()
       if (setCounts && !setCountError) {

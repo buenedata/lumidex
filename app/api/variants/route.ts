@@ -271,6 +271,9 @@ export async function GET(request: NextRequest) {
     }
 
     if (userId) {
+      // Fetch regular variant quantities AND graded card quantities in parallel.
+      // Graded copies with a specific variant_id are merged into that variant slot.
+      // Graded copies with variant_id = null are attributed to the quick-add (or first) variant.
       let userQuery = supabaseAdmin
         .from('user_card_variants')
         .select('variant_id, quantity, card_id')
@@ -281,7 +284,20 @@ export async function GET(request: NextRequest) {
         userQuery = userQuery.eq('card_id', cardId)
       }
 
-      const { data: userVariants, error: userVariantsError } = await userQuery
+      let gradedQuery = supabaseAdmin
+        .from('user_graded_cards')
+        .select('card_id, variant_id, quantity')
+        .eq('user_id', userId)
+        .gt('quantity', 0)
+
+      if (cardId) {
+        gradedQuery = (gradedQuery as any).eq('card_id', cardId)
+      }
+
+      const [
+        { data: userVariants, error: userVariantsError },
+        { data: userGraded },
+      ] = await Promise.all([userQuery, gradedQuery])
 
       if (userVariantsError) {
         console.error('Error fetching user variants:', userVariantsError)
@@ -291,14 +307,35 @@ export async function GET(request: NextRequest) {
         )
       }
 
-      const userQuantityMap = new Map(
+      const userQuantityMap = new Map<string, number>(
         (userVariants as UserCardVariant[])?.map((uv: UserCardVariant) => [uv.variant_id, uv.quantity]) || []
       )
+
+      // Merge graded quantities: variant_id set → add directly; null → accumulate for distribution
+      let gradedNullTotal = 0
+      ;(userGraded as { card_id: string; variant_id: string | null; quantity: number }[] | null)?.forEach(gc => {
+        if (gc.variant_id) {
+          userQuantityMap.set(gc.variant_id, (userQuantityMap.get(gc.variant_id) ?? 0) + gc.quantity)
+        } else {
+          gradedNullTotal += gc.quantity
+        }
+      })
 
       const variantsWithQuantities: VariantWithQuantity[] = filteredVariants.map((variant: Variant) => ({
         ...variant,
         quantity: userQuantityMap.get(variant.id) || 0
       }))
+
+      // Distribute null-variant graded total to the quick-add (or first) variant.
+      // Covers graded-only cards where no specific variant was selected at grading time.
+      if (gradedNullTotal > 0 && variantsWithQuantities.length > 0) {
+        const targetIdx = variantsWithQuantities.findIndex((v: any) => v.is_quick_add)
+        const idx = targetIdx >= 0 ? targetIdx : 0
+        variantsWithQuantities[idx] = {
+          ...variantsWithQuantities[idx],
+          quantity: variantsWithQuantities[idx].quantity + gradedNullTotal,
+        }
+      }
 
       const singleUserResponse = NextResponse.json(variantsWithQuantities)
       singleUserResponse.headers.set('Cache-Control', 'no-store')
@@ -484,29 +521,55 @@ export async function POST(request: NextRequest) {
       const allVariantIds = [...new Set([...variantIds, ...cardSpecificVariantIds])]
 
       if (userId) {
-        const { data: userVariants, error: uvErr } = await supabaseAdmin
-          .from('user_card_variants')
-          .select('variant_id, quantity, card_id')
-          .eq('user_id', userId)
-          .in('card_id', cardIdList)
-          .in('variant_id', allVariantIds)
+        // Fetch regular variant quantities AND graded quantities in parallel.
+        const [
+          { data: userVariants, error: uvErr },
+          { data: userGraded },
+        ] = await Promise.all([
+          supabaseAdmin
+            .from('user_card_variants')
+            .select('variant_id, quantity, card_id')
+            .eq('user_id', userId)
+            .in('card_id', cardIdList)
+            .in('variant_id', allVariantIds),
+          supabaseAdmin
+            .from('user_graded_cards')
+            .select('card_id, variant_id, quantity')
+            .eq('user_id', userId)
+            .in('card_id', cardIdList)
+            .gt('quantity', 0),
+        ])
 
         if (uvErr) {
           console.error('[variants POST batch] user quantities:', uvErr)
           return NextResponse.json({ error: 'Failed to fetch user variant quantities' }, { status: 500 })
         }
 
+        // Build quantity map from regular variants: cardId → variantId → quantity
         const quantityMap: Record<string, Record<string, number>> = {}
         userVariants?.forEach((uv) => {
           if (!quantityMap[uv.card_id]) quantityMap[uv.card_id] = {}
           quantityMap[uv.card_id][uv.variant_id] = uv.quantity
         })
 
+        // Merge graded quantities.
+        // variant_id set → add directly to that variant slot.
+        // variant_id null → accumulate; distributed to quick-add/first variant below.
+        const gradedNullTotals: Record<string, number> = {}
+        ;(userGraded as { card_id: string; variant_id: string | null; quantity: number }[] | null)?.forEach(gc => {
+          if (gc.variant_id) {
+            if (!quantityMap[gc.card_id]) quantityMap[gc.card_id] = {}
+            quantityMap[gc.card_id][gc.variant_id] = (quantityMap[gc.card_id][gc.variant_id] ?? 0) + gc.quantity
+          } else {
+            gradedNullTotals[gc.card_id] = (gradedNullTotals[gc.card_id] ?? 0) + gc.quantity
+          }
+        })
+
         const grouped: Record<string, VariantWithQuantity[]> = {}
         cardIdList.forEach(cId => {
           const q = quantityMap[cId] || {}
           const hasOverride = !!(overrideMap[cId]?.size > 0)
-          grouped[cId] = variantsForCard(cId).map((v: Variant) => ({
+          const variantList: VariantWithQuantity[] = variantsForCard(cId).map((v: Variant) => ({
             ...v,
             quantity: q[v.id] || 0,
             variant_image_url: batchVariantImageMap[cId]?.[v.id] ?? null,
@@ -514,6 +577,17 @@ export async function POST(request: NextRequest) {
             // the admin explicitly added them to an override via the ⚙️ panel.
             is_configured_as_dot: v.card_id == null || hasOverride,
           }))
+
+          // Distribute null-variant graded totals to the quick-add (or first) variant.
+          // Covers graded-only cards where no specific variant was selected at grading time.
+          const nullGraded = gradedNullTotals[cId]
+          if (nullGraded && variantList.length > 0) {
+            const targetIdx = variantList.findIndex((v) => v.is_quick_add)
+            const idx = targetIdx >= 0 ? targetIdx : 0
+            variantList[idx] = { ...variantList[idx], quantity: variantList[idx].quantity + nullGraded }
+          }
+
+          grouped[cId] = variantList
         })
 
         const r = NextResponse.json(grouped)
