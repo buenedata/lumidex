@@ -3,8 +3,6 @@
 import { memo } from 'react'
 import Link from 'next/link'
 import { PokemonCard, QuickAddVariant } from '@/types'
-import { useItemPrice } from '@/hooks/useItemPrice'
-import { fmtCardPrice } from '@/lib/currency'
 
 // ── Shared constants (mirrors CardGrid) ────────────────────────────────────
 const COLOR_MAP = {
@@ -42,8 +40,6 @@ export interface CardTileProps {
   /** When true (masterset/grandmasterset goal), renders a diagonal grey overlay
    *  over the bottom-right half of the card to show partial variant ownership. */
   isPartiallyOwned?:  boolean
-  cardPricesUSD?:     Record<string, number>
-  effectiveCurrency:  string
   // Stable callbacks — wrapped in useCallback + ref in CardGrid so React.memo works
   onCardBadgeClick:         (card: PokemonCard) => void
   onCardImageClick:         (card: PokemonCard) => void
@@ -64,8 +60,6 @@ function CardTileInner({
   customVariantCount,
   greyOutUnowned,
   isPartiallyOwned = false,
-  cardPricesUSD,
-  effectiveCurrency,
   onCardBadgeClick,
   onCardImageClick,
   onCardImageDblClick,
@@ -75,16 +69,6 @@ function CardTileInner({
   onVariantGrayClick,
   onMobileVariantOpen,
 }: CardTileProps) {
-  // Fetch CardMarket EUR price via item_prices — only when tcggo_id is present.
-  // The hook returns { price: null, loading: false } when itemId is null/undefined,
-  // so cards without a tcggo_id never trigger a network request.
-  const { price: cmPrice, loading: cmLoading } = useItemPrice(
-    card.tcggo_id != null ? String(card.tcggo_id) : null,
-    'single',
-    'normal',
-  )
-
-
   // Show as dot if: globally-scoped (card_id == null) OR explicitly configured by admin
   // via the ⚙️ Variant Dot Display panel (is_configured_as_dot === true).
   // Card-specific variants that were NOT explicitly configured remain hidden here;
@@ -207,21 +191,7 @@ function CardTileInner({
         <p className="text-sm font-semibold text-primary truncate leading-tight">
           {card.name}
         </p>
-        {/* Row 2: Price badge — prominent, shown for any card with a tcggo_id.
-            Displays '...' while loading, formatted price on success, '—' when unavailable.
-            Uses the user's preferred currency via effectiveCurrency prop. */}
-        {card.tcggo_id != null && (
-          <div className="flex items-center mt-0.5">
-            <span className="text-sm font-bold tabular-nums bg-green-900/40 text-green-300 border border-green-500/30 rounded-md px-2 py-0.5 leading-tight">
-              {cmLoading
-                ? '...'
-                : cmPrice !== null
-                  ? (fmtCardPrice({ eur: cmPrice, usd: null }, effectiveCurrency) ?? '—')
-                  : '—'}
-            </span>
-          </div>
-        )}
-        {/* Row 3: Card number */}
+        {/* Row 2: Card number */}
         <div className="flex items-center">
           <span className="text-xs font-medium text-secondary tabular-nums">#{card.number}</span>
         </div>

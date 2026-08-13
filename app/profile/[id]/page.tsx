@@ -25,7 +25,6 @@ import { ProBadge } from '@/components/upgrade/ProBadge'
 import { User, Achievement, PokemonSet, SetProgress } from '@/types'
 import type { FriendEntry } from '@/components/profile/FriendsList'
 import { cn } from '@/lib/utils'
-import { fmtCardPrice } from '@/lib/currency'
 import { useLocale } from '@/contexts/LocaleContext'
 import type { TranslationKey } from '@/locales/en'
 
@@ -94,7 +93,6 @@ export default function ProfilePage() {
   })
   const [profileUserIsPro, setProfileUserIsPro] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [portfolioValue, setPortfolioValue] = useState<string | null>(null)
 
   // Local mutable URLs (may change after an upload without re-fetching the whole profile)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
@@ -224,19 +222,6 @@ export default function ProfilePage() {
       // The old approach used COUNT(*) of variant rows which gave a row count, not quantity sum.
       const { data: collectionStats } = await supabase.rpc('get_user_collection_stats', { p_user_id: userId })
       const totalCards: number = collectionStats?.[0] ? Number(collectionStats[0].total_quantity) : 0
-
-      // Fetch portfolio value — price × quantity for each owned card.
-      // Replaces the old set-stats approach that summed all cards in each set
-      // regardless of ownership and without multiplying by the user's quantity.
-      fetch(`/api/users/${userId}/portfolio-value`)
-        .then(r => (r.ok ? r.json() : null))
-        .catch(() => null)
-        .then(data => {
-          if (data?.value != null) {
-            const cur = userData?.preferred_currency ?? 'USD'
-            setPortfolioValue(fmtCardPrice({ eur: data.value, usd: null }, cur))
-          }
-        })
 
       // completedSets — derived from the already-fetched setsInfo + cardCounts (no extra queries)
       const completedSets = (setsInfo ?? []).filter(set => {
@@ -401,8 +386,8 @@ export default function ProfilePage() {
               </div>
             </div>
           </div>
-          <div className="grid grid-cols-4 gap-4 mb-6">
-            {Array.from({ length: 4 }).map((_, i) => (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
+            {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="bg-surface border border-subtle rounded-xl p-4">
                 <div className="skeleton h-3 w-20 rounded mb-2" />
                 <div className="skeleton h-7 w-12 rounded" />
@@ -671,7 +656,7 @@ export default function ProfilePage() {
         {!isPrivate && (
           <>
             {/* ── Stats Row ────────────────────────────────────────────────────── */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-8">
               <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
                 <span className="text-xs text-muted uppercase tracking-wider">{t('profile_cards_collected')}</span>
                 <span className="text-2xl font-bold text-primary">
@@ -681,12 +666,6 @@ export default function ProfilePage() {
               <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
                 <span className="text-xs text-muted uppercase tracking-wider">{t('profile_sets_started')}</span>
                 <span className="text-2xl font-bold text-primary">{userSets.length}</span>
-              </div>
-              <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
-                <span className="text-xs text-muted uppercase tracking-wider">{t('profile_portfolio_value')}</span>
-                <span className="text-2xl font-bold text-price">
-                  {portfolioValue ?? '—'}
-                </span>
               </div>
               <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
                 <span className="text-xs text-muted uppercase tracking-wider">{t('profile_stat_friends')}</span>

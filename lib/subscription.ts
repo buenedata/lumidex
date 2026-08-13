@@ -176,24 +176,6 @@ export function getCustomListLimit(tier: UserTier): number {
   return TIER_LIMITS.CUSTOM_LISTS[tier]
 }
 
-/**
- * Returns the number of price history days accessible for a given tier.
- * @example
- * const days = getPriceHistoryDays('pro') // 365
- */
-export function getPriceHistoryDays(tier: UserTier): number {
-  return TIER_LIMITS.PRICE_HISTORY_DAYS[tier]
-}
-
-/**
- * Returns the number of portfolio history days accessible for a given tier.
- * @example
- * const days = getPortfolioHistoryDays('free') // 0 (snapshot only)
- */
-export function getPortfolioHistoryDays(tier: UserTier): number {
-  return TIER_LIMITS.PORTFOLIO_HISTORY_DAYS[tier]
-}
-
 // ─── Error class ──────────────────────────────────────────────────────────────
 
 /**

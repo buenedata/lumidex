@@ -21,19 +21,4 @@ export const TIER_LIMITS = {
     free: 2,
     pro: Infinity,
   },
-  /** Maximum number of active price alerts per user. */
-  PRICE_ALERTS: {
-    free: 0,
-    pro: 10,
-  },
-  /** Number of days of price history accessible. */
-  PRICE_HISTORY_DAYS: {
-    free: 7,
-    pro: 365,
-  },
-  /** Number of days of portfolio value history accessible (0 = today's snapshot only). */
-  PORTFOLIO_HISTORY_DAYS: {
-    free: 0,
-    pro: 365,
-  },
 } as const

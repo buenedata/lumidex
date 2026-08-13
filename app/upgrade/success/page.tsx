@@ -43,9 +43,6 @@ export default function UpgradeSuccessPage() {
           </h2>
           <ul className="space-y-2.5">
             {[
-              '📈 Full price history charts (up to 1 year)',
-              '💰 Portfolio value over time',
-              '🔔 Price alerts',
               '🏅 Graded cards tracking',
               '📦 Sealed products tracking',
               '📋 Unlimited custom lists',

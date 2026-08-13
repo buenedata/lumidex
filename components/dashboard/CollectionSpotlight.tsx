@@ -1,10 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import type { PokemonSet, SetProgress } from '@/types'
-import { useAuthStore } from '@/lib/store'
-import { fmtCardPrice } from '@/lib/currency'
 import { useLocale } from '@/contexts/LocaleContext'
 
 interface CollectionSpotlightProps {
@@ -14,87 +11,13 @@ interface CollectionSpotlightProps {
   totalCardsToComplete: number
 }
 
-/** Full details of the single most-expensive card across all tracked sets. */
-interface MostExpensiveInfo {
-  /** EUR price */
-  price: number
-  name: string | null
-  /** Card number within the set, e.g. "025/165" */
-  number: string | null
-  /** Card image URL */
-  image: string | null
-  /** Display name of the set that contains this card */
-  setName: string | null
-}
-
 export default function CollectionSpotlight({
   sets,
   getProgress,
   completedSets,
   totalCardsToComplete,
 }: CollectionSpotlightProps) {
-  const { profile } = useAuthStore()
   const { t } = useLocale()
-  const currency   = (profile as any)?.preferred_currency ?? 'USD'
-  const profileId  = (profile as any)?.id as string | undefined
-
-  const [mostExpensiveInfo,   setMostExpensiveInfo]   = useState<MostExpensiveInfo | null>(null)
-  const [collectionValueEur,  setCollectionValueEur]  = useState<number | null>(null)
-  const [pricesLoaded,        setPricesLoaded]        = useState(false)
-
-  useEffect(() => {
-    if (sets.length === 0) return
-    if (!profileId) return
-    let cancelled = false
-
-    setPricesLoaded(false)
-
-    // Fetch set-stats for collection value + most-expensive-card for ownership-aware widget
-    const setStatsPromise = Promise.all(
-      sets.map(set =>
-        fetch(`/api/prices/set-stats/${set.id}`)
-          .then(r => (r.ok ? r.json() : null))
-          .catch(() => null),
-      ),
-    )
-
-    const mostExpensivePromise = fetch(`/api/users/${profileId}/most-expensive-card`)
-      .then(r => (r.ok ? r.json() : null))
-      .catch(() => null)
-
-    Promise.all([setStatsPromise, mostExpensivePromise]).then(([setResults, meData]) => {
-      if (cancelled) return
-
-      // Aggregate collection value from set-stats (unchanged logic)
-      let totalValue = 0
-      let hasSetData = false
-      for (const data of setResults) {
-        if (!data) continue
-        if (data.setValue != null) { totalValue += data.setValue; hasSetData = true }
-      }
-      if (hasSetData) {
-        setCollectionValueEur(totalValue > 0 ? totalValue : null)
-      }
-
-      // Most expensive card comes exclusively from the user-scoped endpoint
-      // so it only reflects cards the user actually owns.
-      if (meData && meData.price != null) {
-        setMostExpensiveInfo({
-          price:   meData.price,
-          name:    meData.name    ?? null,
-          number:  meData.number  ?? null,
-          image:   meData.image   ?? null,
-          setName: meData.setName ?? null,
-        })
-      } else {
-        setMostExpensiveInfo(null)
-      }
-
-      setPricesLoaded(true)
-    })
-
-    return () => { cancelled = true }
-  }, [sets.length, profileId])
 
   if (sets.length === 0) return null
 
@@ -117,16 +40,6 @@ export default function CollectionSpotlight({
   const radius       = 22
   const circumference = 2 * Math.PI * radius
   const dashOffset   = circumference - (progress.percentage / 100) * circumference
-
-  const mostExpensiveFormatted =
-    mostExpensiveInfo != null
-      ? fmtCardPrice({ eur: mostExpensiveInfo.price, usd: null }, currency)
-      : null
-
-  const collectionValueFormatted =
-    collectionValueEur != null
-      ? fmtCardPrice({ eur: collectionValueEur, usd: null }, currency)
-      : null
 
   return (
     <div className="relative overflow-hidden rounded-2xl bg-elevated border border-subtle p-5 lg:p-6">
@@ -242,54 +155,6 @@ export default function CollectionSpotlight({
         {/* ── Right: Stats ──────────────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-2 lg:w-80 xl:w-96 gap-3 content-start shrink-0">
 
-          {/* ── Most Expensive card ──────────────────────────────────── */}
-          <div className="rounded-xl bg-surface border border-subtle p-3 flex flex-col gap-2 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm leading-none" role="img" aria-hidden>💎</span>
-              <p className="text-[10px] text-muted uppercase tracking-wider font-medium truncate leading-none">
-                {t('spotlight_most_expensive')}
-              </p>
-            </div>
-
-            {!pricesLoaded ? (
-              <p className="text-xs text-muted leading-tight">{t('spotlight_loading')}</p>
-            ) : mostExpensiveInfo ? (
-              <div className="flex items-start gap-2 min-w-0">
-                {mostExpensiveInfo.image && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={mostExpensiveInfo.image}
-                    alt={mostExpensiveInfo.name ?? 'Card'}
-                    className="w-9 shrink-0 rounded object-contain drop-shadow"
-                    loading="lazy"
-                  />
-                )}
-                <div className="min-w-0 flex flex-col gap-0.5">
-                  {mostExpensiveInfo.name && (
-                    <p className="text-xs font-bold text-primary leading-tight truncate">
-                      {mostExpensiveInfo.name}
-                    </p>
-                  )}
-                  {(mostExpensiveInfo.setName || mostExpensiveInfo.number) && (
-                    <p className="text-[10px] text-muted leading-tight truncate">
-                      {[mostExpensiveInfo.setName, mostExpensiveInfo.number && `#${mostExpensiveInfo.number}`]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </p>
-                  )}
-                  <p className="text-sm font-bold text-price leading-tight">
-                    {mostExpensiveFormatted ?? '—'}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <>
-                <p className="text-sm font-bold text-primary leading-tight">—</p>
-                <p className="text-xs text-muted leading-tight">{t('spotlight_no_price')}</p>
-              </>
-            )}
-          </div>
-
           {/* ── Sets Complete ─────────────────────────────────────────── */}
           <div className="rounded-xl bg-surface border border-subtle p-3 flex flex-col gap-1.5 min-w-0">
             <div className="flex items-center gap-1.5">
@@ -317,22 +182,6 @@ export default function CollectionSpotlight({
               {totalCardsToComplete === 0
                 ? t('spotlight_all_complete')
                 : t('spotlight_to_finish')}
-            </p>
-          </div>
-
-          {/* ── Collection Value ──────────────────────────────────────── */}
-          <div className="rounded-xl bg-surface border border-subtle p-3 flex flex-col gap-1.5 min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm leading-none" role="img" aria-hidden>💰</span>
-              <p className="text-[10px] text-muted uppercase tracking-wider font-medium truncate leading-none">
-                {t('spotlight_collection_value')}
-              </p>
-            </div>
-            <p className="text-sm font-bold text-price truncate leading-tight">
-              {collectionValueFormatted ?? '—'}
-            </p>
-            <p className="text-xs text-muted truncate leading-tight">
-              {!pricesLoaded ? t('spotlight_loading') : t('spotlight_across_sets')}
             </p>
           </div>
 

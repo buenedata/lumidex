@@ -62,9 +62,9 @@ export interface DbCard {
   artist: string | null
   /** FK → variants.id — the default variant for double-click quick-add */
   default_variant_id: string | null
-  /** pokemontcg.io / RapidAPI card ID e.g. "sv1-1". Used for price matching. */
+  /** pokemontcg.io card ID e.g. "sv1-1". Used by admin import tooling. */
   api_id: string | null
-  /** TCGGO numeric card ID — used as item_id in the item_prices table. */
+  /** TCGGO numeric card ID — numeric identifier from the TCGGO catalogue. */
   tcggo_id: number | null
   created_at: string
 }

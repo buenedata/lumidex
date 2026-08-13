@@ -292,11 +292,6 @@ export default function BrowseTypeahead({
                         {p.set_name}&nbsp;·&nbsp;{p.product_type ?? 'Product'}
                       </p>
                     </div>
-                    {p.tcgp_market != null && (
-                      <span className="text-sm font-medium text-price shrink-0">
-                        ${p.tcgp_market.toFixed(2)}
-                      </span>
-                    )}
                   </button>
                 </li>
               )

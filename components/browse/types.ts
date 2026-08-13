@@ -46,7 +46,6 @@ export interface BrowseProduct {
   name:         string
   product_type: string | null
   image_url:    string | null
-  tcgp_market:  number | null
 }
 
 export interface DiscoverySet {

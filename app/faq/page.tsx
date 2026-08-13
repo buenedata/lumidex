@@ -31,7 +31,7 @@ const FAQ_SECTIONS: { section: string; items: FAQItem[] }[] = [
       {
         question: 'What is Lumidex?',
         answer:
-          'Lumidex is a Pokémon TCG collection tracker. You can catalogue every card you own, track prices from CardMarket and TCGPlayer, connect with friends, manage trade proposals, and showcase your collection.',
+          'Lumidex is a Pokémon TCG collection tracker. You can catalogue every card you own, connect with friends, manage trade proposals, and showcase your collection.',
       },
       {
         question: 'Is Lumidex free to use?',
@@ -44,9 +44,6 @@ const FAQ_SECTIONS: { section: string; items: FAQItem[] }[] = [
                 <li>Unlimited card collection tracking across all sets and variants</li>
                 <li>All three Collection Goals (Normal Set, Masterset, Grandmaster Set)</li>
                 <li>Binder Calculator</li>
-                <li>Today&rsquo;s card prices from CardMarket &amp; TCGPlayer</li>
-                <li>7-day price history per card variant</li>
-                <li>Today&rsquo;s total portfolio value</li>
                 <li>Wanted list + up to 2 custom named lists</li>
                 <li>Public profile, friends system, and trade proposals</li>
                 <li>All 36 achievements</li>
@@ -73,20 +70,16 @@ const FAQ_SECTIONS: { section: string; items: FAQItem[] }[] = [
             <p>
               Lumidex Pro is a paid subscription (
               <strong>€4.99/month</strong> or <strong>€39.99/year</strong> — save 33%).
-              It unlocks everything you need to track your collection like an investor:
+              It unlocks the full power of your collection:
             </p>
             <ul className="space-y-2 mt-1">
               {[
-                { label: '14/30/90/365-day price history charts', note: 'Free tier gets 7-day history' },
-                { label: 'Portfolio value over time', note: 'See how your collection has grown or dipped' },
-                { label: 'Price alerts', note: 'Get notified when a card crosses your target price (up to 10 active alerts)' },
                 { label: 'Graded cards tracking (PSA, BGS, CGC, TAG, ACE)', note: null },
                 { label: 'Sealed products tracking', note: 'Booster boxes, ETBs, tins, and more' },
                 { label: 'Unlimited custom lists', note: 'Free tier allows 2' },
-                { label: 'Collection export (CSV / JSON)', note: 'Includes card names, sets, variants, quantities, and prices' },
-                { label: 'Advanced collection analytics', note: 'Top valuable cards, rarity breakdowns, value by set, best/worst performers' },
+                { label: 'Collection export (CSV / JSON)', note: 'Includes card names, sets, variants, and quantities' },
+                { label: 'Advanced collection analytics', note: 'Top cards, rarity breakdowns, and collection insights' },
                 { label: 'Pro profile badge', note: 'Glowing 💎 badge on your public profile + early access to new features' },
-                { label: 'Priority price sync', note: 'Pro users get more frequent price refreshes' },
               ].map(({ label, note }) => (
                 <li key={label} className="flex items-start gap-2">
                   <span className="text-[#34d399] flex-shrink-0 mt-0.5">✓</span>
@@ -154,8 +147,7 @@ const FAQ_SECTIONS: { section: string; items: FAQItem[] }[] = [
             <Link href="/upgrade" className="text-accent hover:underline font-medium">Lumidex Pro</Link>
             {' '}feature. With Pro, open any card modal, scroll to the bottom of the Card tab, and use the{' '}
             <strong>&ldquo;Add graded copy&rdquo;</strong> button to log a graded card with its grade and grading company.
-            Supported graders: <strong>PSA, BGS (Beckett), CGC, TAG, and ACE</strong>. Graded card values use dedicated
-            graded-sale price data where available and are tracked separately from your raw card collection.
+            Supported graders: <strong>PSA, BGS (Beckett), CGC, TAG, and ACE</strong>. Graded cards are tracked separately from your raw card collection.
           </>
         ),
       },
@@ -174,7 +166,6 @@ const FAQ_SECTIONS: { section: string; items: FAQItem[] }[] = [
             <Link href="/sets" className="text-accent hover:underline">Sets</Link>
             {' '}page and open any set. From there, go to the <strong>Products</strong> tab to find booster boxes,
             ETBs, tins, and other sealed items for that set — then use the + / − buttons to track how many you own.
-            Sealed product values are included in your total portfolio value.
           </>
         ),
       },
@@ -198,45 +189,6 @@ const FAQ_SECTIONS: { section: string; items: FAQItem[] }[] = [
             The{' '}
             <Link href="/wanted-board" className="text-accent hover:underline">Wanted Board</Link>
             {' '}shows you matches between cards you want and cards your friends own — and vice versa. It&rsquo;s the starting point for proposing trades.
-          </>
-        ),
-      },
-    ],
-  },
-  {
-    section: 'Prices',
-    items: [
-      {
-        question: 'Where does price data come from?',
-        answer:
-          'Lumidex pulls market prices from CardMarket (EUR) and TCGPlayer (USD). Prices are updated on a regular schedule. You can switch your preferred currency in your profile settings.',
-      },
-      {
-        question: 'Why does a card show no price?',
-        answer:
-          'Some cards or variants don\'t yet have price data from our sources. Prices for newer sets or rare variants may take a little time to appear after a set release.',
-      },
-      {
-        question: 'How is my collection value calculated?',
-        answer: (
-          <>
-            Your collection value is the sum of market prices for every card and sealed product you own, using your
-            preferred currency. Graded card prices use dedicated graded-sale data where available.{' '}
-            <strong>Free users see today&rsquo;s snapshot value.</strong>{' '}
-            <Link href="/upgrade" className="text-accent hover:underline font-medium">Lumidex Pro</Link>
-            {' '}unlocks the full portfolio value history chart so you can see how your collection&rsquo;s worth has
-            changed over time.
-          </>
-        ),
-      },
-      {
-        question: 'How much price history can I see?',
-        answer: (
-          <>
-            <strong>Free users</strong> see a 7-day price history chart for every card variant — enough to spot short-term
-            trends. <Link href="/upgrade" className="text-accent hover:underline font-medium">Lumidex Pro</Link>
-            {' '}extends this to <strong>14-day, 30-day, 90-day, and 1-year</strong> history, giving you the full picture
-            of a card&rsquo;s long-term price movement.
           </>
         ),
       },
@@ -281,7 +233,7 @@ const FAQ_SECTIONS: { section: string; items: FAQItem[] }[] = [
       {
         question: 'Can I make my profile private?',
         answer:
-          'You can control who sees your portfolio value (everyone, friends only, or just you) from your profile Settings. Public friends lists and collection counts are visible by default.',
+          'You can control who sees your profile from your profile Settings. Public friends lists and collection counts are visible by default.',
       },
       {
         question: 'How do I change my username or avatar?',

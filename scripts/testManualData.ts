@@ -250,8 +250,6 @@ async function testManualDatabase() {
   console.log('   npm run dev')
   console.log('\n3. Add more sets and cards as needed using the documented process.')
   
-  console.log('\n💰 Optional: Fetch live pricing data:')
-  console.log('   npx ts-node scripts/fetchPricing.ts')
 }
 
 // Run the tests

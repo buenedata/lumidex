@@ -109,7 +109,6 @@ const en = {
   profile_private_notice:          'This profile is private.',
   profile_cards_collected:         'Cards Collected',
   profile_sets_started:            'Sets Started',
-  profile_portfolio_value:         'Portfolio Value',
   profile_stat_friends:            'Friends',
   profile_friends_heading:         'Friends',
   /** {name}'s Friends */
@@ -154,14 +153,11 @@ const en = {
   settings_preferred_language:     'Preferred Language',
   settings_preferred_currency:     'Preferred Currency',
   settings_section_display:        'Collection Display',
-  settings_price_source:           'Price Source',
-  settings_price_source_soon:      'Price source preferences are coming soon with the new pricing system.',
   settings_grey_out:               'Grey out unowned cards',
   settings_grey_out_desc:          "Cards you don't own will appear dimmed in set views",
   settings_section_privacy:        'Privacy',
   settings_private_profile:        'Private profile',
   settings_private_profile_desc:   'Your bio, location, sets and achievements will be hidden from other users',
-  settings_portfolio_visibility:   'Portfolio Value Visibility',
   settings_lists_public:           'New lists are public by default',
   settings_lists_public_desc:      'When you create a new custom list it will be publicly visible unless you change it',
   settings_section_social:         'Social & Marketplace Links',
@@ -182,7 +178,7 @@ const en = {
   settings_billing_opening:        'Opening…',
   settings_manage_billing:         'Manage Billing',
   settings_free_plan:              'Free Plan',
-  settings_upgrade_cta:            'Upgrade to unlock price history, graded cards & more',
+  settings_upgrade_cta:            'Upgrade to unlock graded cards, custom lists & more',
   settings_upgrade_link:           'Upgrade →',
   settings_section_danger:         'Danger Zone',
   settings_danger_desc:            'These actions are permanent and cannot be undone.',
@@ -293,28 +289,6 @@ const en = {
   add_friend_no_results:  'No users found for "{query}"',
   add_friend_friends:     '✓ Friends',
 
-  // ── Analytics ─────────────────────────────────────────────────────────────────
-  analytics_section_title:      '📊 Collection Analytics',
-  analytics_portfolio_over_time:'Portfolio Value Over Time',
-  /** Failed to load portfolio history: {error} */
-  analytics_portfolio_error:    'Failed to load portfolio history: {error}',
-  /** Failed to load analytics data: {error} */
-  analytics_load_error:         'Failed to load analytics data: {error}',
-  analytics_tab_top_cards:      'Top Cards',
-  analytics_tab_by_rarity:      'By Rarity',
-  analytics_tab_by_set:         'By Set',
-  analytics_tab_performers:     'Performers',
-  analytics_no_price_data:      'No cards with price data yet.',
-  analytics_no_data:            'No data available.',
-  analytics_no_portfolio:       'No portfolio data yet',
-  analytics_not_enough_data:    'Not enough data yet — check back tomorrow!',
-  analytics_this_period:        'this period',
-  analytics_top_gainers:        'Top Gainers',
-  analytics_biggest_drops:      'Biggest Drops',
-  analytics_no_performer_data:  'No data yet',
-  /** {count} cards */
-  analytics_tooltip_cards:      '{count} cards',
-
   // ── Collection Spotlight ──────────────────────────────────────────────────────
   spotlight_title:          'Collection Spotlight',
   /** {owned} / {total} cards collected */
@@ -323,9 +297,6 @@ const en = {
   spotlight_cards_to_go:    '{n} cards to go',
   spotlight_set_complete:   '🎉 Set complete!',
   spotlight_continue:       'Continue collecting',
-  spotlight_most_expensive: 'Most Expensive',
-  spotlight_loading:        'Loading…',
-  spotlight_no_price:       'no price data',
   spotlight_sets_complete:  'Sets Complete',
   spotlight_1_set_finished: '1 set finished',
   /** {n} sets finished */
@@ -333,8 +304,6 @@ const en = {
   spotlight_cards_needed:   'Cards Needed',
   spotlight_all_complete:   'All sets complete!',
   spotlight_to_finish:      'to finish tracked sets',
-  spotlight_collection_value:'Collection Value',
-  spotlight_across_sets:    'across tracked sets',
 
   // ── Coming Soon / Roadmap ────────────────────────────────────────────────────
   coming_soon_heading:         "What's Coming to Lumidex",

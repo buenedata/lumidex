@@ -192,7 +192,7 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
             <div className="text-4xl mb-4">📦</div>
             <p className="text-muted mb-2">No sealed products available yet</p>
             <p className="text-xs text-muted/70">
-              Sealed product prices are synced automatically. Check back soon.
+              Check back soon for sealed product availability.
             </p>
           </div>
         </div>

@@ -10,9 +10,6 @@ const FREE_FEATURES = [
   'Unlimited collection tracking (all variants)',
   'All 3 collection goals (Normal, Masterset, Grandmaster)',
   'All 36 achievements',
-  'Today\'s card prices (TCGPlayer + CardMarket)',
-  '7-day price history chart',
-  'Today\'s total portfolio value',
   'Wanted list + 2 custom lists',
   'Friends, trades & social features',
   'Binder calculator',
@@ -20,16 +17,12 @@ const FREE_FEATURES = [
 ]
 
 const PRO_FEATURES = [
-  { text: '14 / 30 / 90 / 365-day price history', highlight: true },
-  { text: 'Portfolio value over time (historical chart)', highlight: true },
-  { text: 'Price alerts — get notified when prices move', highlight: true },
-  { text: 'Graded cards (PSA, BGS, CGC, TAG, ACE)', highlight: false },
+  { text: 'Graded cards (PSA, BGS, CGC, TAG, ACE)', highlight: true },
   { text: 'Sealed products tracking', highlight: false },
   { text: 'Unlimited custom lists', highlight: false },
   { text: 'Collection export (CSV / JSON)', highlight: false },
   { text: 'Advanced analytics & collection insights', highlight: false },
   { text: '💎 Pro badge on your public profile', highlight: false },
-  { text: 'Priority price sync (fresher data)', highlight: false },
 ]
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -83,7 +76,7 @@ export default function UpgradePage() {
             Your collection deserves more than a snapshot.
           </h1>
           <p className="text-[#9191b0] text-lg max-w-xl mx-auto">
-            Track where your cards have been, where they're going, and know the moment prices move.
+            Track where your cards have been, where they're going, and unlock powerful collection tools.
           </p>
         </div>
 
@@ -257,10 +250,6 @@ export default function UpgradePage() {
             {
               q: 'Can I switch between monthly and annual?',
               a: 'Yes. Open the billing portal via your profile settings to change your plan. If you switch to annual mid-cycle, Stripe will prorate the remaining value.',
-            },
-            {
-              q: 'Why is price history a Pro feature?',
-              a: "Storing and querying a year of price data for hundreds of thousands of card/variant combinations is expensive infrastructure. It's the feature that most directly pays for the servers.",
             },
           ].map(({ q, a }) => (
             <div key={q} className="bg-[#111118] border border-[#2a2a3d] rounded-xl p-5">

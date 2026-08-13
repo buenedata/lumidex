@@ -1,10 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { useAuthStore } from '@/lib/store'
-import { fmtCardPrice } from '@/lib/currency'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface TPUser {
@@ -85,27 +83,8 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 // ── Detailed card tile ────────────────────────────────────────────────────────
-function CardDetailTile({ item, currency }: { item: TPItem; currency: string }) {
+function CardDetailTile({ item }: { item: TPItem }) {
   const card = item.cards
-
-  // undefined = loading, null = no price available
-  const [cardPrice, setCardPrice] = useState<{ amount: number; currency: string } | null | undefined>(undefined)
-
-  useEffect(() => {
-    if (!card?.tcggo_id) { setCardPrice(null); return }
-    let cancelled = false
-    fetch(`/api/prices/card-variants/${card.tcggo_id}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (cancelled || !d) { setCardPrice(null); return }
-        const v = d.variants as Record<string, number | null>
-        // Prefer normal, then reverse_holo, then any available variant
-        const amount = v.normal ?? v.reverse_holo ?? Object.values(v).find(x => x != null) ?? null
-        setCardPrice(amount != null ? { amount, currency: d.currency ?? 'EUR' } : null)
-      })
-      .catch(() => { if (!cancelled) setCardPrice(null) })
-    return () => { cancelled = true }
-  }, [card?.tcggo_id])
 
   if (!card) return null
   const setInfo = (Array.isArray(card.sets) ? card.sets[0] : card.sets) as { name: string | null; logo_url: string | null } | null
@@ -147,16 +126,6 @@ function CardDetailTile({ item, currency }: { item: TPItem; currency: string }) 
         {card.number ? ` · #${card.number}` : ''}
       </p>
 
-      {/* Market price */}
-      {cardPrice === undefined ? (
-        <span className="text-[10px] text-muted">…</span>
-      ) : cardPrice !== null ? (
-        <span className="text-xs font-semibold text-price">
-          {cardPrice.currency === 'USD'
-            ? (fmtCardPrice({ eur: null, usd: cardPrice.amount }, currency) ?? cardPrice.amount.toFixed(2))
-            : (fmtCardPrice({ eur: cardPrice.amount, usd: null }, currency) ?? cardPrice.amount.toFixed(2))}
-        </span>
-      ) : null}
     </div>
   )
 }
@@ -168,14 +137,12 @@ function CardSidePanel({
   items,
   cashAmount,
   currencyCode,
-  userCurrency,
 }: {
   label: string
   labelClass: string
   items: TPItem[]
   cashAmount: number
   currencyCode: string
-  userCurrency: string
 }) {
   return (
     <div className="px-5 py-4 flex flex-col gap-3">
@@ -189,7 +156,6 @@ function CardSidePanel({
             <CardDetailTile
               key={item.id}
               item={item}
-              currency={userCurrency}
             />
           ))}
         </div>
@@ -214,9 +180,6 @@ function CardSidePanel({
 export default function TradeProposalCard({ proposal, onStatusChange }: TradeProposalCardProps) {
   const [acting, setActing] = useState(false)
   const [error,  setError]  = useState<string | null>(null)
-
-  const { profile } = useAuthStore()
-  const userCurrency: string = (profile as any)?.preferred_currency ?? 'USD'
 
   const { otherUser, isProposer, status } = proposal
   const otherName = otherUser?.display_name ?? otherUser?.username ?? 'Trainer'
@@ -296,7 +259,6 @@ export default function TradeProposalCard({ proposal, onStatusChange }: TradePro
           items={myOfferItems}
           cashAmount={myCashOffer}
           currencyCode={proposal.currency_code}
-          userCurrency={userCurrency}
         />
         <CardSidePanel
           label={`${otherName} Offers`}
@@ -304,7 +266,6 @@ export default function TradeProposalCard({ proposal, onStatusChange }: TradePro
           items={theirItems}
           cashAmount={theirCashOffer}
           currencyCode={proposal.currency_code}
-          userCurrency={userCurrency}
         />
       </div>
 

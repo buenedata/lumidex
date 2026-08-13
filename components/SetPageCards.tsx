@@ -3,7 +3,6 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { ChevronUpDownIcon, ArrowUpIcon, ArrowDownIcon } from '@heroicons/react/20/solid'
 import { cn } from '@/lib/utils'
-import { fmtCardPrice } from '@/lib/currency'
 import CardGrid from '@/components/CardGrid'
 import CollectionGoalSelector from '@/components/CollectionGoalSelector'
 import BinderCalculatorModal from '@/components/BinderCalculatorModal'
@@ -32,7 +31,6 @@ interface SetPageCardsProps {
   userId?: string
   hasPromos: boolean
   initialGoal?: CollectionGoal
-  currency?: string
   /**
    * When true, cards are never greyed out regardless of the user's grey_out_unowned setting.
    * Used on the browse/search page where collection status should not affect card appearance.
@@ -42,12 +40,6 @@ interface SetPageCardsProps {
   statSeries?: string
   statReleased?: string
   statCards?: string
-  /** Name of the most-expensive card — formatted client-side with effectiveCurrency */
-  statMostExpensiveName?: string
-  /** USD price of the most-expensive card — formatted client-side with effectiveCurrency */
-  statMostExpensiveUSD?: number
-  /** Total set value in USD — formatted client-side with effectiveCurrency */
-  statSetValueUSD?: number
 }
 
 type FilterTab    = 'all' | 'owned' | 'missing' | 'duplicates'
@@ -72,7 +64,6 @@ export default function SetPageCards({
   userId,
   hasPromos,
   initialGoal = 'normal',
-  currency = 'USD',
   disableGreyOut = false,
   statSeries,
   statReleased,
@@ -92,9 +83,6 @@ export default function SetPageCards({
   const [hasExtraVariants, setHasExtraVariants] = useState(false)
   // Tracks whether the batch variant fetch is in flight.
   const [variantsBatchLoading, setVariantsBatchLoading] = useState(false)
-  // Set-level price stats — fetched once from /api/prices/set-stats/[setId]
-  const [statMostExpensive, setStatMostExpensive] = useState<number | null>(null)
-  const [statSetValue,      setStatSetValue]       = useState<number | null>(null)
   // Only flip the shimmer visible if loading takes > 250ms — prevents a flash on fast/cached loads.
   const [showVariantShimmer, setShowVariantShimmer] = useState(false)
   useEffect(() => {
@@ -106,21 +94,6 @@ export default function SetPageCards({
     return () => clearTimeout(t)
   }, [variantsBatchLoading])
 
-  // Fetch set-level pricing stats once when the set page mounts.
-  // Only runs when statSeries is defined (i.e. we are on the set detail page, not browse).
-  useEffect(() => {
-    if (!setId || statSeries === undefined) return
-    let cancelled = false
-    fetch(`/api/prices/set-stats/${setId}`)
-      .then(r => r.ok ? r.json() : null)
-      .then((data: { mostExpensive: number | null; setValue: number | null } | null) => {
-        if (cancelled || !data) return
-        setStatMostExpensive(data.mostExpensive ?? null)
-        setStatSetValue(data.setValue ?? null)
-      })
-      .catch(() => { /* non-fatal — stats stay as '—' */ })
-    return () => { cancelled = true }
-  }, [setId]) // eslint-disable-line react-hooks/exhaustive-deps
   // Goal-aware Have/Need counts emitted by CardGrid after the batch variant load.
   // null until first emission — tab badges fall back to the basic Zustand counts.
   const [goalHave, setGoalHave] = useState<number | null>(null)
@@ -134,13 +107,8 @@ export default function SetPageCards({
   }, [])
 
   const { userCards: storeUserCards } = useCollectionStore()
-  const { user, profile, isLoading: isAuthLoading } = useAuthStore()
+  const { user, isLoading: isAuthLoading } = useAuthStore()
   const isAuthenticated = !!user
-
-  // Prefer the client-side profile's preferred_currency (always up-to-date after
-  // login) over the server-passed prop, which may have defaulted to 'USD' if the
-  // server-side supabaseAdmin query failed silently.
-  const effectiveCurrency = (profile as any)?.preferred_currency ?? currency
 
   // ── Search filter ────────────────────────────────────────────────────────
   // Wrapped in useMemo so a non-empty searchQuery doesn't produce a new array
@@ -269,21 +237,9 @@ export default function SetPageCards({
           <div className="max-w-screen-2xl mx-auto px-6 py-4">
             <div className="flex items-center gap-8 flex-wrap">
               {[
-                { label: 'Series',         value: statSeries   ?? '—' },
-                { label: 'Released',       value: statReleased ?? '—' },
-                { label: 'Cards',          value: statCards    ?? '—' },
-                {
-                  label: 'Most Expensive',
-                  value: statMostExpensive != null
-                    ? fmtCardPrice({ eur: statMostExpensive, usd: null }, effectiveCurrency)
-                    : '—',
-                },
-                {
-                  label: 'Set Value',
-                  value: statSetValue != null
-                    ? fmtCardPrice({ eur: statSetValue, usd: null }, effectiveCurrency)
-                    : '—',
-                },
+                { label: 'Series',   value: statSeries   ?? '—' },
+                { label: 'Released', value: statReleased ?? '—' },
+                { label: 'Cards',    value: statCards    ?? '—' },
               ].map(({ label, value }) => (
                 <div key={label} className="flex flex-col gap-0.5">
                   <span className="text-xs text-muted uppercase tracking-wider">{label}</span>
@@ -545,17 +501,16 @@ export default function SetPageCards({
         ) : (
           <CardGrid
              cards={filteredCards}
-             userCards={storeUserCards}
-             filter={safeFilter}
-             sortBy={sortBy}
-             sortDirection={sortDirection}
-             setTotal={setTotal}
-             setName={setName}
-             setComplete={setComplete}
-             initialCardId={initialCardId}
-             collectionGoal={collectionGoal}
-             currency={effectiveCurrency}
-             userId={userId}
+               userCards={storeUserCards}
+               filter={safeFilter}
+               sortBy={sortBy}
+               sortDirection={sortDirection}
+               setTotal={setTotal}
+               setName={setName}
+               setComplete={setComplete}
+               initialCardId={initialCardId}
+               collectionGoal={collectionGoal}
+               userId={userId}
              allCards={cards}
              onCountsChange={handleCountsChange}
              onVariantsLegendChange={setLegendVariants}

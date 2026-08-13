@@ -140,7 +140,6 @@ function flattenProducts(groups: SeriesProductGroup[]): BrowseProduct[] {
           name:         product.name,
           product_type: product.product_type,
           image_url:    product.image_url,
-          tcgp_market:  null,
         })
       }
     }

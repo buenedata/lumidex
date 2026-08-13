@@ -607,8 +607,6 @@ function TradeHubContent() {
           <FriendCardPickerModal
             otherUser={otherUser}
             alreadyAdded={addedRequestIds}
-            offerValueEur={0}
-            requestedValueEur={0}
             onAdd={(card: FriendCard) => {
               if (!addedRequestIds.has(card.id)) {
                 setRequesting(prev => [...prev, {

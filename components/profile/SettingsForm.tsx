@@ -330,12 +330,6 @@ export default function SettingsForm({
             {t('settings_section_display')}
           </h3>
 
-          {/* Pricing preferences — coming soon */}
-          <div className="opacity-50 cursor-not-allowed">
-            <label className="block text-sm font-medium text-gray-400">{t('settings_price_source')}</label>
-            <p className="text-xs text-gray-500 mt-1">{t('settings_price_source_soon')}</p>
-          </div>
-
           <Toggle
             id="grey_out_unowned"
             label={t('settings_grey_out')}
@@ -360,12 +354,6 @@ export default function SettingsForm({
             checked={values.profile_private}
             onChange={v => onChange({ profile_private: v })}
           />
-
-          {/* Portfolio value visibility — coming soon */}
-          <div className="opacity-50 cursor-not-allowed">
-            <label className="block text-sm font-medium text-gray-400">{t('settings_portfolio_visibility')}</label>
-            <p className="text-xs text-gray-500 mt-1">{t('settings_price_source_soon')}</p>
-          </div>
 
           <Toggle
             id="lists_public_by_default"

@@ -128,7 +128,7 @@ export interface PokemonCard {
   artist?: string | null; // Illustrator credit, e.g. "GIDORA" (optional — not all routes fetch it)
   /** FK → variants.id — which variant is added when the card tile is double-clicked */
   default_variant_id?: string | null;
-  /** TCGGO numeric card ID — used as item_id in the item_prices table for price lookups. */
+  /** TCGGO numeric card ID — numeric identifier from the TCGGO catalogue. */
   tcggo_id?: number | null;
   created_at: string;
   // Legacy compatibility fields (deprecated after migration)
@@ -141,18 +141,6 @@ export interface PokemonCard {
   set_logo_url?: string | null;
   /** Set release date (ISO string) — only populated on the browse/search page; used for date sort */
   set_release_date?: string | null;
-}
-
-/** A single data point in the price history chart. */
-export interface PriceHistoryPoint {
-  /** Variant key from card_price_history.variant_key */
-  variantKey: 'normal' | 'reverse_holo' | 'holo' | '1st_edition' | string;
-  /** Price in USD */
-  priceUsd: number;
-  /** ISO timestamp when this price was recorded */
-  recordedAt: string;
-  /** Price source: 'tcgplayer' | 'cardmarket' */
-  source: string;
 }
 
 /** Friend who owns a card — returned by /api/friends/card/[cardId] */

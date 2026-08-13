@@ -20,14 +20,10 @@ interface SetPageProps {
 //
 // Encapsulates the full auth flow (getUser → profile → user_set) so it can
 // run CONCURRENTLY with getSetById + getCardsBySet in a single Promise.all.
-//
-// Previously these three sequential awaits blocked the price fetch behind a
-// 4-step waterfall.  Now auth latency overlaps with data-fetch latency and
-// the effective TTFB for the full page drops by ~40 %.
+// Auth latency overlaps with data-fetch latency, reducing TTFB by ~40 %.
 //
 interface AuthPrefs {
   userId:      string | undefined
-  currency:    string
   currentGoal: CollectionGoal
 }
 
@@ -37,37 +33,24 @@ async function getAuthAndPrefs(setId: string): Promise<AuthPrefs> {
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
-      return { userId: undefined, currency: 'USD', currentGoal: 'normal' }
+      return { userId: undefined, currentGoal: 'normal' }
     }
 
-    // Profile preferences and collection goal are independent — fetch in parallel.
-    const [profileResult, userSetResult] = await Promise.all([
-      supabaseAdmin
-        .from('users')
-        .select('preferred_currency')
-        .eq('id', user.id)
-        .maybeSingle(),
-      supabaseAdmin
-        .from('user_sets')
-        .select('collection_goal')
-        .eq('user_id', user.id)
-        .eq('set_id', setId)
-        .maybeSingle(),
-    ])
-
-    if (profileResult.error) {
-      console.error('[set page] Failed to read user profile preferences:', profileResult.error)
-    }
+    const userSetResult = await supabaseAdmin
+      .from('user_sets')
+      .select('collection_goal')
+      .eq('user_id', user.id)
+      .eq('set_id', setId)
+      .maybeSingle()
 
     return {
       userId:      user.id,
-      currency:    profileResult.data?.preferred_currency ?? 'USD',
       currentGoal: (userSetResult.data?.collection_goal ?? 'normal') as CollectionGoal,
     }
   } catch (err) {
     // Auth errors are non-fatal — guest view still works.
     console.warn('[set page] Could not fetch user session:', err)
-    return { userId: undefined, currency: 'USD', currentGoal: 'normal' }
+    return { userId: undefined, currentGoal: 'normal' }
   }
 }
 
@@ -92,7 +75,7 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
   let fetchError: string | null = null
   let rawSetData: Awaited<ReturnType<typeof getSetById>> = null
   let rawCards:   Awaited<ReturnType<typeof getCardsBySet>> = []
-  let authPrefs:  AuthPrefs = { userId: undefined, currency: 'USD', currentGoal: 'normal' }
+  let authPrefs:  AuthPrefs = { userId: undefined, currentGoal: 'normal' }
 
   try {
     ;[rawSetData, rawCards, authPrefs] = await Promise.all([
@@ -139,12 +122,9 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
     rarity:    card.rarity || '',
   })) as PokemonCard[]
 
-  const { userId, currency, currentGoal } = authPrefs
+  const { userId, currentGoal } = authPrefs
 
-  // ── Phase 2: prices + variant structure (parallel) ───────────────────────
-  //
-  // Both fetches need cardIds from Phase 1 but are independent of each other,
-  // so we run them in parallel.
+  // ── Phase 2: variant structure ────────────────────────────────────────────
   //
   // batchFetchVariantStructure queries supabaseAdmin directly — no HTTP round-
   // trip — so variant dots are embedded in the initial HTML and appear on first
@@ -240,7 +220,6 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
         userId={userId}
         hasPromos={hasPromos}
         initialGoal={currentGoal}
-        currency={currency}
         statSeries={set.series ?? '—'}
         statReleased={
           set.release_date

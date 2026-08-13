@@ -12,8 +12,6 @@ export interface FriendCard {
   set_name: string | null
   set_logo_url: string | null
   quantity: number
-  price_eur: number | null
-  price_usd: number | null
 }
 
 interface TradeUser {
@@ -26,33 +24,8 @@ interface TradeUser {
 interface FriendCardPickerModalProps {
   otherUser: TradeUser
   alreadyAdded: Set<string>
-  /** Total EUR value of cards you are currently offering */
-  offerValueEur: number
-  /** Total EUR value of cards you have already requested */
-  requestedValueEur: number
   onAdd: (card: FriendCard) => void
   onClose: () => void
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-const EUR_TO_USD = 1.09
-
-function fmtEur(v: number) {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(v)
-}
-
-function cardPrice(card: FriendCard): string | null {
-  if (card.price_eur != null) return fmtEur(card.price_eur)
-  if (card.price_usd != null)
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(card.price_usd)
-  return null
-}
-
-/** Normalise card price to EUR for sorting/comparison */
-function toEur(card: FriendCard): number | null {
-  if (card.price_eur != null) return card.price_eur
-  if (card.price_usd != null) return card.price_usd / EUR_TO_USD
-  return null
 }
 
 // ── Card tile ─────────────────────────────────────────────────────────────────
@@ -65,7 +38,6 @@ function CardTile({
   added: boolean
   onAdd: () => void
 }) {
-  const price = cardPrice(card)
   return (
     <button
       onClick={onAdd}
@@ -93,13 +65,6 @@ function CardTile({
         {card.name}
       </p>
 
-      {/* Price */}
-      {price ? (
-        <p className="text-[10px] font-bold text-price leading-none">{price}</p>
-      ) : (
-        <p className="text-[10px] text-muted leading-none">–</p>
-      )}
-
       {/* Add / Added state */}
       {added ? (
         <span className="text-[9px] text-accent font-semibold leading-none">✓ Added</span>
@@ -116,16 +81,12 @@ function CardTile({
 export default function FriendCardPickerModal({
   otherUser,
   alreadyAdded,
-  offerValueEur,
-  requestedValueEur,
   onAdd,
   onClose,
 }: FriendCardPickerModalProps) {
   const name = otherUser.display_name ?? otherUser.username ?? 'them'
 
-  const [tab,     setTab]     = useState<'suggested' | 'all'>('suggested')
   const [search,  setSearch]  = useState('')
-  const [sort,    setSort]    = useState<'set' | 'price-desc' | 'price-asc'>('set')
   const [cards,   setCards]   = useState<FriendCard[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -139,27 +100,6 @@ export default function FriendCardPickerModal({
       .finally(() => setLoading(false))
   }, [otherUser.id])
 
-  // How much value still needs to be covered on the request side
-  const remainingEur = Math.max(0, offerValueEur - requestedValueEur)
-
-  // ── Suggested: cards sorted by proximity to remaining trade gap ───────────
-  const suggested = useMemo(() => {
-    const target = remainingEur > 0
-      ? remainingEur
-      : offerValueEur > 0
-        ? offerValueEur
-        : 10  // sensible fallback when no offer value yet
-
-    return [...cards]
-      .filter(c => toEur(c) != null)
-      .sort((a, b) => {
-        const pa = toEur(a)!
-        const pb = toEur(b)!
-        return Math.abs(pa - target) - Math.abs(pb - target)
-      })
-      .slice(0, 24)
-  }, [cards, remainingEur, offerValueEur])
-
   // ── All cards filtered ────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     if (!search.trim()) return cards
@@ -171,17 +111,7 @@ export default function FriendCardPickerModal({
     )
   }, [cards, search])
 
-  // ── Sorted flat list (for price sorts) ────────────────────────────────────
-  const sortedFlat = useMemo(() => {
-    if (sort === 'set') return filtered
-    return [...filtered].sort((a, b) => {
-      const pa = toEur(a) ?? (sort === 'price-desc' ? -Infinity : Infinity)
-      const pb = toEur(b) ?? (sort === 'price-desc' ? -Infinity : Infinity)
-      return sort === 'price-desc' ? pb - pa : pa - pb
-    })
-  }, [filtered, sort])
-
-  // ── Grouped by set (only used when sort === 'set') ────────────────────────
+  // ── Grouped by set ────────────────────────────────────────────────────────
   const bySet = useMemo(() => {
     const groups = new Map<string, { setName: string; cards: FriendCard[] }>()
     for (const c of filtered) {
@@ -191,20 +121,6 @@ export default function FriendCardPickerModal({
     }
     return Array.from(groups.values()).sort((a, b) => a.setName.localeCompare(b.setName))
   }, [filtered])
-
-  const unpricedCount = cards.filter(c => toEur(c) == null).length
-
-  // Switch to "all" when user starts typing
-  function handleSearch(v: string) {
-    setSearch(v)
-    if (v.trim()) setTab('all')
-  }
-
-  const sortLabel: Record<typeof sort, string> = {
-    'set':        '🗂️ By Set',
-    'price-desc': '💰 Price ↓',
-    'price-asc':  '💰 Price ↑',
-  }
 
   return (
     <div
@@ -219,20 +135,9 @@ export default function FriendCardPickerModal({
             <h3 className="font-bold text-primary text-base leading-tight truncate">
               Browse {name}&apos;s Collection
             </h3>
-            {offerValueEur > 0 ? (
-              <p className="text-[11px] text-muted mt-0.5 leading-snug">
-                Your offer is worth&nbsp;
-                <span className="text-accent font-semibold">{fmtEur(offerValueEur)}</span>
-                {remainingEur > 0
-                  ? <> — pick&nbsp;<span className="text-price font-semibold">~{fmtEur(remainingEur)}</span>&nbsp;more to balance</>
-                  : ' — trade is currently balanced or in your favour'
-                }
-              </p>
-            ) : (
-              <p className="text-[11px] text-muted mt-0.5">
-                Add cards to your offer first to get price suggestions
-              </p>
-            )}
+            <p className="text-[11px] text-muted mt-0.5">
+              Select cards from {name}&apos;s collection to add to your trade request
+            </p>
           </div>
           <button
             onClick={onClose}
@@ -253,71 +158,18 @@ export default function FriendCardPickerModal({
             <input
               type="text"
               value={search}
-              onChange={e => handleSearch(e.target.value)}
+              onChange={e => setSearch(e.target.value)}
               placeholder={`Search ${name}'s cards…`}
               className="flex-1 bg-transparent text-sm text-primary placeholder:text-muted outline-none"
             />
             {search && (
-              <button onClick={() => handleSearch('')} className="text-muted hover:text-primary transition-colors">
+              <button onClick={() => setSearch('')} className="text-muted hover:text-primary transition-colors">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             )}
           </div>
-        </div>
-
-        {/* ── Tabs + sort controls ── */}
-        <div className="flex items-center justify-between gap-2 px-5 pt-3 pb-1 shrink-0">
-          {/* Tabs */}
-          {!search && (
-            <div className="flex gap-1">
-              <button
-                onClick={() => setTab('suggested')}
-                className={[
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
-                  tab === 'suggested'
-                    ? 'bg-accent text-white'
-                    : 'text-muted hover:text-primary hover:bg-surface',
-                ].join(' ')}
-              >
-                <span>💡</span> Suggested
-              </button>
-              <button
-                onClick={() => setTab('all')}
-                className={[
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors',
-                  tab === 'all'
-                    ? 'bg-accent text-white'
-                    : 'text-muted hover:text-primary hover:bg-surface',
-                ].join(' ')}
-              >
-                <span>🗂️</span> All Cards
-                {!loading && <span className="opacity-70">({cards.length})</span>}
-              </button>
-            </div>
-          )}
-          {search && <div />}
-
-          {/* Sort control — only shown in All Cards / search mode */}
-          {(tab === 'all' || search) && !loading && cards.length > 0 && (
-            <div className="flex gap-1 ml-auto">
-              {(['set', 'price-desc', 'price-asc'] as const).map(s => (
-                <button
-                  key={s}
-                  onClick={() => setSort(s)}
-                  className={[
-                    'px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-colors whitespace-nowrap',
-                    sort === s
-                      ? 'bg-surface border border-accent/50 text-accent'
-                      : 'text-muted hover:text-primary hover:bg-surface border border-transparent',
-                  ].join(' ')}
-                >
-                  {sortLabel[s]}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* ── Content ── */}
@@ -342,56 +194,8 @@ export default function FriendCardPickerModal({
             </div>
           )}
 
-          {/* ── Suggested tab ── */}
-          {!loading && cards.length > 0 && !search && tab === 'suggested' && (
-            <div>
-              {offerValueEur > 0 && (
-                <p className="text-xs text-muted mb-4 leading-relaxed">
-                  {remainingEur > 0
-                    ? <>Cards closest to the <span className="text-price font-semibold">{fmtEur(remainingEur)}</span> you still need to make this a fair trade.</>
-                    : <>Your request already matches your offer — these are the closest-valued cards {name} owns.</>
-                  }
-                </p>
-              )}
-
-              {suggested.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-3xl mb-2">🏷️</p>
-                  <p className="text-sm text-secondary font-medium">No priced cards to suggest</p>
-                  <p className="text-xs text-muted mt-1">
-                    Switch to All Cards to browse {name}&apos;s collection
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-[repeat(auto-fill,minmax(90px,1fr))] gap-3">
-                  {suggested.map(card => (
-                    <CardTile
-                      key={card.id}
-                      card={card}
-                      added={alreadyAdded.has(card.id)}
-                      onAdd={() => onAdd(card)}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {unpricedCount > 0 && (
-                <p className="text-xs text-muted mt-5 text-center">
-                  {name} also has{' '}
-                  <button
-                    onClick={() => setTab('all')}
-                    className="text-accent hover:underline font-medium"
-                  >
-                    {unpricedCount} card{unpricedCount !== 1 ? 's' : ''} without price data
-                  </button>
-                  {' '}— browse All Cards to see them
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* ── All Cards / Search tab ── */}
-          {!loading && cards.length > 0 && (tab === 'all' || search) && (
+          {/* ── Cards — grouped by set ── */}
+          {!loading && cards.length > 0 && (
             <div className="flex flex-col gap-6">
               {filtered.length === 0 ? (
                 <div className="text-center py-12">
@@ -399,28 +203,7 @@ export default function FriendCardPickerModal({
                   <p className="text-sm text-secondary font-medium">No results for &ldquo;{search}&rdquo;</p>
                   <p className="text-xs text-muted mt-1">{name} doesn&apos;t own any matching cards</p>
                 </div>
-              ) : sort !== 'set' ? (
-                /* Price-sorted flat grid */
-                <div>
-                  <p className="text-xs text-muted mb-3">
-                    {sortedFlat.length} card{sortedFlat.length !== 1 ? 's' : ''}
-                    {sortedFlat.filter(c => toEur(c) == null).length > 0 && (
-                      <> · {sortedFlat.filter(c => toEur(c) == null).length} unpriced</>
-                    )}
-                  </p>
-                  <div className="grid grid-cols-[repeat(auto-fill,minmax(90px,1fr))] gap-3">
-                    {sortedFlat.map(card => (
-                      <CardTile
-                        key={card.id}
-                        card={card}
-                        added={alreadyAdded.has(card.id)}
-                        onAdd={() => onAdd(card)}
-                      />
-                    ))}
-                  </div>
-                </div>
               ) : (
-                /* Grouped by set */
                 bySet.map(group => (
                   <div key={group.setName}>
                     <p className="text-xs font-semibold text-secondary uppercase tracking-wider mb-3 flex items-center gap-2">

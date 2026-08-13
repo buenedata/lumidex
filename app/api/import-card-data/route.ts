@@ -556,8 +556,7 @@ export async function POST(request: NextRequest) {
               supertype: pkmnCard.supertype ?? null,  // card category
               rarity: pkmnCard.rarity ?? null,
               type: resolvedType ?? null,             // element type
-              // pokemontcg.io card ID — used by price sync to match API data without
-              // relying on card number alone (numbers repeat across different sets)
+              // pokemontcg.io card ID — unique identifier for this card from the external API
               api_id: pkmnCard.dbId ?? null,
             }
 
@@ -686,7 +685,7 @@ export async function POST(request: NextRequest) {
           const updatePayload: Record<string, unknown> = {}
           if (pkmnCard.artist !== null) updatePayload.artist = pkmnCard.artist
           if (pkmnCard.supertype !== null) updatePayload.supertype = pkmnCard.supertype
-          // Backfill api_id if it was missing (added in price-data migration)
+          // Backfill api_id if it was missing (added in a prior schema migration)
           if (pkmnCard.dbId && !(dbCard as unknown as { api_id: string | null }).api_id) {
             updatePayload.api_id = pkmnCard.dbId
           }

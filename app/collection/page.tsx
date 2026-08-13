@@ -9,11 +9,9 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { SetProgress } from '@/types'
 import { cn } from '@/lib/utils'
-import { fmtCardPrice } from '@/lib/currency'
-import AnalyticsSection from '@/components/analytics/AnalyticsSection'
 
 export default function CollectionPage() {
-  const { user, isLoading: authLoading, profile } = useAuthStore()
+  const { user, isLoading: authLoading } = useAuthStore()
   const {
     userSets,
     pokemonSets,
@@ -25,9 +23,8 @@ export default function CollectionPage() {
   } = useCollectionStore()
   const router = useRouter()
 
-  const [searchTerm, setSearchTerm]         = useState('')
-  const [collectionValue, setCollectionValue] = useState<string | null>(null)
-  const [mySetsOpen, setMySetsOpen]         = useState(true)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [mySetsOpen, setMySetsOpen] = useState(true)
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -44,27 +41,6 @@ export default function CollectionPage() {
     if (userSets.length === 0) fetchUserSets()
     if (userCardCountBySet.size === 0) fetchUserCards()
   }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Fetch collection value — price × quantity for all owned cards via the
-  // portfolio-value endpoint. Replaces the old set-stats approach that summed
-  // market prices for every card in each set without considering ownership or qty.
-  useEffect(() => {
-    if (!user) return
-    let cancelled = false
-
-    fetch(`/api/users/${user.id}/portfolio-value`)
-      .then(r => (r.ok ? r.json() : null))
-      .catch(() => null)
-      .then(data => {
-        if (cancelled) return
-        if (data?.value != null) {
-          const cur = (profile as any)?.preferred_currency ?? 'USD'
-          setCollectionValue(fmtCardPrice({ eur: data.value, usd: null }, cur))
-        }
-      })
-
-    return () => { cancelled = true }
-  }, [user?.id, profile]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Derive set progress from the store ──────────────────────────────────
   const buildProgress = (setId: string): SetProgress => {
@@ -113,8 +89,8 @@ export default function CollectionPage() {
           </div>
 
           {/* Stats skeleton */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-            {Array.from({ length: 3 }).map((_, i) => (
+          <div className="grid grid-cols-2 gap-4 mb-8">
+            {Array.from({ length: 2 }).map((_, i) => (
               <div key={i} className="bg-surface border border-subtle rounded-xl p-4">
                 <div className="skeleton h-3 w-24 rounded mb-2" />
                 <div className="skeleton h-7 w-16 rounded" />
@@ -164,7 +140,7 @@ export default function CollectionPage() {
         {userPokemonSets.length > 0 && (
           <>
             {/* ── Summary Stats ────────────────────────────────────────── */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+            <div className="grid grid-cols-2 gap-4 mb-8">
               <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1">
                 <span className="text-xs text-muted uppercase tracking-wider">Sets Tracked</span>
                 <span className="text-2xl font-bold text-primary">{userPokemonSets.length}</span>
@@ -173,19 +149,10 @@ export default function CollectionPage() {
                 <span className="text-xs text-muted uppercase tracking-wider">Cards Owned</span>
                 <span className="text-2xl font-bold text-primary">{cardsOwned.toLocaleString()}</span>
               </div>
-              <div className="bg-surface border border-subtle rounded-xl p-4 flex flex-col gap-1 col-span-2 md:col-span-1">
-                <span className="text-xs text-muted uppercase tracking-wider">Collection Value</span>
-                <span className="text-2xl font-bold text-price">
-                  {collectionValue ?? '—'}
-                </span>
-              </div>
             </div>
 
             {/* ── Last Activity ────────────────────────────────────────── */}
             <LastActivitySection userId={user.id} isOwnProfile compact />
-
-            {/* ── Analytics ────────────────────────────────────────────── */}
-            <AnalyticsSection />
 
             {/* ── Search / Filter ──────────────────────────────────────── */}
             <div className="mb-6">

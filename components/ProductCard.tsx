@@ -2,9 +2,6 @@
 
 import { useState, useCallback } from 'react'
 import { cn } from '@/lib/utils'
-import { useItemPrice } from '@/hooks/useItemPrice'
-import { useAuthStore } from '@/lib/store'
-import { fmtCardPrice } from '@/lib/currency'
 
 // ── Known product types ───────────────────────────────────────────────────────
 export const PRODUCT_TYPES = [
@@ -72,9 +69,6 @@ export default function ProductCard({
   const [productType, setProductType] = useState<string | null>(product.product_type)
   const [typesaving,  setTypeSaving]  = useState(false)
 
-  const { profile } = useAuthStore()
-  const userCurrency: string = (profile as any)?.preferred_currency ?? 'USD'
-
   const typeStyle = getProductTypeStyle(productType)
 
   const handleTypeChange = useCallback(async (newType: string) => {
@@ -92,7 +86,6 @@ export default function ProductCard({
       setTypeSaving(false)
     }
   }, [product.id])
-  const { price, loading: priceLoading } = useItemPrice(product.api_product_id, 'product', 'normal')
 
   const updateQuantity = useCallback(async (newQty: number) => {
     if (!userId || saving) return
@@ -165,19 +158,6 @@ export default function ProductCard({
         >
           {product.name}
         </h3>
-
-        {/* Price */}
-        <div className="text-right">
-          {priceLoading ? (
-            <span className="text-xs text-muted animate-pulse">Loading…</span>
-          ) : price !== null ? (
-            <span className="text-sm font-semibold text-accent">
-              {fmtCardPrice({ eur: price, usd: null }, userCurrency) ?? `EUR ${price.toFixed(2)}`}
-            </span>
-          ) : (
-            <span className="text-xs text-muted">—</span>
-          )}
-        </div>
 
         {/* Quantity controls */}
         <div className="flex items-end justify-end gap-2">

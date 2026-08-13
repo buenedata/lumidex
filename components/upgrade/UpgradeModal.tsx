@@ -12,9 +12,6 @@ interface UpgradeModalProps {
 }
 
 const PRO_FEATURES = [
-  '14/30/90/365-day price history charts',
-  'Portfolio value over time',
-  'Price alerts when cards move',
   'Graded cards (PSA, BGS, CGC, TAG, ACE)',
   'Sealed products tracking',
   'Unlimited custom lists',
