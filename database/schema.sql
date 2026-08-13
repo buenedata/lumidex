@@ -8,7 +8,7 @@
 --
 -- Tables (in dependency order):
 --   sets, cards*, variants*, users, achievements,
---   set_products, item_prices,
+--   set_products,
 --   card_variant_availability, card_variant_images,
 --   friendships, wanted_cards,
 --   user_achievements, user_card_variants, user_cards,
@@ -154,21 +154,6 @@ create table if not exists public.set_products (
     product_type   text,
     updated_at     timestamptz not null default now(),
     image_url      text
-);
-
--- Item prices (latest prices for singles, graded cards, and sealed products)
--- NOTE: item_id is a text identifier (card uuid or product id as text).
---       item_type: 'single' | 'graded' | 'product'
---       source: 'tcggo' | 'cardmarket'
-create table if not exists public.item_prices (
-    id         uuid        not null default gen_random_uuid() primary key,
-    item_id    text        not null,
-    item_type  text        not null check (item_type in ('single','graded','product')),
-    variant    text        not null default 'normal',
-    price      numeric,
-    currency   text        not null default 'EUR',
-    source     text        not null check (source in ('tcggo','cardmarket')),
-    updated_at timestamptz not null default now()
 );
 
 -- Card variant availability (which variants are available for a given card)
@@ -397,7 +382,6 @@ alter table public.achievements              enable row level security;
 alter table public.card_variant_availability enable row level security;
 alter table public.card_variant_images       enable row level security;
 alter table public.friendships               enable row level security;
-alter table public.item_prices               enable row level security;
 alter table public.set_products              enable row level security;
 alter table public.sets                      enable row level security;
 alter table public.trade_proposal_items      enable row level security;
@@ -637,12 +621,6 @@ create policy "friendships_parties_delete"
 create policy "friendships_admin_all"
     on public.friendships for all using (public.is_admin());
 
--- item_prices
-create policy "item_prices_public_read"
-    on public.item_prices for select using (true);
-create policy "item_prices_admin_write"
-    on public.item_prices for all using (public.is_admin());
-
 -- set_products
 create policy "set_products_public_read"
     on public.set_products for select using (true);
@@ -848,14 +826,6 @@ create index if not exists friendships_accepted_requester_idx
     on public.friendships(requester_id) where status = 'accepted';
 create index if not exists friendships_accepted_addressee_idx
     on public.friendships(addressee_id) where status = 'accepted';
-
--- item_prices
-create index if not exists item_prices_item_id_idx
-    on public.item_prices(item_id);
-create index if not exists item_prices_item_type_idx
-    on public.item_prices(item_type);
-create index if not exists item_prices_updated_at_idx
-    on public.item_prices(updated_at desc);
 
 -- set_products
 create index if not exists set_products_set_id_idx
