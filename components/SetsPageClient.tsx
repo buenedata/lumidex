@@ -271,9 +271,25 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId, initialG
     filteredFavorites.length +
     Array.from(groupedSets.values()).reduce((acc, arr) => acc + arr.length, 0)
 
+  // ── Dynamic page title / subtitle ────────────────────────────────────────
+  const gameDisplayName = GAMES[selectedGame].displayName
+  const pageTitle    = selectedGame === 'pokemon' ? 'Card Sets' : `${gameDisplayName} Sets`
+  const pageSubtitle = `Browse and collect ${gameDisplayName} sets`
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div>
+      {/* ── Page header ────────────────────────────────────────────────── */}
+      <div className="mb-8">
+        <h1
+          className="text-3xl font-bold mb-1"
+          style={{ fontFamily: 'var(--font-space-grotesk)' }}
+        >
+          {pageTitle}
+        </h1>
+        <p className="text-secondary text-sm">{pageSubtitle}</p>
+      </div>
+
       {/* ── Game selector tabs ─────────────────────────────────────────── */}
       {/* Hidden when a specific game is locked via ?game= URL param */}
       {!initialGame && (

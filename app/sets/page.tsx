@@ -81,17 +81,6 @@ export default async function SetsPage({
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--color-bg-base)' }}>
       <div className="max-w-screen-2xl mx-auto px-6 py-8">
-        {/* Page header */}
-        <div className="mb-8">
-          <h1
-            className="text-3xl font-bold mb-1"
-            style={{ fontFamily: 'var(--font-space-grotesk)' }}
-          >
-            Card Sets
-          </h1>
-          <p className="text-secondary text-sm">Browse and collect TCG sets</p>
-        </div>
-
         {sets.length === 0 ? (
           <div className="text-center py-24">
             <p className="text-muted mb-2">No sets found</p>
