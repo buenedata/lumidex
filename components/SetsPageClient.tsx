@@ -19,6 +19,11 @@ interface SetsPageClientProps {
   userId: string | null
   /** Series names that have at least one sealed product in the DB */
   seriesWithProducts?: string[]
+  /**
+   * Game to pre-select on first render, passed from the server via ?game= query param.
+   * Takes priority over localStorage. When absent, localStorage (or 'pokemon') is used.
+   */
+  initialGame?: GameSlug
 }
 
 // Canonical Pokémon TCG series chronological order (oldest = smallest number, newest = largest).
@@ -53,11 +58,13 @@ const KNOWN_SERIES_ORDER: Record<string, number> = {
   'Scarlet & Violet':          220,
 }
 
-export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPageClientProps) {
+export default function SetsPageClient({ sets, favoritedSetIds, userId, initialGame }: SetsPageClientProps) {
   const { t } = useLocale()
 
   // ── Game selector ─────────────────────────────────────────────────────────
+  // Priority: URL ?game= param (initialGame) > localStorage > default 'pokemon'
   const [selectedGame, setSelectedGame] = useState<GameSlug>(() => {
+    if (initialGame) return initialGame
     if (typeof window === 'undefined') return 'pokemon'
     return (localStorage.getItem('lumidex_selected_game') as GameSlug) ?? 'pokemon'
   })

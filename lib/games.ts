@@ -5,6 +5,14 @@ export interface GameConfig {
   displayName: string;
   cardBackImage: string;
   defaultLanguage: string;
+  /**
+   * Logo/icon image for UI elements like the navbar dropdown.
+   * Place the actual image files at the referenced paths under /public/.
+   * e.g. public/images/games/pokemon-logo.png
+   */
+  logoUrl: string;
+  /** Short description shown in game-picker UI */
+  description?: string;
 }
 
 export const GAMES: Record<GameSlug, GameConfig> = {
@@ -13,12 +21,18 @@ export const GAMES: Record<GameSlug, GameConfig> = {
     displayName: 'Pokémon',
     cardBackImage: '/pokemon_card_backside.png',
     defaultLanguage: 'en',
+    // TODO: place logo image at public/images/games/pokemon-logo.png
+    logoUrl: '/images/games/pokemon-logo.png',
+    description: 'The original TCG — collect every set from Base Set to Scarlet & Violet.',
   },
   moomin: {
     slug: 'moomin',
     displayName: 'Moomin',
     cardBackImage: '/moomin_card_backside.png',
     defaultLanguage: 'en',
+    // TODO: place logo image at public/images/games/moomin-logo.png
+    logoUrl: '/images/games/moomin-logo.png',
+    description: 'Track your Moomin TCG collection.',
   },
 };
 

@@ -1,12 +1,23 @@
 import { getSets } from '@/lib/db'
 import { createSupabaseServerClient } from '@/lib/supabaseServer'
 import SetsPageClient, { type EnrichedSet } from '@/components/SetsPageClient'
+import { isValidGame } from '@/lib/games'
+import type { GameSlug } from '@/lib/games'
 
 // Opt out of static pre-rendering: this route reads auth cookies at request time.
 export const dynamic = 'force-dynamic'
 
 // Server Component — fetches sets + user-specific data (favorites, card counts)
-export default async function SetsPage() {
+export default async function SetsPage({
+  searchParams,
+}: {
+  searchParams: { game?: string }
+}) {
+  // Validate the ?game= query param — falls back to undefined (all games) if invalid
+  const initialGame: GameSlug | undefined =
+    searchParams.game && isValidGame(searchParams.game)
+      ? (searchParams.game as GameSlug)
+      : undefined
   let sets: EnrichedSet[] = []
   let favoritedSetIds: string[] = []
   let userId: string | null = null
@@ -94,6 +105,7 @@ export default async function SetsPage() {
               favoritedSetIds={favoritedSetIds}
               userId={userId}
               seriesWithProducts={seriesWithProducts}
+              initialGame={initialGame}
             />
         )}
       </div>

@@ -9,6 +9,7 @@ import Image from 'next/image'
 import { useIsPro } from '@/hooks/useProGate'
 import { ProBadge } from '@/components/upgrade/ProBadge'
 import { useLocale } from '@/contexts/LocaleContext'
+import { GAMES } from '@/lib/games'
 
 interface NotifProposal {
   id: string
@@ -48,8 +49,11 @@ export default function Navbar() {
   const [friendNotifs,   setFriendNotifs]   = useState<NotifFriend[]>([])
   const [seenFriendIds,  setSeenFriendIds]  = useState<Set<string>>(new Set())
   const [showNotif,      setShowNotif]      = useState(false)
-  const [mobileOpen,     setMobileOpen]     = useState(false)
-  const notifRef = useRef<HTMLDivElement>(null)
+  const [mobileOpen,          setMobileOpen]          = useState(false)
+  const [setsDropdownOpen,    setSetsDropdownOpen]    = useState(false)
+  const [setsMobileExpanded,  setSetsMobileExpanded]  = useState(false)
+  const notifRef    = useRef<HTMLDivElement>(null)
+  const setsRef     = useRef<HTMLDivElement>(null)
 
   // Load dismissed friend notification IDs from localStorage
   useEffect(() => {
@@ -241,7 +245,70 @@ export default function Navbar() {
                 <div className="flex items-center gap-1">
                   <Link href="/dashboard"            className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_dashboard')}</Link>
                   <Link href={`/profile/${user.id}`} className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_profile')}</Link>
-                  <Link href="/sets"                 className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_sets')}</Link>
+                  {/* ── Sets dropdown ── */}
+                  <div
+                    ref={setsRef}
+                    className="relative"
+                    onMouseEnter={() => setSetsDropdownOpen(true)}
+                    onMouseLeave={() => setSetsDropdownOpen(false)}
+                  >
+                    <button
+                      className={`px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all flex items-center gap-1 ${setsDropdownOpen ? 'text-accent bg-elevated' : ''}`}
+                      onClick={() => setSetsDropdownOpen(v => !v)}
+                      aria-haspopup="true"
+                      aria-expanded={setsDropdownOpen}
+                    >
+                      {t('nav_sets')}
+                      <svg
+                        className={`w-3 h-3 transition-transform duration-200 ${setsDropdownOpen ? 'rotate-180' : ''}`}
+                        fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+
+                    {setsDropdownOpen && (
+                      <div className="absolute left-0 top-full pt-1.5 z-50">
+                        <div className="bg-[color:var(--color-bg-elevated)] border border-subtle rounded-2xl shadow-2xl overflow-hidden p-2 min-w-[220px]">
+                          {Object.values(GAMES).map(game => (
+                            <Link
+                              key={game.slug}
+                              href={`/sets?game=${game.slug}`}
+                              onClick={() => setSetsDropdownOpen(false)}
+                              className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[color:var(--color-bg-surface)] transition-all group"
+                            >
+                              {/* Card-back thumbnail — replace src with game.logoUrl once logo images are placed at /public/images/games/<slug>-logo.png */}
+                              <div className="w-9 h-12 rounded-lg overflow-hidden shrink-0 border border-subtle bg-surface">
+                                <img
+                                  src={game.cardBackImage}
+                                  alt={game.displayName}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-primary group-hover:text-accent transition-colors">{game.displayName}</p>
+                                {game.description && (
+                                  <p className="text-xs text-muted leading-tight line-clamp-2 mt-0.5">{game.description}</p>
+                                )}
+                              </div>
+                            </Link>
+                          ))}
+                          <div className="border-t border-subtle mt-1 pt-1">
+                            <Link
+                              href="/sets"
+                              onClick={() => setSetsDropdownOpen(false)}
+                              className="flex items-center gap-1.5 px-3 py-2 rounded-xl hover:bg-[color:var(--color-bg-surface)] text-xs text-muted hover:text-accent transition-all"
+                            >
+                              View all sets
+                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </Link>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   <Link href="/collection"           className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_collection')}</Link>
                   <Link href="/wanted-board"         className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_wanted_board')}</Link>
                   <Link href="/faq"                  className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_faq')}</Link>
@@ -594,13 +661,49 @@ export default function Navbar() {
               {t('nav_profile')}
             </Link>
           )}
-          <Link
-            href="/sets"
-            onClick={() => setMobileOpen(false)}
-            className="flex items-center gap-3 px-3 py-2.5 text-sm text-secondary hover:text-accent hover:bg-surface rounded-lg transition-all"
-          >
-            {t('nav_sets')}
-          </Link>
+          {/* ── Sets expandable section (mobile) ── */}
+          <div>
+            <button
+              onClick={() => setSetsMobileExpanded(v => !v)}
+              className="flex items-center justify-between w-full px-3 py-2.5 text-sm text-secondary hover:text-accent hover:bg-surface rounded-lg transition-all"
+            >
+              <span>{t('nav_sets')}</span>
+              <svg
+                className={`w-4 h-4 transition-transform duration-200 ${setsMobileExpanded ? 'rotate-180' : ''}`}
+                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {setsMobileExpanded && (
+              <div className="ml-3 mt-0.5 mb-1 pl-3 border-l border-subtle space-y-0.5">
+                {Object.values(GAMES).map(game => (
+                  <Link
+                    key={game.slug}
+                    href={`/sets?game=${game.slug}`}
+                    onClick={() => { setMobileOpen(false); setSetsMobileExpanded(false) }}
+                    className="flex items-center gap-2.5 px-3 py-2 text-sm text-secondary hover:text-accent hover:bg-surface rounded-lg transition-all"
+                  >
+                    {/* Card-back thumbnail — replace src with game.logoUrl once logo images are placed at /public/images/games/<slug>-logo.png */}
+                    <div className="w-7 h-9 rounded overflow-hidden border border-subtle shrink-0 bg-surface">
+                      <img src={game.cardBackImage} alt={game.displayName} className="w-full h-full object-cover" />
+                    </div>
+                    <span>{game.displayName}</span>
+                  </Link>
+                ))}
+                <Link
+                  href="/sets"
+                  onClick={() => { setMobileOpen(false); setSetsMobileExpanded(false) }}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs text-muted hover:text-accent hover:bg-surface rounded-lg transition-all"
+                >
+                  All sets
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </Link>
+              </div>
+            )}
+          </div>
           <Link
             href="/collection"
             onClick={() => setMobileOpen(false)}
