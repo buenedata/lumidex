@@ -104,6 +104,7 @@ export default async function SetsPage({
           </div>
         ) : (
           <SetsPageClient
+              key={initialGame ?? 'default'}
               sets={sets}
               favoritedSetIds={favoritedSetIds}
               userId={userId}
