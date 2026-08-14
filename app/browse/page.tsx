@@ -24,6 +24,7 @@ interface BrowsePageProps {
     name?:      string
     mode?:      string
     artist?:    string
+    game?:      string
     type?:      string
     rarity?:    string
     supertype?: string
@@ -62,19 +63,28 @@ async function fetchCardResults(
   if (filters.type)      q = q.ilike('type',      `%${filters.type}%`)
   if (filters.rarity)    q = q.ilike('rarity',    `%${filters.rarity}%`)
   if (filters.supertype) q = q.ilike('supertype', `%${filters.supertype}%`)
+  // Filter by game via the inner-joined sets table
+  if (filters.game)      q = q.eq('sets.game',    filters.game)
 
   const { data } = await q.order('name').limit(200)
   return toCardResults(data ?? [])
 }
 
-async function fetchArtistCardResults(artistQuery: string): Promise<CardSearchResult[]> {
-  const { data } = await supabaseAdmin
+async function fetchArtistCardResults(
+  artistQuery: string,
+  game?: string,
+): Promise<CardSearchResult[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let q: any = supabaseAdmin
     .from('cards')
     .select('id, name, number, rarity, type, supertype, image, set_id, sets!inner(name, series, release_date, logo_url)')
     .ilike('artist', `%${artistQuery}%`)
     .order('name')
     .limit(2000)
 
+  if (game) q = q.eq('sets.game', game)
+
+  const { data } = await q
   return toCardResults(data ?? [])
 }
 
@@ -181,10 +191,13 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
   const artistQuery = params.artist?.trim()    ?? ''
   const mode        = (params.mode as SearchMode) || 'cards'
 
+  const game = params.game?.trim() ?? ''
+
   const filters: ActiveFilters = {
     type:      params.type?.trim()      ?? '',
     rarity:    params.rarity?.trim()    ?? '',
     supertype: params.supertype?.trim() ?? '',
+    game,
   }
 
   const hasQuery     = !!(rawQuery || artistQuery)
@@ -214,9 +227,9 @@ export default async function BrowsePage({ searchParams }: BrowsePageProps) {
   let discoveryData:   DiscoveryData | null = null
 
   await Promise.all([
-    // Cards by a specific artist
+    // Cards by a specific artist (game filter preserved if active)
     isArtistView
-      ? fetchArtistCardResults(artistQuery).then(r  => { initialCards = r })
+      ? fetchArtistCardResults(artistQuery, game || undefined).then(r  => { initialCards = r })
       : Promise.resolve(),
 
     // Card search results

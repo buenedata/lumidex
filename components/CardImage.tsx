@@ -12,12 +12,15 @@
 import { useState } from 'react'
 import { getCardImageWithFallback } from '../lib/imageUpload'
 import { PokemonCard } from '../types'
+import { getCardBack } from '../lib/games'
 
 interface CardImageProps {
   card: PokemonCard
   size?: 'small' | 'medium' | 'large' | 'xlarge'
   className?: string
   alt?: string
+  /** Game slug used to select the correct card-back fallback image. Defaults to 'pokemon'. */
+  game?: string
 }
 
 /** Intrinsic pixel dimensions per size variant (portrait ~2.5:3.5 aspect ratio). */
@@ -32,12 +35,14 @@ export function CardImage({
   card,
   size,
   className = '',
-  alt
+  alt,
+  game = 'pokemon',
 }: CardImageProps) {
   // Get image URL with automatic fallback logic
   const imageUrl = getCardImageWithFallback(card)
   // State-based src so we can swap to the backside on error
   // (next/image does not support imperative src mutation via e.target.src)
+  const cardBackUrl = getCardBack(game)
   const [imgSrc, setImgSrc] = useState(imageUrl)
   
   // Define responsive size classes
@@ -72,9 +77,9 @@ export function CardImage({
       `}
       loading="lazy"
       onError={() => {
-        // Fallback to card backside if image fails to load
-        if (!imgSrc.endsWith('/pokemon_card_backside.png')) {
-          setImgSrc('/pokemon_card_backside.png')
+        // Fallback to the correct game's card back image if the card image fails to load
+        if (imgSrc !== cardBackUrl) {
+          setImgSrc(cardBackUrl)
         }
       }}
     />

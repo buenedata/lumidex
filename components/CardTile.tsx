@@ -3,6 +3,7 @@
 import { memo } from 'react'
 import Link from 'next/link'
 import { PokemonCard, QuickAddVariant } from '@/types'
+import { getCardBack } from '@/lib/games'
 
 // ── Shared constants (mirrors CardGrid) ────────────────────────────────────
 const COLOR_MAP = {
@@ -37,6 +38,8 @@ export interface CardTileProps {
   isOwned:            boolean
   customVariantCount: number
   greyOutUnowned:     boolean
+  /** Game slug used to select the correct card-back fallback image. Defaults to 'pokemon'. */
+  game?:              string
   /** When true (masterset/grandmasterset goal), renders a diagonal grey overlay
    *  over the bottom-right half of the card to show partial variant ownership. */
   isPartiallyOwned?:  boolean
@@ -60,6 +63,7 @@ function CardTileInner({
   customVariantCount,
   greyOutUnowned,
   isPartiallyOwned = false,
+  game = 'pokemon',
   onCardBadgeClick,
   onCardImageClick,
   onCardImageDblClick,
@@ -69,6 +73,7 @@ function CardTileInner({
   onVariantGrayClick,
   onMobileVariantOpen,
 }: CardTileProps) {
+  const cardBackUrl = getCardBack(game)
   // Show as dot if: globally-scoped (card_id == null) OR explicitly configured by admin
   // via the ⚙️ Variant Dot Display panel (is_configured_as_dot === true).
   // Card-specific variants that were NOT explicitly configured remain hidden here;
@@ -107,15 +112,15 @@ function CardTileInner({
         onContextMenu={(e) => { e.preventDefault(); onCardContextMenu(card) }}
       >
         <img
-          src={card.image_url ?? card.image ?? '/pokemon_card_backside.png'}
+          src={card.image_url ?? card.image ?? cardBackUrl}
           alt={card.name ?? ''}
           className={`w-full h-full object-cover transition-all duration-300 pointer-events-none ${
             shouldGrey ? 'grayscale opacity-40' : ''
           }`}
           loading="lazy"
           onError={(e) => {
-            const t = e.target as HTMLImageElement
-            if (!t.src.endsWith('/pokemon_card_backside.png')) t.src = '/pokemon_card_backside.png'
+            const img = e.target as HTMLImageElement
+            if (img.src !== cardBackUrl) img.src = cardBackUrl
           }}
         />
         {/* Diagonal partial-ownership overlay — shown in masterset/grandmasterset

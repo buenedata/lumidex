@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useLocale } from '@/contexts/LocaleContext'
+import { getCardBack } from '@/lib/games'
+
+const CARD_BACK = getCardBack('pokemon')
 
 interface WantedCard {
   id: string
@@ -157,7 +160,7 @@ export default function ProfileWantedCards({ userId, isOwnProfile, displayName }
                 >
                   <div className="w-[72px] h-[100px] rounded-lg overflow-hidden border border-subtle group-hover:border-accent/50 transition-colors bg-elevated">
                     <img
-                      src={card.image ?? '/pokemon_card_backside.png'}
+                      src={card.image ?? CARD_BACK}
                       alt={card.name ?? ''}
                       className="w-full h-full object-cover"
                       loading="lazy"

@@ -12,10 +12,12 @@ interface BrowseHeroProps {
   mode:           SearchMode
   committedQuery: string        // current URL ?q= value (or ?artist= value)
   allProducts:    BrowseProduct[]
+  /** Active game filter — preserved in all URL navigation from the hero. */
+  activeGame?:    string
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-export default function BrowseHero({ mode, committedQuery, allProducts }: BrowseHeroProps) {
+export default function BrowseHero({ mode, committedQuery, allProducts, activeGame }: BrowseHeroProps) {
   const router     = useRouter()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const inputRef   = useRef<HTMLInputElement>(null)
@@ -62,19 +64,22 @@ export default function BrowseHero({ mode, committedQuery, allProducts }: Browse
 
   // ── URL helpers ─────────────────────────────────────────────────────────────
 
-  /** Push a committed card/artist/product search URL */
+  /** Push a committed card/artist/product search URL, preserving active game. */
   const commitQuery = useCallback((query: string) => {
     if (!query.trim()) return
     setTypeaheadVisible(false)
-    router.push(`/browse?q=${encodeURIComponent(query.trim())}&mode=${mode}`)
-  }, [router, mode])
+    const params = new URLSearchParams({ q: query.trim(), mode })
+    if (activeGame) params.set('game', activeGame)
+    router.push(`/browse?${params.toString()}`)
+  }, [router, mode, activeGame])
 
   const handleModeChange = useCallback((newMode: SearchMode) => {
     const params = new URLSearchParams()
     if (committedQuery) params.set('q', committedQuery)
     params.set('mode', newMode)
+    if (activeGame) params.set('game', activeGame)
     router.push(`/browse?${params.toString()}`)
-  }, [router, committedQuery])
+  }, [router, committedQuery, activeGame])
 
   // ── Typeahead selection callbacks ───────────────────────────────────────────
 
@@ -215,6 +220,7 @@ export default function BrowseHero({ mode, committedQuery, allProducts }: Browse
             mode={mode}
             allProducts={allProducts}
             visible={typeaheadVisible}
+            game={activeGame}
             onSelectCard={handleSelectCard}
             onSelectArtist={handleSelectArtist}
             onSelectProduct={handleSelectProduct}

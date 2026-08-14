@@ -1,6 +1,7 @@
 'use client'
 
 import { cn } from '@/lib/utils'
+import { GAMES, ALL_GAME_SLUGS } from '@/lib/games'
 import type { ActiveFilters } from './types'
 
 // ── Static option lists ───────────────────────────────────────────────────────
@@ -48,6 +49,41 @@ export default function BrowseFilters({ filters, onChange }: BrowseFiltersProps)
     <div className="border-b border-subtle" style={{ backgroundColor: 'var(--color-bg-surface)' }}>
       <div className="max-w-screen-2xl mx-auto px-6 py-2 overflow-x-auto">
         <div className="flex items-center gap-2 flex-nowrap min-w-max py-1">
+
+          {/* ── Game filter pills ──────────────────────────────────────── */}
+          {/* "All" option clears the game filter */}
+          <button
+            onClick={() => onChange('game', '')}
+            className={cn(
+              'pill px-3 py-2 rounded-full text-xs font-medium border transition-all min-h-[44px] shrink-0',
+              !filters.game
+                ? 'bg-accent/15 text-accent border-accent/50'
+                : 'bg-elevated text-secondary border-subtle hover:border-accent/30 hover:text-primary',
+            )}
+          >
+            🎮 All
+          </button>
+
+          {ALL_GAME_SLUGS.map(slug => {
+            const active = filters.game === slug
+            return (
+              <button
+                key={slug}
+                onClick={() => onChange('game', active ? '' : slug)}
+                className={cn(
+                  'pill px-3 py-2 rounded-full text-xs font-medium border transition-all min-h-[44px] shrink-0',
+                  active
+                    ? 'bg-accent/15 text-accent border-accent/50'
+                    : 'bg-elevated text-secondary border-subtle hover:border-accent/30 hover:text-primary',
+                )}
+              >
+                {GAMES[slug].displayName}
+              </button>
+            )
+          })}
+
+          {/* Divider */}
+          <div className="w-px h-5 bg-border mx-1 shrink-0" />
 
           {/* ── Supertype toggles ─────────────────────────────────────── */}
           {SUPERTYPES.map(st => {

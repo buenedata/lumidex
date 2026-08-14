@@ -3,6 +3,9 @@
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import type { CardSearchResult } from './types'
+import { getCardBack } from '@/lib/games'
+
+const CARD_BACK = getCardBack('pokemon')
 
 // Colour dot CSS classes — mirrors the set-page CardTile colour map
 const VARIANT_COLOR_MAP: Record<string, string> = {
@@ -116,12 +119,12 @@ export default function CardResults({ cards, query, artistName }: CardResultsPro
                     loading="lazy"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement
-                      target.src = '/pokemon_card_backside.png'
+                      target.src = CARD_BACK
                     }}
                   />
                 ) : (
                   <img
-                    src="/pokemon_card_backside.png"
+                    src={CARD_BACK}
                     alt={card.name}
                     className="w-full h-full object-contain pointer-events-none"
                   />

@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useCollectionStore } from '@/lib/store'
 import { getCardImageUrl } from '@/lib/imageUpload'
+import { getCardBack } from '@/lib/games'
+
+const CARD_BACK = getCardBack('pokemon')
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -30,7 +33,7 @@ function CardTile({ card, collectionQty }: { card: ArtistCard; collectionQty: nu
   // so that both null AND empty-string image values fall through to the legacy R2 URL.
   const imgSrc = card.image
     || (card.set_id && card.number ? getCardImageUrl(card.set_id, card.number) : null)
-    || '/pokemon_card_backside.png'
+    || CARD_BACK
   const setName     = card.sets?.name ?? null
   const setSymbol   = card.sets?.symbol ?? null
   const setComplete = card.sets?.setComplete ?? null
@@ -62,7 +65,7 @@ function CardTile({ card, collectionQty }: { card: ArtistCard; collectionQty: nu
           loading="lazy"
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           onError={(e) => {
-            ;(e.currentTarget as HTMLImageElement).src = '/pokemon_card_backside.png'
+            ;(e.currentTarget as HTMLImageElement).src = CARD_BACK
           }}
         />
       </div>

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { Variant, UserCardVariant, VariantWithQuantity } from '@/types'
-import { getAvailableVariantIds } from '@/lib/variants'
+import { getAvailableVariantIdsForGame } from '@/lib/variants'
 
 export async function GET(request: NextRequest) {
   try {
@@ -91,13 +91,13 @@ export async function GET(request: NextRequest) {
         cId => !(overrideMap[cId]?.size > 0) && !(cardSpecificMap[cId]?.length > 0)
       )
 
-      // cardId → { name, number, rarity, setTotal }
-      const cardInfoMap: Record<string, { name: string; number: string; rarity: string; setTotal: number }> = {}
+      // cardId → { name, number, rarity, setTotal, game }
+      const cardInfoMap: Record<string, { name: string; number: string; rarity: string; setTotal: number; game: string }> = {}
 
       if (cardIdsWithoutOverrides.length > 0) {
         const { data: cardRows } = await supabaseAdmin
           .from('cards')
-          .select('id, name, number, rarity, sets!inner(setTotal)')
+          .select('id, name, number, rarity, sets!inner(setTotal, game)')
           .in('id', cardIdsWithoutOverrides)
 
         cardRows?.forEach((card: any) => {
@@ -107,6 +107,7 @@ export async function GET(request: NextRequest) {
             number:   card.number   ?? '',
             rarity:   card.rarity   ?? '',
             setTotal: setData?.setTotal ?? 9999,
+            game:     setData?.game     ?? 'pokemon',
           }
         })
       }
@@ -132,7 +133,8 @@ export async function GET(request: NextRequest) {
         } else {
           const info = cardInfoMap[cId]
           if (info) {
-            const availableIds = getAvailableVariantIds(
+            const availableIds = getAvailableVariantIdsForGame(
+              info.game,
               { number: info.number, name: info.name, rarity: info.rarity },
               info.setTotal,
               variants as Variant[]
@@ -233,13 +235,14 @@ export async function GET(request: NextRequest) {
         // No overrides, no card-specific → apply rarity rules
         const { data: cardRow } = await supabaseAdmin
           .from('cards')
-          .select('name, number, rarity, sets!inner(setTotal)')
+          .select('name, number, rarity, sets!inner(setTotal, game)')
           .eq('id', cardId)
           .single()
 
         if (cardRow) {
           const setData = Array.isArray(cardRow.sets) ? (cardRow.sets as any[])[0] : cardRow.sets as any
-          const availableIds = getAvailableVariantIds(
+          const availableIds = getAvailableVariantIdsForGame(
+            setData?.game ?? 'pokemon',
             { number: cardRow.number ?? '', name: cardRow.name ?? '', rarity: cardRow.rarity ?? '' },
             setData?.setTotal ?? 9999,
             variants as Variant[]
@@ -446,12 +449,12 @@ export async function POST(request: NextRequest) {
       const cardIdsWithoutOverrides = cardIdList.filter(
         cId => !(overrideMap[cId]?.size > 0) && !(cardSpecificMap[cId]?.length > 0)
       )
-      const cardInfoMap: Record<string, { name: string; number: string; rarity: string; setTotal: number }> = {}
+      const cardInfoMap: Record<string, { name: string; number: string; rarity: string; setTotal: number; game: string }> = {}
 
       if (cardIdsWithoutOverrides.length > 0) {
         const { data: cardRows } = await supabaseAdmin
           .from('cards')
-          .select('id, name, number, rarity, sets!inner(setTotal)')
+          .select('id, name, number, rarity, sets!inner(setTotal, game)')
           .in('id', cardIdsWithoutOverrides)
 
         cardRows?.forEach((card: any) => {
@@ -461,6 +464,7 @@ export async function POST(request: NextRequest) {
             number:   card.number ?? '',
             rarity:   card.rarity ?? '',
             setTotal: setData?.setTotal ?? 9999,
+            game:     setData?.game     ?? 'pokemon',
           }
         })
       }
@@ -498,7 +502,8 @@ export async function POST(request: NextRequest) {
         } else {
           const info = cardInfoMap[cId]
           if (info) {
-            const availableIds = getAvailableVariantIds(
+            const availableIds = getAvailableVariantIdsForGame(
+              info.game,
               { number: info.number, name: info.name, rarity: info.rarity },
               info.setTotal,
               variants as Variant[]

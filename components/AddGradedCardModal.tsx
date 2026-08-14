@@ -9,6 +9,9 @@ import {
   type PokemonCard,
   type VariantWithQuantity,
 } from '@/types'
+import { getCardBack } from '@/lib/games'
+
+const CARD_BACK = getCardBack('pokemon')
 
 // ── Company display config ────────────────────────────────────────────────────
 
@@ -200,7 +203,7 @@ export default function AddGradedCardModal({
           {/* Thumbnail */}
           <div className="shrink-0 w-24 rounded-lg overflow-hidden border border-subtle shadow-md">
             <img
-              src={card.image ?? card.image_url ?? '/pokemon_card_backside.png'}
+              src={card.image ?? card.image_url ?? CARD_BACK}
               alt={card.name ?? 'Card'}
               className="w-full h-auto object-contain"
             />

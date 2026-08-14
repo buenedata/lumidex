@@ -6,6 +6,9 @@ import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
 import { useRouter } from 'next/navigation'
 import { useLocale } from '@/contexts/LocaleContext'
+import { getCardBack } from '@/lib/games'
+
+const CARD_BACK = getCardBack('pokemon')
 
 // ── Minimal type for pending proposals ────────────────────────────────────────
 interface PendingProposal {
@@ -108,7 +111,7 @@ function CardThumb({ card }: { card: WBCard }) {
       {/* Image */}
       <div className="relative w-16 h-[90px] rounded-lg overflow-hidden bg-surface border border-subtle">
         <img
-          src={card.image ?? '/pokemon_card_backside.png'}
+          src={card.image ?? CARD_BACK}
           alt={card.name ?? ''}
           className="w-full h-full object-cover"
           loading="lazy"
@@ -279,7 +282,7 @@ function PendingProposalBanner({ proposal }: { proposal: PendingProposal }) {
       <div className="hidden sm:flex gap-1 shrink-0">
         {offeringCards.slice(0, 3).map(item => item.cards && (
           <div key={item.id} className="w-8 h-11 rounded overflow-hidden border border-subtle bg-surface">
-            <img src={item.cards.image ?? '/pokemon_card_backside.png'} alt={item.cards.name ?? ''} className="w-full h-full object-cover" loading="lazy" />
+            <img src={item.cards.image ?? CARD_BACK} alt={item.cards.name ?? ''} className="w-full h-full object-cover" loading="lazy" />
           </div>
         ))}
       </div>
@@ -338,7 +341,7 @@ function DeclinedProposalBanner({ proposal }: { proposal: PendingProposal }) {
       <div className="hidden sm:flex gap-1 shrink-0">
         {offeringCards.slice(0, 3).map(item => item.cards && (
           <div key={item.id} className="w-8 h-11 rounded overflow-hidden border border-subtle bg-surface opacity-50">
-            <img src={item.cards.image ?? '/pokemon_card_backside.png'} alt={item.cards.name ?? ''} className="w-full h-full object-cover" loading="lazy" />
+            <img src={item.cards.image ?? CARD_BACK} alt={item.cards.name ?? ''} className="w-full h-full object-cover" loading="lazy" />
           </div>
         ))}
       </div>

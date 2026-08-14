@@ -103,7 +103,12 @@ export interface UserAchievement {
 }
 
 // Database types (DB-first architecture)
-export interface PokemonSet {
+
+/**
+ * Game-agnostic set interface.
+ * Contains all fields from PokemonSet plus the `game` discriminator added in Phase 2.
+ */
+export interface TcgSet {
   id: string;
   name: string;
   series: string | null;
@@ -113,22 +118,32 @@ export interface PokemonSet {
   logo_url?: string | null;
   symbol_url?: string | null;
   created_at: string;
+  /** Game this set belongs to — e.g. 'pokemon' | 'moomin' */
+  game: string;
   // Computed fields
   user_card_count?: number;
 }
 
-export interface PokemonCard {
+/** @deprecated Use TcgSet — this alias exists for backward compatibility while 100+ consumers are migrated (Phase 7). */
+export type PokemonSet = TcgSet;
+
+/**
+ * Game-agnostic card interface.
+ * Contains all fields from PokemonCard. Pokémon-specific fields (type, supertype, hp,
+ * api_id, tcggo_id) remain but are nullable and unused for non-Pokémon games.
+ */
+export interface TcgCard {
   id: string;
   set_id: string;
   name: string | null;
   number: string | null;
   rarity: string | null;
-  type: string | null; // Pokemon element type e.g. "Grass", "Fire", "Water"
+  type: string | null; // Pokémon element type e.g. "Grass", "Fire", "Water" — null for other games
   image: string | null; // New single image field
   artist?: string | null; // Illustrator credit, e.g. "GIDORA" (optional — not all routes fetch it)
   /** FK → variants.id — which variant is added when the card tile is double-clicked */
   default_variant_id?: string | null;
-  /** TCGGO numeric card ID — numeric identifier from the TCGGO catalogue. */
+  /** TCGGO numeric card ID — numeric identifier from the TCGGO catalogue. Null for non-Pokémon games. */
   tcggo_id?: number | null;
   created_at: string;
   // Legacy compatibility fields (deprecated after migration)
@@ -142,6 +157,9 @@ export interface PokemonCard {
   /** Set release date (ISO string) — only populated on the browse/search page; used for date sort */
   set_release_date?: string | null;
 }
+
+/** @deprecated Use TcgCard — this alias exists for backward compatibility while 100+ consumers are migrated (Phase 7). */
+export type PokemonCard = TcgCard;
 
 /** Friend who owns a card — returned by /api/friends/card/[cardId] */
 export interface FriendCardOwner {

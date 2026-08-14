@@ -7,6 +7,9 @@ import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import FriendCardPickerModal, { type FriendCard } from '@/components/trade/FriendCardPickerModal'
+import { getCardBack } from '@/lib/games'
+
+const CARD_BACK = getCardBack('pokemon')
 
 // ── Normalise cards from different API shapes into TradeCard ──────────────────
 // /api/my-collection  → { image, set_name, set_logo_url, set_id }
@@ -75,7 +78,7 @@ function CardItem({ card, onRemove }: { card: TradeCard; onRemove: () => void })
     <div className="relative group shrink-0">
       <div className="w-[72px] h-[100px] rounded-lg overflow-hidden border border-subtle bg-surface">
         <img
-          src={card.image ?? '/pokemon_card_backside.png'}
+          src={card.image ?? CARD_BACK}
           alt={card.name ?? ''}
           className="w-full h-full object-cover"
           loading="lazy"
@@ -109,7 +112,7 @@ function SearchResult({ card, onAdd, added }: { card: TradeCard; onAdd: () => vo
       )}
     >
       <div className="w-8 h-11 rounded overflow-hidden bg-surface border border-subtle shrink-0">
-        <img src={card.image ?? '/pokemon_card_backside.png'} alt="" className="w-full h-full object-cover" />
+        <img src={card.image ?? CARD_BACK} alt="" className="w-full h-full object-cover" />
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-primary truncate leading-tight">{card.name}</p>

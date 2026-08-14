@@ -3,6 +3,9 @@
 import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { getCardBack } from '@/lib/games'
+
+const CARD_BACK = getCardBack('pokemon')
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface TPUser {
@@ -94,7 +97,7 @@ function CardDetailTile({ item }: { item: TPItem }) {
       {/* Card image */}
       <div className="relative w-[90px] h-[125px] rounded-xl overflow-hidden border border-subtle bg-surface group">
         <img
-          src={card.image ?? '/pokemon_card_backside.png'}
+          src={card.image ?? CARD_BACK}
           alt={card.name ?? ''}
           className="w-full h-full object-cover"
           loading="lazy"

@@ -66,4 +66,6 @@ export interface ActiveFilters {
   type:      string
   rarity:    string
   supertype: string
+  /** Game slug filter — empty string means "all games" (no filter applied). */
+  game:      string
 }

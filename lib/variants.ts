@@ -140,6 +140,45 @@ export function getAvailableVariantIds(
 }
 
 /**
+ * Returns the variant IDs that apply to a Moomin card.
+ * Moomin cards get 'normal' only (and 'moomin-foil' once source data confirms it exists).
+ */
+function getMoominVariantIds(allVariants: Variant[]): string[] {
+  return allVariants
+    .filter(v => v.key === 'normal' || v.key === 'moomin-foil')
+    .map(v => v.id)
+}
+
+/**
+ * Game-aware variant resolution strategy.
+ *
+ * Pokémon uses the existing rarity-based rules (EX/V, secret rare, holo detection)
+ * unchanged.  Moomin and unknown games return only the universally-applicable
+ * variants (those whose `key` is `'normal'` or an explicitly confirmed game-specific
+ * parallel).
+ *
+ * This is the canonical entry-point for all new code.  Existing callers that
+ * already pass `'pokemon'` will get identical results to `getAvailableVariantIds()`.
+ */
+export function getAvailableVariantIdsForGame(
+  game: string,
+  card: { number: string; name?: string; rarity?: string },
+  setTotal: number,
+  allVariants: Variant[],
+): string[] {
+  switch (game) {
+    case 'pokemon':
+      return getAvailableVariantIds(card, setTotal, allVariants)
+    case 'moomin':
+      return getMoominVariantIds(allVariants)
+    default:
+      // Unknown game: fall back to just the universal 'normal' variant
+      // (mirrors the DB semantics where game IS NULL = applies to all games).
+      return allVariants.filter(v => v.key === 'normal').map(v => v.id)
+  }
+}
+
+/**
  * Legacy function for backward compatibility
  * Maps old VariantType[] to new Variant system
  */

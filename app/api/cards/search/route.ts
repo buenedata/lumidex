@@ -6,6 +6,7 @@ import { supabase } from '@/lib/db'
  *
  * Query params:
  *   q         – name / number search string (supports "Pikachu 24" compound syntax)
+ *   game      – filter by sets.game  e.g. "pokemon" | "moomin" (omit = all games)
  *   type      – filter by cards.type      e.g. "Fire"
  *   rarity    – filter by cards.rarity    e.g. "Rare Holo"
  *   supertype – filter by cards.supertype e.g. "Pokémon"
@@ -14,8 +15,9 @@ import { supabase } from '@/lib/db'
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const q         = searchParams.get('q')
-  const typeParam = searchParams.get('type')?.trim()      || null
-  const rarityParam    = searchParams.get('rarity')?.trim()   || null
+  const gameParam      = searchParams.get('game')?.trim()      || null
+  const typeParam      = searchParams.get('type')?.trim()      || null
+  const rarityParam    = searchParams.get('rarity')?.trim()    || null
   const supertypeParam = searchParams.get('supertype')?.trim() || null
   const limit     = Math.min(Math.max(parseInt(searchParams.get('limit') ?? '100', 10), 1), 500)
 
@@ -51,10 +53,11 @@ export async function GET(request: NextRequest) {
       .from('cards')
       .select('id, name, number, rarity, type, supertype, image, set_id, default_variant_id, sets!inner(name, series, release_date, logo_url)')
 
-    if (namePart)      dbQuery = dbQuery.ilike('name',      `%${namePart}%`)
-    if (numberPart)    dbQuery = dbQuery.ilike('number',    `%${numberPart}%`)
-    if (typeParam)     dbQuery = dbQuery.ilike('type',      `%${typeParam}%`)
-    if (rarityParam)   dbQuery = dbQuery.ilike('rarity',    `%${rarityParam}%`)
+    if (namePart)       dbQuery = dbQuery.ilike('name',      `%${namePart}%`)
+    if (numberPart)     dbQuery = dbQuery.ilike('number',    `%${numberPart}%`)
+    if (gameParam)      dbQuery = dbQuery.eq('sets.game',    gameParam)
+    if (typeParam)      dbQuery = dbQuery.ilike('type',      `%${typeParam}%`)
+    if (rarityParam)    dbQuery = dbQuery.ilike('rarity',    `%${rarityParam}%`)
     if (supertypeParam) dbQuery = dbQuery.ilike('supertype', `%${supertypeParam}%`)
 
     const { data, error } = await dbQuery

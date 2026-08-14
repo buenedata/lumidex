@@ -3,10 +3,14 @@ import { getSets } from '@/lib/db'
 
 export async function GET(request: NextRequest) {
   try {
-    // Use database query instead of external API
-    const sets = await getSets()
+    // Optional ?game= filter — e.g. /api/sets?game=moomin
+    // When absent, all games are returned (backward-compatible default).
+    const game = request.nextUrl.searchParams.get('game') ?? undefined
 
-    // Transform for API consumers, preserving logo_url and symbol_url
+    // Use database query instead of external API
+    const sets = await getSets(game)
+
+    // Transform for API consumers, preserving logo_url, symbol_url, and game
     const transformedSets = sets.map((set) => ({
       id: set.id,
       name: set.name,
@@ -17,6 +21,7 @@ export async function GET(request: NextRequest) {
       logo_url: set.logo_url ?? null,
       symbol_url: set.symbol_url ?? null,
       language: set.language ?? null,
+      game: set.game,
     }))
 
     const response = NextResponse.json({ sets: transformedSets })

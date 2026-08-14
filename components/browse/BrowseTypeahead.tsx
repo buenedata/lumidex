@@ -16,6 +16,8 @@ interface BrowseTypeaheadProps {
   mode:            SearchMode
   allProducts:     BrowseProduct[]  // pre-loaded for client-side product filtering
   visible:         boolean
+  /** When set, typeahead results are scoped to this game slug. */
+  game?:           string
   onSelectCard:    (card:    CardSearchResult) => void
   onSelectArtist:  (artist:  ArtistResult)     => void
   onSelectProduct: (product: BrowseProduct)    => void
@@ -25,7 +27,7 @@ interface BrowseTypeaheadProps {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function BrowseTypeahead({
-  query, mode, allProducts, visible,
+  query, mode, allProducts, visible, game,
   onSelectCard, onSelectArtist, onSelectProduct, onSeeAll, onClose,
 }: BrowseTypeaheadProps) {
   const [cards,   setCards]   = useState<CardSearchResult[]>([])
@@ -58,8 +60,10 @@ export default function BrowseTypeahead({
     async function doFetch() {
       try {
         if (mode === 'cards') {
+          const params = new URLSearchParams({ q: query, limit: '6' })
+          if (game) params.set('game', game)
           const res = await fetch(
-            `/api/cards/search?q=${encodeURIComponent(query)}&limit=6`,
+            `/api/cards/search?${params.toString()}`,
             { signal },
           )
           if (!res.ok) return
@@ -83,7 +87,7 @@ export default function BrowseTypeahead({
 
     doFetch()
     return () => controller.abort()
-  }, [query, mode, visible])
+  }, [query, mode, visible, game])
 
   // ── Build flat item list ───────────────────────────────────────────────────
   const items: AnyItem[] = []

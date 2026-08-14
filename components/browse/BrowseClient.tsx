@@ -4,6 +4,7 @@ import { useCallback, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useCollectionStore, useAuthStore } from '@/lib/store'
 import BrowseHero      from './BrowseHero'
+import BrowseFilters   from './BrowseFilters'
 import ArtistResults   from './ArtistResults'
 import ProductResults  from './ProductResults'
 import BrowseDiscovery from './BrowseDiscovery'
@@ -11,7 +12,7 @@ import SetPageCards    from '@/components/SetPageCards'
 import type { PokemonCard, QuickAddVariant } from '@/types'
 import type {
   SearchMode, CardSearchResult, ArtistResult,
-  BrowseProduct, DiscoveryData,
+  BrowseProduct, DiscoveryData, ActiveFilters,
 } from './types'
 
 // ── Helper: convert CardSearchResult → PokemonCard (for SetPageCards / CardGrid) ──
@@ -65,6 +66,26 @@ export default function BrowseClient({
 }: BrowseClientProps) {
   const router       = useRouter()
   const searchParams = useSearchParams()
+
+  // ── Active filter state (read from URL) ───────────────────────────────────
+  const activeGame = searchParams.get('game') ?? ''
+  const activeFilters: ActiveFilters = {
+    type:      searchParams.get('type')      ?? '',
+    rarity:    searchParams.get('rarity')    ?? '',
+    supertype: searchParams.get('supertype') ?? '',
+    game:      activeGame,
+  }
+
+  // ── Filter change handler — updates URL params without losing context ──────
+  const handleFilterChange = useCallback((key: keyof ActiveFilters, value: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (value) {
+      params.set(key, value)
+    } else {
+      params.delete(key)
+    }
+    router.push(`/browse?${params.toString()}`)
+  }, [router, searchParams])
 
   // ── Bug #2c: pre-warm user collection data ─────────────────────────────────
   // Trigger fetchUserCards here — before CardGrid mounts — so the progress bar
@@ -122,7 +143,16 @@ export default function BrowseClient({
         mode={mode}
         committedQuery={artistQuery ?? committedQuery}
         allProducts={allProducts}
+        activeGame={activeGame || undefined}
       />
+
+      {/* Filter bar — shown in cards mode (game + type/rarity/supertype filters) */}
+      {mode === 'cards' && (
+        <BrowseFilters
+          filters={activeFilters}
+          onChange={handleFilterChange}
+        />
+      )}
 
       {/* Content area */}
       {!hasQuery ? (

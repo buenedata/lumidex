@@ -33,6 +33,8 @@ export interface DbSet {
   created_at: string
   /** ISO 639-1 language code: 'en' = English, 'ja' = Japanese */
   language: string | null
+  /** Game this set belongs to — e.g. 'pokemon' | 'moomin' */
+  game: string
 }
 
 export interface DbCard {
@@ -105,14 +107,18 @@ export function hasPromoCards(cards: DbCard[]): boolean {
  * Supabase on every /sets page load.
  */
 export const getSets = unstable_cache(
-  async (): Promise<DbSet[]> => {
-    const { data, error } = await supabase
+  async (game?: string): Promise<DbSet[]> => {
+    let query = supabase
       .from('sets')
-      .select('id:set_id, name, series, total:setTotal, setComplete, release_date, logo_url, symbol_url, created_at, language')
+      .select('id:set_id, name, series, total:setTotal, setComplete, release_date, logo_url, symbol_url, created_at, language, game')
       .order('release_date', { ascending: false })
       // Explicit high limit to bypass PostgREST's default max_rows cap (typically 1 000).
       // Raise this ceiling if the catalogue ever exceeds 2 000 sets.
       .limit(2000)
+
+    if (game) query = query.eq('game', game)
+
+    const { data, error } = await query
 
     if (error) {
       console.error('Error fetching sets:', error)
@@ -137,7 +143,7 @@ export const getSetById = unstable_cache(
   async (setId: string): Promise<DbSet | null> => {
     const { data, error } = await supabase
       .from('sets')
-      .select('id:set_id, name, series, total:setTotal, setComplete, release_date, logo_url, symbol_url, created_at, language')
+      .select('id:set_id, name, series, total:setTotal, setComplete, release_date, logo_url, symbol_url, created_at, language, game')
       .eq('set_id', setId)
       .single()
 
@@ -318,9 +324,9 @@ export async function getUserCardCountsBySet(userId: string): Promise<{ set_id: 
 /**
  * Get sets with card progress for user
  */
-export async function getSetsWithProgress(userId: string): Promise<(DbSet & { user_card_count: number })[]> {
-  // Get all sets
-  const sets = await getSets()
+export async function getSetsWithProgress(userId: string, game?: string): Promise<(DbSet & { user_card_count: number })[]> {
+  // Get all sets (optionally filtered by game)
+  const sets = await getSets(game)
   
   // Get user's card counts by set
   const cardCounts = await getUserCardCountsBySet(userId)

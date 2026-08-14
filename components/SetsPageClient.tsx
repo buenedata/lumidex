@@ -8,6 +8,8 @@ import type { DbSet } from '@/lib/db'
 import type { SetProgress } from '@/types'
 import { cn } from '@/lib/utils'
 import { useLocale } from '@/contexts/LocaleContext'
+import { GAMES } from '@/lib/games'
+import type { GameSlug } from '@/lib/games'
 
 export type EnrichedSet = DbSet & { user_card_count?: number }
 
@@ -19,10 +21,8 @@ interface SetsPageClientProps {
   seriesWithProducts?: string[]
 }
 
-// Canonical series chronological order (oldest = smallest number, newest = largest).
-// Used as the primary sort key so data inconsistencies (e.g. a late-added Japanese
-// Sword & Shield set whose release_date is 2023-01-27 — newer than the first S&V
-// sets released 2023-01-20) can never flip the era order.
+// Canonical Pokémon TCG series chronological order (oldest = smallest number, newest = largest).
+// Only applied when game === 'pokemon'. Other games sort by date only.
 const KNOWN_SERIES_ORDER: Record<string, number> = {
   'Base Set':                  100,
   'Jungle':                    100,
@@ -55,6 +55,13 @@ const KNOWN_SERIES_ORDER: Record<string, number> = {
 
 export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPageClientProps) {
   const { t } = useLocale()
+
+  // ── Game selector ─────────────────────────────────────────────────────────
+  const [selectedGame, setSelectedGame] = useState<GameSlug>(() => {
+    if (typeof window === 'undefined') return 'pokemon'
+    return (localStorage.getItem('lumidex_selected_game') as GameSlug) ?? 'pokemon'
+  })
+
   const [favoritedIds, setFavoritedIds] = useState<Set<string>>(
     () => new Set(favoritedSetIds)
   )
@@ -66,6 +73,17 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
     return (localStorage.getItem('lumidex_sets_lang') as 'en' | 'ja') ?? 'en'
   })
 
+  // ── Game switch — resets series pill and language ─────────────────────────
+  const handleGameChange = (game: GameSlug) => {
+    localStorage.setItem('lumidex_selected_game', game)
+    setSelectedGame(game)
+    setActiveSeries('All')
+    // Non-Pokémon games are always English — reset language toggle
+    if (game !== 'pokemon') {
+      setSelectedLanguage('en')
+    }
+  }
+
   // ── Language switch — also resets the active series pill ─────────────────
   const handleLanguageChange = (lang: 'en' | 'ja') => {
     localStorage.setItem('lumidex_sets_lang', lang)
@@ -73,21 +91,34 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
     setActiveSeries('All')
   }
 
+  // ── Sets for the selected game ────────────────────────────────────────────
+  // Filter the prop-provided sets by the active game first, then apply
+  // language/search filters on top. Using `?? 'pokemon'` guards against any
+  // legacy sets that predate the game column being populated.
+  const gameSets = useMemo(
+    () => sets.filter(s => (s.game ?? 'pokemon') === selectedGame),
+    [sets, selectedGame]
+  )
+
   // ── Series order ──────────────────────────────────────────────────────────
-  // Computed from only the sets that belong to the currently selected language
-  // so the pills always reflect the correct series for that language.
-  // Newest series first; "Other" always last.
+  // Computed from only the sets that belong to the currently selected game
+  // (and language, for Pokémon). Newest series first; "Other" always last.
   //
-  // We prefer the best *real* release_date for a series when at least one set
-  // has one.  Only if **no** set in a series has a release_date do we fall back
-  // to the best created_at.  This prevents a series like Scarlet & Violet
-  // (where some Japanese sets lack release dates) from being accidentally sorted
-  // below an older series whose sets all have explicit release dates.
+  // For Pokémon: KNOWN_SERIES_ORDER provides a canonical chronological rank so
+  // data inconsistencies (e.g. a late-added Japanese set with an unexpected
+  // release_date) can never flip era order.
+  //
+  // For other games: sort by best available release_date / created_at only.
   const seriesOrder = useMemo(() => {
-    const langSets = sets.filter(s => (s.language ?? 'en') === selectedLanguage)
-    const bestRelease  = new Map<string, string>()  // max non-null release_date
-    const bestFallback = new Map<string, string>()  // max created_at
-    for (const set of langSets) {
+    // Pokémon respects the language toggle; other games show all sets
+    const baseSets =
+      selectedGame === 'pokemon'
+        ? gameSets.filter(s => (s.language ?? 'en') === selectedLanguage)
+        : gameSets
+
+    const bestRelease  = new Map<string, string>()  // max non-null release_date per series
+    const bestFallback = new Map<string, string>()  // max created_at per series
+    for (const set of baseSets) {
       const s = set.series ?? 'Other'
       if (set.release_date && set.release_date > (bestRelease.get(s) ?? '')) {
         bestRelease.set(s, set.release_date)
@@ -105,15 +136,17 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
       .sort((a, b) => {
         if (a[0] === 'Other') return 1
         if (b[0] === 'Other') return -1
-        // Prefer the canonical era order when both series are known.
-        const pa = KNOWN_SERIES_ORDER[a[0]]
-        const pb = KNOWN_SERIES_ORDER[b[0]]
-        if (pa !== undefined && pb !== undefined) return pb - pa
-        // One or both unknown — fall back to date string comparison.
+        // Pokémon: prefer canonical era order when both series are known
+        if (selectedGame === 'pokemon') {
+          const pa = KNOWN_SERIES_ORDER[a[0]]
+          const pb = KNOWN_SERIES_ORDER[b[0]]
+          if (pa !== undefined && pb !== undefined) return pb - pa
+        }
+        // Unknown / non-Pokémon: fall back to date string comparison (newest first)
         return b[1].localeCompare(a[1])
       })
       .map(([s]) => s)
-  }, [sets, selectedLanguage])
+  }, [gameSets, selectedGame, selectedLanguage])
 
   // ── Favorite toggle ───────────────────────────────────────────────────────
   const toggleFavorite = async (setId: string) => {
@@ -165,8 +198,11 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
 
   // ── Filter + group ────────────────────────────────────────────────────────
   const { filteredFavorites, groupedSets } = useMemo(() => {
-    // Always show only the selected language
-    let filtered = sets.filter(s => (s.language ?? 'en') === selectedLanguage)
+    // Pokémon respects the language toggle; other games show all sets in that game
+    let filtered =
+      selectedGame === 'pokemon'
+        ? gameSets.filter(s => (s.language ?? 'en') === selectedLanguage)
+        : gameSets
 
     // Text search
     if (searchQuery.trim()) {
@@ -198,7 +234,6 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
 
     // Preserve series order determined above; within each group order:
     // regular sets (0) → Promo sets (1) → Energy sets (2)
-    // Products card is appended last via JSX so it is effectively position 3.
     const setOrder = (name: string) =>
       /promo/i.test(name) ? 1 : /energy/i.test(name) ? 2 : 0
     const grouped = new Map<string, EnrichedSet[]>()
@@ -212,7 +247,7 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
     }
 
     return { filteredFavorites, groupedSets: grouped }
-  }, [sets, searchQuery, activeSeries, selectedLanguage, favoritedIds, userId, seriesOrder])
+  }, [gameSets, selectedGame, searchQuery, activeSeries, selectedLanguage, favoritedIds, userId, seriesOrder])
 
   const totalVisible =
     filteredFavorites.length +
@@ -221,6 +256,24 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div>
+      {/* ── Game selector tabs ─────────────────────────────────────────── */}
+      <div className="flex items-center gap-2 mb-6 flex-wrap">
+        {(Object.values(GAMES) as { slug: GameSlug; displayName: string }[]).map(game => (
+          <button
+            key={game.slug}
+            onClick={() => handleGameChange(game.slug)}
+            className={cn(
+              'px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-150 select-none',
+              selectedGame === game.slug
+                ? 'bg-accent text-white shadow-sm'
+                : 'bg-surface border border-subtle text-secondary hover:border-accent/50 hover:text-primary'
+            )}
+          >
+            {game.displayName}
+          </button>
+        ))}
+      </div>
+
       {/* ── Search + series filter bar ─────────────────────────────────── */}
       <div className="mb-8 space-y-4">
         {/* Search input + language toggle row */}
@@ -248,31 +301,33 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
             />
           </div>
 
-          {/* Language segmented toggle */}
-          <div className="flex items-center bg-surface border border-subtle rounded-lg p-1 gap-1">
-            <button
-              onClick={() => handleLanguageChange('en')}
-              className={cn(
-                'px-3 py-1 rounded text-sm font-medium transition-all duration-150 select-none',
-                selectedLanguage === 'en'
-                  ? 'bg-accent text-white shadow-sm'
-                  : 'text-secondary hover:text-primary'
-              )}
-            >
-              {t('sets_lang_english')}
-            </button>
-            <button
-              onClick={() => handleLanguageChange('ja')}
-              className={cn(
-                'px-3 py-1 rounded text-sm font-medium transition-all duration-150 select-none',
-                selectedLanguage === 'ja'
-                  ? 'bg-accent text-white shadow-sm'
-                  : 'text-secondary hover:text-primary'
-              )}
-            >
-              {t('sets_lang_japanese')}
-            </button>
-          </div>
+          {/* Language segmented toggle — Pokémon only (Moomin is English-only) */}
+          {selectedGame === 'pokemon' && (
+            <div className="flex items-center bg-surface border border-subtle rounded-lg p-1 gap-1">
+              <button
+                onClick={() => handleLanguageChange('en')}
+                className={cn(
+                  'px-3 py-1 rounded text-sm font-medium transition-all duration-150 select-none',
+                  selectedLanguage === 'en'
+                    ? 'bg-accent text-white shadow-sm'
+                    : 'text-secondary hover:text-primary'
+                )}
+              >
+                {t('sets_lang_english')}
+              </button>
+              <button
+                onClick={() => handleLanguageChange('ja')}
+                className={cn(
+                  'px-3 py-1 rounded text-sm font-medium transition-all duration-150 select-none',
+                  selectedLanguage === 'ja'
+                    ? 'bg-accent text-white shadow-sm'
+                    : 'text-secondary hover:text-primary'
+                )}
+              >
+                {t('sets_lang_japanese')}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Series pill buttons */}
@@ -399,8 +454,9 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
                 />
               ))}
 
-              {/* Products entry card — always shown as last tile in each series */}
-              <Link
+              {/* Products entry card — only shown for Pokémon (sealed products exist for Pokémon only) */}
+              {selectedGame === 'pokemon' && (
+                <Link
                   href={`/products?series=${encodeURIComponent(series)}`}
                   className={cn(
                     'group relative flex flex-col rounded-xl overflow-hidden h-full min-h-[220px]',
@@ -461,7 +517,8 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId }: SetsPa
                       {t('sets_products_view_all')}
                     </span>
                   </div>
-              </Link>
+                </Link>
+              )}
             </div>
           </section>
         )

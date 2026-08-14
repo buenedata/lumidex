@@ -67,9 +67,13 @@ export function getAvailableVariants(card: PokemonCard, setTotal: number): strin
 }
 
 // ---------------------------------------------------------------------------
-// Pokemon type glow system for Set Cards
+// Pokémon-specific type glow system for Set Cards
 // ---------------------------------------------------------------------------
 
+/**
+ * Pokémon-specific. Only meaningful for sets/cards belonging to the 'pokemon' game.
+ * Non-Pokémon games do not have elemental types and should not use this type.
+ */
 export type PokemonType =
   | 'grass'
   | 'fire'
@@ -84,7 +88,10 @@ export type PokemonType =
   | 'poison'
   | 'normal'
 
-/** Maps each Pokemon type to a CSS rgba glow color */
+/**
+ * Pokémon-specific. Maps each Pokémon elemental type to a CSS rgba glow color.
+ * Non-Pokémon games do not have elemental types and should not reference this map.
+ */
 export const typeGlowColors: Record<PokemonType, string> = {
   grass:    'rgba(34, 197, 94, 0.75)',
   fire:     'rgba(239, 68, 68, 0.75)',
@@ -131,11 +138,14 @@ function hashString(s: string): number {
 }
 
 /**
- * Derives a Pokemon type for a set based on keyword matching in the set name
+ * Pokémon-specific. Returns null for non-Pokémon games.
+ *
+ * Derives a Pokémon type for a set based on keyword matching in the set name
  * and series. Falls back to a deterministic hash of the set id so every set
  * always gets the same consistent color even without an explicit keyword match.
  */
-export function getPokemonTypeForSet(set: PokemonSet): PokemonType {
+export function getPokemonTypeForSet(set: PokemonSet): PokemonType | null {
+  if (set.game && set.game !== 'pokemon') return null
   const haystack = `${set.name ?? ''} ${set.series ?? ''}`.toLowerCase()
 
   for (const rule of TYPE_KEYWORD_RULES) {
@@ -149,9 +159,11 @@ export function getPokemonTypeForSet(set: PokemonSet): PokemonType {
 }
 
 /**
+ * Pokémon-specific. Returns 'normal' (colorless) for non-Pokémon or unrecognised types.
+ *
  * Maps the stored `type` column value from the cards table (e.g. "Grass",
  * "Lightning", "Darkness") to a normalised PokemonType used for UI colours.
- * The Pokemon TCG uses slightly different naming from the games:
+ * The Pokémon TCG uses slightly different naming from the games:
  *   Lightning → electric  |  Darkness → dark  |  Metal → steel  |  Colorless → normal
  */
 export function getPokemonTypeForCard(type: string | null | undefined): PokemonType {

@@ -71,6 +71,14 @@ const ADMIN_TOOLS: AdminTool[] = [
       'Create, edit and delete news articles for the Stories section. Write article content using the block editor, upload cover images, and publish instantly. 6 categories: Value, Trivia, Sets, Art, Market, Competitive.',
     badge: 'Content',
   },
+  {
+    href: '/admin/card-import',
+    icon: '📋',
+    title: 'Generic Card Import',
+    description:
+      'Import set and card data via JSON for any non-Pokémon game (Moomin, etc.). Idempotent — safe to re-run without creating duplicates.',
+    badge: 'Import',
+  },
 ]
 
 export default function AdminHubPage() {

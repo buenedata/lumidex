@@ -1,6 +1,9 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { getCardBack } from '@/lib/games'
+
+const CARD_BACK = getCardBack('pokemon')
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export interface FriendCard {
@@ -53,7 +56,7 @@ function CardTile({
       {/* Card image */}
       <div className="w-full aspect-[2.5/3.5] rounded-lg overflow-hidden border border-subtle bg-elevated">
         <img
-          src={card.image ?? '/pokemon_card_backside.png'}
+          src={card.image ?? CARD_BACK}
           alt={card.name ?? ''}
           className="w-full h-full object-cover"
           loading="lazy"

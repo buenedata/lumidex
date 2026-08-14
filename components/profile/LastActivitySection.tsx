@@ -4,6 +4,9 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { ActivityItem, GradedCardActivityItem } from '@/app/api/users/[id]/last-activity/route'
 import { useLocale } from '@/contexts/LocaleContext'
+import { getCardBack } from '@/lib/games'
+
+const CARD_BACK = getCardBack('pokemon')
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -144,7 +147,7 @@ function ProductDeltaBadge({ created_at, updated_at, quantity }: {
 function CardTile({ item }: { item: Extract<ActivityItem, { type: 'card' }> }) {
   const [imgError, setImgError] = useState(false)
   const imgSrc = (!item.card_image || imgError)
-    ? '/pokemon_card_backside.png'
+    ? CARD_BACK
     : item.card_image
 
   return (
@@ -199,7 +202,7 @@ function CardTile({ item }: { item: Extract<ActivityItem, { type: 'card' }> }) {
 function GradedCardTile({ item }: { item: GradedCardActivityItem }) {
   const [imgError, setImgError] = useState(false)
   const imgSrc = (!item.card_image || imgError)
-    ? '/pokemon_card_backside.png'
+    ? CARD_BACK
     : item.card_image
 
   const companyStyle = gradingCompanyStyle(item.grading_company)

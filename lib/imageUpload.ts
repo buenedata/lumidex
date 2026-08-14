@@ -5,6 +5,7 @@
  */
 
 import type { PokemonCard } from '../types'
+import { getCardBack } from './games'
 
 /**
  * Generate standardized filename for card images.
@@ -160,7 +161,7 @@ export function getCardImageWithFallback(card: PokemonCard): string {
   
   // Backward compatibility with old fields
   if (card.image_large || card.image_small) {
-    return card.image_large || card.image_small || '/pokemon_card_backside.png'
+    return card.image_large || card.image_small || getCardBack('pokemon')
   }
   
   // Generate URL based on card info
@@ -168,5 +169,5 @@ export function getCardImageWithFallback(card: PokemonCard): string {
     return getCardImageUrl(card.set_id, card.number)
   }
   
-  return '/pokemon_card_backside.png'
+  return getCardBack('pokemon')
 }

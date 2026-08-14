@@ -7,6 +7,9 @@ import Link from 'next/link'
 import { useAuthStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import TradeProposalCard, { type TradeProposal } from '@/components/trade/TradeProposalCard'
+import { getCardBack } from '@/lib/games'
+
+const CARD_BACK = getCardBack('pokemon')
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface WBUser {
@@ -80,7 +83,7 @@ function CardThumb({ card }: { card: WBCard }) {
     >
       <div className="w-[72px] h-[100px] rounded-xl overflow-hidden border border-subtle group-hover:border-accent/60 transition-all duration-200 bg-surface shadow-sm group-hover:shadow-md group-hover:scale-105">
         <img
-          src={card.image ?? '/pokemon_card_backside.png'}
+          src={card.image ?? CARD_BACK}
           alt={card.name ?? ''}
           className="w-full h-full object-cover"
           loading="lazy"

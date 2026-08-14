@@ -12,6 +12,9 @@ import AddGradedCardModal from '@/components/AddGradedCardModal'
 import { UpgradeModal } from '@/components/upgrade/UpgradeModal'
 import { updateVariant, deleteVariant, removeVariantFromCard } from '@/app/admin/variants/actions'
 import AddToListDropdown from '@/components/lists/AddToListDropdown'
+import { getCardBack } from '@/lib/games'
+
+const CARD_BACK = getCardBack('pokemon')
 
 type ModalTab = 'card' | 'friends'
 
@@ -117,9 +120,9 @@ function CardGlareImage({
 
   // ── Base image src — state-tracked so onError can swap to backside without
   //    mutating e.target.src (which next/image does not support).
-  const [displaySrc, setDisplaySrc] = useState(src || '/pokemon_card_backside.png')
+  const [displaySrc, setDisplaySrc] = useState(src || CARD_BACK)
   // Sync when the user navigates to a different card (src prop changes)
-  useEffect(() => { setDisplaySrc(src || '/pokemon_card_backside.png') }, [src])
+  useEffect(() => { setDisplaySrc(src || CARD_BACK) }, [src])
 
   // ── Variant image cross-fade ─────────────────────────────────────────────
   const [displayedVariantSrc, setDisplayedVariantSrc] = useState<string | null>(null)
@@ -208,8 +211,8 @@ function CardGlareImage({
           height={543}
           className="absolute inset-0 w-full h-full object-cover"
           onError={() => {
-            if (!displaySrc.endsWith('/pokemon_card_backside.png')) {
-              setDisplaySrc('/pokemon_card_backside.png')
+            if (displaySrc !== CARD_BACK) {
+              setDisplaySrc(CARD_BACK)
             }
           }}
         />
@@ -225,7 +228,7 @@ function CardGlareImage({
             className="absolute inset-0 w-full h-full object-cover pointer-events-none"
             style={{ opacity: variantOpacity, transition: 'opacity 300ms ease-in-out' }}
             onError={() => {
-              setDisplayedVariantSrc('/pokemon_card_backside.png')
+              setDisplayedVariantSrc(CARD_BACK)
             }}
           />
         )}
@@ -255,8 +258,8 @@ function RelatedCardThumb({ src, alt }: { src: string; alt: string }) {
       alt={alt}
       className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
       onError={() => {
-        if (!imgSrc.endsWith('/pokemon_card_backside.png')) {
-          setImgSrc('/pokemon_card_backside.png')
+        if (imgSrc !== CARD_BACK) {
+          setImgSrc(CARD_BACK)
         }
       }}
     />
@@ -2133,7 +2136,7 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                                 style={{ aspectRatio: '2.5/3.5' }}
                               >
                                 <RelatedCardThumb
-                                  src={rc.image ?? '/pokemon_card_backside.png'}
+                                  src={rc.image ?? CARD_BACK}
                                   alt={rc.name ?? 'Card'}
                                 />
                               </div>

@@ -10,7 +10,7 @@
 
 import { unstable_cache } from 'next/cache'
 import { supabaseAdmin } from '@/lib/supabase'
-import { getAvailableVariantIds } from '@/lib/variants'
+import { getAvailableVariantIdsForGame } from '@/lib/variants'
 import type { Variant, QuickAddVariant } from '@/types'
 
 // ── Private inner — the actual DB logic ──────────────────────────────────────
@@ -64,13 +64,13 @@ async function _batchFetchVariantStructure(
   )
 
   const cardInfoMap: Record<string, {
-    name: string; number: string; rarity: string; setTotal: number
+    name: string; number: string; rarity: string; setTotal: number; game: string
   }> = {}
 
   if (needsRarityLookup.length > 0) {
     const { data: cardRows } = await supabaseAdmin
       .from('cards')
-      .select('id, name, number, rarity, sets!inner(setTotal)')
+      .select('id, name, number, rarity, sets!inner(setTotal, game)')
       .in('id', needsRarityLookup)
 
     for (const card of (cardRows ?? []) as any[]) {
@@ -80,6 +80,7 @@ async function _batchFetchVariantStructure(
         number:   card.number   ?? '',
         rarity:   card.rarity   ?? '',
         setTotal: setData?.setTotal ?? 9999,
+        game:     setData?.game     ?? 'pokemon',
       }
     }
   }
@@ -124,7 +125,8 @@ async function _batchFetchVariantStructure(
     } else {
       const info = cardInfoMap[cId]
       if (info) {
-        const availableIds = getAvailableVariantIds(
+        const availableIds = getAvailableVariantIdsForGame(
+          info.game,
           { number: info.number, name: info.name, rarity: info.rarity },
           info.setTotal,
           globalVariants,

@@ -83,9 +83,11 @@ interface CollectionState {
    * Computed server-side via get_user_collection_stats RPC.
    */
   distinctCardsOwned: number
+  tcgSets: Map<string, PokemonSet>
+  /** @deprecated Use tcgSets instead */
   pokemonSets: Map<string, PokemonSet>
   pokemonCards: Map<string, PokemonCard[]>
-  /** True while a fetchPokemonSets request is in-flight — prevents duplicate concurrent calls. */
+  /** True while a fetchTcgSets request is in-flight — prevents duplicate concurrent calls. */
   isFetchingSets: boolean
 
   // Actions
@@ -94,7 +96,9 @@ interface CollectionState {
   updateCardQuantity: (cardId: string, quantity: number, variants?: { normal?: number; reverse?: number; holo?: number }) => Promise<void>
   fetchUserSets: () => Promise<void>
   fetchUserCards: (setId?: string) => Promise<void>
-  fetchPokemonSets: () => Promise<void>
+  fetchTcgSets: (game?: string) => Promise<void>
+  /** @deprecated Use fetchTcgSets instead */
+  fetchPokemonSets: (game?: string) => Promise<void>
   fetchPokemonCards: (setId: string) => Promise<void>
 }
 
@@ -114,7 +118,8 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
   totalCardVariantCount: 0,
   cardsOwned: 0,
   distinctCardsOwned: 0,
-  pokemonSets: new Map(),
+  tcgSets: new Map(),
+  pokemonSets: new Map(), // @deprecated alias for tcgSets — kept for backward compatibility
   pokemonCards: new Map(),
   isFetchingSets: false,
 
@@ -353,24 +358,32 @@ export const useCollectionStore = create<CollectionState>((set, get) => ({
     }
   },
 
-  fetchPokemonSets: async () => {
+  fetchTcgSets: async (game?: string) => {
     // Skip if data is already loaded or a fetch is already in-flight.
-    if (get().pokemonSets.size > 0) return
+    // Note: when a game filter is supplied we always fetch (different subset).
+    if (!game && get().tcgSets.size > 0) return
     if (get().isFetchingSets) return
     set({ isFetchingSets: true })
     try {
-      const response = await fetch('/api/sets')
+      const url = game ? `/api/sets?game=${encodeURIComponent(game)}` : '/api/sets'
+      const response = await fetch(url)
       if (response.ok) {
         const { sets } = await response.json()
         const setsMap = new Map()
-        sets.forEach((set: PokemonSet) => setsMap.set(set.id, set))
-        set({ pokemonSets: setsMap })
+        sets.forEach((s: PokemonSet) => setsMap.set(s.id, s))
+        // Keep pokemonSets in sync as deprecated alias
+        set({ tcgSets: setsMap, pokemonSets: setsMap })
       }
     } catch (error) {
-      console.error('Error fetching Pokemon sets:', error)
+      console.error('Error fetching TCG sets:', error)
     } finally {
       set({ isFetchingSets: false })
     }
+  },
+
+  /** @deprecated Use fetchTcgSets instead */
+  fetchPokemonSets: async (game?: string) => {
+    return get().fetchTcgSets(game)
   },
 
   fetchPokemonCards: async (setId: string) => {
