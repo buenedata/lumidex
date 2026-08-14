@@ -21,7 +21,6 @@ export const GAMES: Record<GameSlug, GameConfig> = {
     displayName: 'Pokémon',
     cardBackImage: '/pokemon_card_backside.png',
     defaultLanguage: 'en',
-    // TODO: place logo image at public/images/games/pokemon-logo.png
     logoUrl: '/images/games/pokemon-logo.png',
     description: 'The original TCG — collect every set from Base Set to Mega Evolution.',
   },
@@ -30,8 +29,7 @@ export const GAMES: Record<GameSlug, GameConfig> = {
     displayName: 'Moomin',
     cardBackImage: '/moomin_card_backside.png',
     defaultLanguage: 'en',
-    // TODO: place logo image at public/images/games/moomin-logo.png
-    logoUrl: '/images/games/moomin-logo.png',
+    logoUrl: '/images/games/moomin-logo.jpg',
     description: 'Track your Moomin TCG collection.',
   },
 };
