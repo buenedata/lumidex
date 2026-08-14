@@ -23,7 +23,7 @@ export const GAMES: Record<GameSlug, GameConfig> = {
     defaultLanguage: 'en',
     // TODO: place logo image at public/images/games/pokemon-logo.png
     logoUrl: '/images/games/pokemon-logo.png',
-    description: 'The original TCG — collect every set from Base Set to Scarlet & Violet.',
+    description: 'The original TCG — collect every set from Base Set to Mega Evolution.',
   },
   moomin: {
     slug: 'moomin',
