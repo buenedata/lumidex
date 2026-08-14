@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import SetCard from '@/components/SetCard'
 import { supabase } from '@/lib/supabase'
@@ -62,12 +62,23 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId, initialG
   const { t } = useLocale()
 
   // ── Game selector ─────────────────────────────────────────────────────────
-  // Priority: URL ?game= param (initialGame) > localStorage > default 'pokemon'
-  const [selectedGame, setSelectedGame] = useState<GameSlug>(() => {
-    if (initialGame) return initialGame
-    if (typeof window === 'undefined') return 'pokemon'
-    return (localStorage.getItem('lumidex_selected_game') as GameSlug) ?? 'pokemon'
-  })
+  // Initialize SSR-safe: always 'pokemon' or the locked initialGame.
+  // We CANNOT read localStorage in the useState initializer because this component
+  // is server-rendered — React 18 hydration discards the client initializer value
+  // to match the server HTML, so localStorage reads in initializers are silently
+  // ignored. We apply the localStorage preference in a useEffect instead.
+  const [selectedGame, setSelectedGame] = useState<GameSlug>(initialGame ?? 'pokemon')
+
+  // After mount (client-only), restore the user's last-chosen game from localStorage —
+  // but only when the URL hasn't locked us to a specific game.
+  useEffect(() => {
+    if (initialGame) return  // URL param takes priority; do not override
+    const stored = localStorage.getItem('lumidex_selected_game') as GameSlug | null
+    if (stored && stored !== selectedGame) {
+      setSelectedGame(stored)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])  // intentionally runs once on mount
 
   const [favoritedIds, setFavoritedIds] = useState<Set<string>>(
     () => new Set(favoritedSetIds)
@@ -264,22 +275,25 @@ export default function SetsPageClient({ sets, favoritedSetIds, userId, initialG
   return (
     <div>
       {/* ── Game selector tabs ─────────────────────────────────────────── */}
-      <div className="flex items-center gap-2 mb-6 flex-wrap">
-        {(Object.values(GAMES) as { slug: GameSlug; displayName: string }[]).map(game => (
-          <button
-            key={game.slug}
-            onClick={() => handleGameChange(game.slug)}
-            className={cn(
-              'px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-150 select-none',
-              selectedGame === game.slug
-                ? 'bg-accent text-white shadow-sm'
-                : 'bg-surface border border-subtle text-secondary hover:border-accent/50 hover:text-primary'
-            )}
-          >
-            {game.displayName}
-          </button>
-        ))}
-      </div>
+      {/* Hidden when a specific game is locked via ?game= URL param */}
+      {!initialGame && (
+        <div className="flex items-center gap-2 mb-6 flex-wrap">
+          {(Object.values(GAMES) as { slug: GameSlug; displayName: string }[]).map(game => (
+            <button
+              key={game.slug}
+              onClick={() => handleGameChange(game.slug)}
+              className={cn(
+                'px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-150 select-none',
+                selectedGame === game.slug
+                  ? 'bg-accent text-white shadow-sm'
+                  : 'bg-surface border border-subtle text-secondary hover:border-accent/50 hover:text-primary'
+              )}
+            >
+              {game.displayName}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── Search + series filter bar ─────────────────────────────────── */}
       <div className="mb-8 space-y-4">
