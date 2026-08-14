@@ -11,12 +11,15 @@ export const dynamic = 'force-dynamic'
 export default async function SetsPage({
   searchParams,
 }: {
-  searchParams: { game?: string }
+  // Next.js 15+: searchParams is a Promise and must be awaited before reading.
+  searchParams: Promise<{ game?: string }>
 }) {
+  const { game } = await searchParams
+
   // Validate the ?game= query param — falls back to undefined (all games) if invalid
   const initialGame: GameSlug | undefined =
-    searchParams.game && isValidGame(searchParams.game)
-      ? (searchParams.game as GameSlug)
+    game && isValidGame(game)
+      ? (game as GameSlug)
       : undefined
   let sets: EnrichedSet[] = []
   let favoritedSetIds: string[] = []
