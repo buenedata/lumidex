@@ -291,6 +291,16 @@ export default function Navbar() {
                                 />
                                 {/* Gradient overlay for text legibility */}
                                 <div className="absolute inset-0 bg-gradient-to-t from-gray-900/80 via-transparent to-transparent" />
+                                {/* Game logo overlay */}
+                                {game.logoUrl && (
+                                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2">
+                                    <img
+                                      src={game.logoUrl}
+                                      alt={`${game.displayName} logo`}
+                                      className="h-8 w-auto object-contain drop-shadow-lg"
+                                    />
+                                  </div>
+                                )}
                               </div>
                               {/* Game info below image */}
                               <div className="p-3">
@@ -694,6 +704,13 @@ export default function Navbar() {
                       <img src={game.cardBackImage} alt={game.displayName} className="w-full h-full object-cover" />
                     </div>
                     <div className="min-w-0">
+                      {game.logoUrl && (
+                        <img
+                          src={game.logoUrl}
+                          alt={`${game.displayName} logo`}
+                          className="h-5 w-auto object-contain mb-1"
+                        />
+                      )}
                       <p className="font-medium text-sm">{game.displayName}</p>
                       {game.description && (
                         <p className="text-xs text-muted leading-tight line-clamp-2 mt-0.5">{game.description}</p>
