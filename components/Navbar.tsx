@@ -267,47 +267,53 @@ export default function Navbar() {
                       </svg>
                     </button>
 
-                    {setsDropdownOpen && (
-                      <div className="absolute left-0 top-full pt-1.5 z-50">
-                        <div className="bg-[color:var(--color-bg-elevated)] border border-subtle rounded-2xl shadow-2xl overflow-hidden p-2 min-w-[220px]">
+                    {/* Always in DOM — visibility driven by opacity/translate for smooth CSS transitions */}
+                    <div className={`absolute left-1/2 -translate-x-1/2 top-full pt-2 z-50 transition-all duration-200 ease-out ${
+                      setsDropdownOpen
+                        ? 'opacity-100 translate-y-0 pointer-events-auto'
+                        : 'opacity-0 -translate-y-2 pointer-events-none'
+                    }`}>
+                      <div className="bg-gray-900 border border-gray-700/60 shadow-2xl rounded-xl overflow-hidden p-3 min-w-[560px]">
+                        <div className="grid grid-cols-2 gap-2">
                           {Object.values(GAMES).map(game => (
                             <Link
                               key={game.slug}
                               href={`/sets?game=${game.slug}`}
                               onClick={() => setSetsDropdownOpen(false)}
-                              className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-[color:var(--color-bg-surface)] transition-all group"
+                              className="group relative flex flex-col rounded-xl overflow-hidden border border-gray-700/50 hover:border-accent/50 bg-gray-800/60 hover:bg-gray-800 transition-all duration-150 hover:scale-[1.02]"
                             >
-                              {/* Card-back thumbnail — replace src with game.logoUrl once logo images are placed at /public/images/games/<slug>-logo.png */}
-                              <div className="w-9 h-12 rounded-lg overflow-hidden shrink-0 border border-subtle bg-surface">
+                              {/* Tall image area */}
+                              <div className="h-40 overflow-hidden bg-gray-800 relative">
                                 <img
                                   src={game.cardBackImage}
                                   alt={game.displayName}
-                                  className="w-full h-full object-cover"
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                                 />
+                                {/* Gradient overlay for text legibility */}
+                                <div className="absolute inset-0 bg-gradient-to-t from-gray-900/80 via-transparent to-transparent" />
                               </div>
-                              <div className="min-w-0">
+                              {/* Game info below image */}
+                              <div className="p-3">
                                 <p className="text-sm font-semibold text-primary group-hover:text-accent transition-colors">{game.displayName}</p>
                                 {game.description && (
-                                  <p className="text-xs text-muted leading-tight line-clamp-2 mt-0.5">{game.description}</p>
+                                  <p className="text-xs text-muted leading-snug mt-1 line-clamp-2">{game.description}</p>
                                 )}
                               </div>
                             </Link>
                           ))}
-                          <div className="border-t border-subtle mt-1 pt-1">
-                            <Link
-                              href="/sets"
-                              onClick={() => setSetsDropdownOpen(false)}
-                              className="flex items-center gap-1.5 px-3 py-2 rounded-xl hover:bg-[color:var(--color-bg-surface)] text-xs text-muted hover:text-accent transition-all"
-                            >
-                              View all sets
-                              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                              </svg>
-                            </Link>
-                          </div>
+                        </div>
+                        {/* View all footer */}
+                        <div className="mt-2 pt-2 border-t border-gray-700/60">
+                          <Link
+                            href="/sets"
+                            onClick={() => setSetsDropdownOpen(false)}
+                            className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg hover:bg-gray-800 text-xs text-muted hover:text-accent transition-all"
+                          >
+                            View all sets →
+                          </Link>
                         </div>
                       </div>
-                    )}
+                    </div>
                   </div>
                   <Link href="/collection"           className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_collection')}</Link>
                   <Link href="/wanted-board"         className="px-3 py-1.5 text-sm text-secondary hover:text-accent hover:bg-elevated rounded-lg transition-all">{t('nav_wanted_board')}</Link>
@@ -676,30 +682,31 @@ export default function Navbar() {
               </svg>
             </button>
             {setsMobileExpanded && (
-              <div className="ml-3 mt-0.5 mb-1 pl-3 border-l border-subtle space-y-0.5">
+              <div className="ml-3 mt-1 mb-1 pl-3 border-l border-subtle space-y-1">
                 {Object.values(GAMES).map(game => (
                   <Link
                     key={game.slug}
                     href={`/sets?game=${game.slug}`}
                     onClick={() => { setMobileOpen(false); setSetsMobileExpanded(false) }}
-                    className="flex items-center gap-2.5 px-3 py-2 text-sm text-secondary hover:text-accent hover:bg-surface rounded-lg transition-all"
+                    className="flex items-center gap-3 px-3 py-3 text-sm text-secondary hover:text-accent hover:bg-surface rounded-lg transition-all"
                   >
-                    {/* Card-back thumbnail — replace src with game.logoUrl once logo images are placed at /public/images/games/<slug>-logo.png */}
-                    <div className="w-7 h-9 rounded overflow-hidden border border-subtle shrink-0 bg-surface">
+                    <div className="w-12 h-16 rounded-lg overflow-hidden border border-subtle shrink-0 bg-surface">
                       <img src={game.cardBackImage} alt={game.displayName} className="w-full h-full object-cover" />
                     </div>
-                    <span>{game.displayName}</span>
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm">{game.displayName}</p>
+                      {game.description && (
+                        <p className="text-xs text-muted leading-tight line-clamp-2 mt-0.5">{game.description}</p>
+                      )}
+                    </div>
                   </Link>
                 ))}
                 <Link
                   href="/sets"
                   onClick={() => { setMobileOpen(false); setSetsMobileExpanded(false) }}
-                  className="flex items-center gap-1.5 px-3 py-2 text-xs text-muted hover:text-accent hover:bg-surface rounded-lg transition-all"
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-xs text-muted hover:text-accent hover:bg-surface rounded-lg transition-all"
                 >
-                  All sets
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
+                  All sets →
                 </Link>
               </div>
             )}
