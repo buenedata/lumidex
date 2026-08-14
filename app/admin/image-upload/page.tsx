@@ -4,21 +4,18 @@ import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store'
+import { GAMES, type GameSlug } from '@/lib/games'
 
-// Card Images imports
-import { SetSelector } from '../../../components/admin/SetSelector'
-import { CardImageGrid, type CardGridItem } from '../../../components/admin/CardImageGrid'
-import { CardImageUploadModal } from '../../../components/admin/CardImageUploadModal'
-import { BulkImageImport } from '../../../components/admin/BulkImageImport'
-// Set Images imports
-import { SetImageGrid, type SetGridItem } from '../../../components/admin/SetImageGrid'
-import { SetImageUploadModal } from '../../../components/admin/SetImageUploadModal'
+// Unified image upload wizard (Card Images + Set Images)
+import { ImageUploadWizard } from '../../../components/admin/ImageUploadWizard'
+import { GamePicker } from '../../../components/admin/GamePicker'
 
 // Set Symbols imports
 import { SetSymbolGrid, type SetSymbolGridItem } from '../../../components/admin/SetSymbolGrid'
 import { SetSymbolUploadModal } from '../../../components/admin/SetSymbolUploadModal'
 
 // Product Images imports
+import { SetSelector } from '../../../components/admin/SetSelector'
 import { ProductImageGrid, type ProductGridItem } from '../../../components/admin/ProductImageGrid'
 import { ProductImageUploadModal } from '../../../components/admin/ProductImageUploadModal'
 
@@ -29,259 +26,30 @@ import { LinkSourceImagesTab } from '../../../components/admin/LinkSourceImagesT
 // Tab definitions
 // ─────────────────────────────────────────────
 const TABS = [
-  { id: 'card-images',     label: 'Card Images',     icon: '🖼️' },
-  { id: 'set-images',      label: 'Set Images',      icon: '🗂️' },
-  { id: 'set-symbols',     label: 'Set Symbols',     icon: '🔷' },
-  { id: 'product-images',  label: 'Product Images',  icon: '📦' },
-  { id: 'source-images',   label: 'Source Images',   icon: '🔗' },
+  { id: 'images',          label: 'Card & Set Images', icon: '🖼️' },
+  { id: 'set-symbols',     label: 'Set Symbols',       icon: '🔷' },
+  { id: 'product-images',  label: 'Product Images',    icon: '📦' },
+  { id: 'source-images',   label: 'Source Images',     icon: '🔗' },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
 
 // ─────────────────────────────────────────────
-// Card Images Tab
+// Shared: mini breadcrumb with "change game" link
 // ─────────────────────────────────────────────
-function CardImagesTab() {
-  const [selectedSetId, setSelectedSetId] = useState<string | null>(null)
-  const [selectedSetName, setSelectedSetName] = useState<string | null>(null)
-  const [selectedCard, setSelectedCard] = useState<CardGridItem | null>(null)
-  const [cardList, setCardList] = useState<CardGridItem[]>([])
-  const [modalOpen, setModalOpen] = useState(false)
-  const [gridRefreshKey, setGridRefreshKey] = useState(0)
-  const [selectorRefreshKey, setSelectorRefreshKey] = useState(0)
-  /**
-   * Cache-busted URLs returned by upload-card-image for cards that were just
-   * uploaded.  Passed to CardImageGrid so the new image is shown instantly
-   * even if the CDN still serves the old cached file at the stable R2 URL.
-   * Cleared whenever the selected set changes.
-   */
-  const [imageOverrides, setImageOverrides] = useState<Record<string, string>>({})
-
-  const handleSetSelect = (setId: string, setName: string) => {
-    setSelectedSetId(setId)
-    setSelectedSetName(setName)
-    setSelectedCard(null)
-    setCardList([])
-    setImageOverrides({})
-  }
-
-  const handleCardSelect = (card: CardGridItem) => {
-    setSelectedCard(card)
-    setModalOpen(true)
-  }
-
-  const handleUploadSuccess = (cardId: string, imageUrl: string) => {
-    // Immediately patch the grid with the cache-busted URL from the upload
-    // response so the admin sees the new image without waiting for the CDN.
-    setImageOverrides((prev) => ({ ...prev, [cardId]: imageUrl }))
-    // Also trigger a full re-fetch so the summary bar and DB state stay in sync.
-    setGridRefreshKey((k) => k + 1)
-  }
-
-  /**
-   * Called by CardImageGrid whenever its card list is (re-)loaded.
-   * We keep cardList in sync for "Next Card" navigation AND also re-sync
-   * selectedCard so the modal immediately reflects the fresh DB state after
-   * a successful upload (e.g. the "Card already has an image" notice updates).
-   */
-  const handleCardsLoaded = (cards: CardGridItem[]) => {
-    setCardList(cards)
-    setSelectedCard((prev) => {
-      if (!prev) return prev
-      const updated = cards.find((c) => c.id === prev.id)
-      return updated ?? prev
-    })
-  }
-
-  const handleModalClose = () => setModalOpen(false)
-
-  const handleNextCard = () => {
-    if (!selectedCard || cardList.length === 0) return
-    const currentIndex = cardList.findIndex((c) => c.id === selectedCard.id)
-    const nextCard = cardList[currentIndex + 1]
-    if (nextCard) setSelectedCard(nextCard)
-  }
-
-  const currentCardIndex = selectedCard ? cardList.findIndex((c) => c.id === selectedCard.id) : -1
-  const hasNextCard = currentCardIndex >= 0 && currentCardIndex < cardList.length - 1
-
+function GameBreadcrumb({
+  selectedGame,
+  onChangeGame,
+}: {
+  selectedGame: GameSlug
+  onChangeGame: () => void
+}) {
   return (
-    <div>
-      <p className="text-gray-400 text-sm mb-6">
-        Choose a set, browse its cards, and click any card to upload or replace its image.
-      </p>
-
-      {/* Step 1 — Choose a set */}
-      <section className="mb-8">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold text-gray-200 flex items-center gap-2">
-            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-yellow-500 text-black text-xs font-bold">1</span>
-            Choose a set
-          </h2>
-          <button
-            onClick={() => setSelectorRefreshKey((k) => k + 1)}
-            className="text-xs text-gray-400 hover:text-yellow-400 transition-colors flex items-center gap-1"
-            title="Re-fetch the sets list from the database"
-          >
-            ↻ Refresh sets
-          </button>
-        </div>
-        <SetSelector
-          selectedSetId={selectedSetId}
-          onSetSelect={handleSetSelect}
-          showImageStatus
-          refreshKey={selectorRefreshKey}
-        />
-      </section>
-
-      {/* Step 2 — Browse cards */}
-      {selectedSetId && (
-        <section className="mb-8">
-          <h2 className="text-base font-semibold mb-3 text-gray-200 flex items-center gap-2">
-            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-yellow-500 text-black text-xs font-bold">2</span>
-            Select a card
-            {selectedSetName && (
-              <span className="text-gray-400 font-normal text-sm">— {selectedSetName}</span>
-            )}
-          </h2>
-          <div className="p-4 bg-gray-900 border border-gray-800 rounded-xl">
-            <CardImageGrid
-              setId={selectedSetId}
-              onCardSelect={handleCardSelect}
-              onCardsLoaded={handleCardsLoaded}
-              selectedCardId={selectedCard?.id}
-              refreshKey={gridRefreshKey}
-              imageOverrides={imageOverrides}
-            />
-          </div>
-          <p className="mt-2 text-gray-500 text-xs">
-            💡 Grey = no image stored. Click any card to open the upload dialog.
-          </p>
-        </section>
-      )}
-
-      {/* Step 3 — Bulk import */}
-      {selectedSetId && (
-        <section className="mb-8">
-          <h2 className="text-base font-semibold mb-3 text-gray-200 flex items-center gap-2">
-            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-yellow-500 text-black text-xs font-bold">3</span>
-            Bulk import from pkmn.gg
-            <span className="text-gray-400 font-normal text-sm">— paste a set or collection URL to import all card images at once</span>
-          </h2>
-          <div className="p-4 bg-gray-900 border border-gray-800 rounded-xl">
-            <BulkImageImport
-              setId={selectedSetId}
-              onComplete={() => setGridRefreshKey((k) => k + 1)}
-            />
-          </div>
-        </section>
-      )}
-
-      {/* Upload modal */}
-      <CardImageUploadModal
-        card={selectedCard}
-        isOpen={modalOpen}
-        onClose={handleModalClose}
-        onUploadSuccess={handleUploadSuccess}
-        onNextCard={handleNextCard}
-        hasNextCard={hasNextCard}
-      />
-
-      {/* How it works (only when no set selected) */}
-      {!selectedSetId && (
-        <div className="mt-6 p-5 bg-gray-900 border border-gray-700 rounded-xl">
-          <h3 className="font-semibold text-yellow-400 mb-2">💡 How it works</h3>
-          <ol className="list-decimal list-inside text-gray-300 space-y-1 text-sm">
-            <li>Pick the set you want to work on from the list above</li>
-            <li>The card grid shows all cards — grey tiles have no image yet</li>
-            <li>Click any card to open the upload dialog</li>
-            <li>
-              Drag an image from{' '}
-              <strong className="text-yellow-400">TCGCollector</strong>
-              {', '}
-              <strong className="text-yellow-400">pkmn.gg</strong>
-              {', or '}
-              <strong className="text-yellow-400">dext TCG</strong>
-              , paste an image URL, or browse for a local file
-            </li>
-            <li>The image is compressed to WebP server-side, saved to Cloudflare R2, and the card record is updated</li>
-          </ol>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─────────────────────────────────────────────
-// Set Images Tab
-// ─────────────────────────────────────────────
-function SetImagesTab() {
-  const [selectedSet, setSelectedSet] = useState<SetGridItem | null>(null)
-  const [setList, setSetList] = useState<SetGridItem[]>([])
-  const [modalOpen, setModalOpen] = useState(false)
-  const [gridRefreshKey, setGridRefreshKey] = useState(0)
-
-  const handleSetSelect = (set: SetGridItem) => {
-    setSelectedSet(set)
-    setModalOpen(true)
-  }
-
-  const handleUploadSuccess = (_setId: string, logoUrl: string) => {
-    setSelectedSet((prev) => (prev ? { ...prev, logo_url: logoUrl } : prev))
-    setGridRefreshKey((k) => k + 1)
-  }
-
-  const handleModalClose = () => setModalOpen(false)
-
-  const handleNextSet = () => {
-    if (!selectedSet || setList.length === 0) return
-    const currentIndex = setList.findIndex((s) => s.id === selectedSet.id)
-    const nextSet = setList[currentIndex + 1]
-    if (nextSet) setSelectedSet(nextSet)
-  }
-
-  const currentSetIndex = selectedSet ? setList.findIndex((s) => s.id === selectedSet.id) : -1
-  const hasNextSet = currentSetIndex >= 0 && currentSetIndex < setList.length - 1
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <p className="text-gray-400 text-sm">
-          Click a set to open the upload modal, then drag the logo from{' '}
-          <a
-            href="https://www.pkmn.gg"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-yellow-400 hover:underline"
-          >
-            pkmn.gg
-          </a>{' '}
-          directly into the drop zone.
-        </p>
-        <button
-          onClick={() => setGridRefreshKey((k) => k + 1)}
-          className="ml-4 shrink-0 text-xs text-gray-400 hover:text-yellow-400 transition-colors flex items-center gap-1"
-          title="Re-fetch the set list from the database"
-        >
-          ↻ Refresh sets
-        </button>
-      </div>
-
-      <SetImageGrid
-        onSetSelect={handleSetSelect}
-        onSetsLoaded={setSetList}
-        selectedSetId={selectedSet?.id ?? null}
-        refreshKey={gridRefreshKey}
-      />
-
-      <SetImageUploadModal
-        set={selectedSet}
-        isOpen={modalOpen}
-        onClose={handleModalClose}
-        onUploadSuccess={handleUploadSuccess}
-        onNextSet={handleNextSet}
-        hasNextSet={hasNextSet}
-      />
+    <div className="flex items-center gap-2 text-sm mb-6">
+      <button onClick={onChangeGame} className="text-yellow-400 hover:underline font-medium">
+        {GAMES[selectedGame].displayName}
+      </button>
+      <span className="text-gray-600">— click to change TCG</span>
     </div>
   )
 }
@@ -290,9 +58,10 @@ function SetImagesTab() {
 // Set Symbols Tab
 // ─────────────────────────────────────────────
 function SetSymbolsTab() {
-  const [selectedSet, setSelectedSet] = useState<SetSymbolGridItem | null>(null)
-  const [setList, setSetList] = useState<SetSymbolGridItem[]>([])
-  const [modalOpen, setModalOpen] = useState(false)
+  const [selectedGame, setSelectedGame]     = useState<GameSlug | null>(null)
+  const [selectedSet, setSelectedSet]       = useState<SetSymbolGridItem | null>(null)
+  const [setList, setSetList]               = useState<SetSymbolGridItem[]>([])
+  const [modalOpen, setModalOpen]           = useState(false)
   const [gridRefreshKey, setGridRefreshKey] = useState(0)
 
   const handleSetSelect = (set: SetSymbolGridItem) => {
@@ -305,8 +74,6 @@ function SetSymbolsTab() {
     setGridRefreshKey((k) => k + 1)
   }
 
-  const handleModalClose = () => setModalOpen(false)
-
   const handleNextSet = () => {
     if (!selectedSet || setList.length === 0) return
     const currentIndex = setList.findIndex((s) => s.id === selectedSet.id)
@@ -317,32 +84,60 @@ function SetSymbolsTab() {
   const currentSetIndex = selectedSet ? setList.findIndex((s) => s.id === selectedSet.id) : -1
   const hasNextSet = currentSetIndex >= 0 && currentSetIndex < setList.length - 1
 
+  // ── Step 1: choose game ──────────────────────────────────────────────────
+  if (!selectedGame) {
+    return (
+      <div>
+        <p className="text-gray-400 text-sm mb-6">
+          Choose a TCG first, then select a set to upload its symbol icon.
+        </p>
+        <h2 className="text-base font-semibold text-gray-200 flex items-center gap-2 mb-4">
+          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-yellow-500 text-black text-xs font-bold">1</span>
+          Choose a TCG
+        </h2>
+        <GamePicker selectedGame={null} onGameSelect={setSelectedGame} />
+      </div>
+    )
+  }
+
+  // ── Step 2: symbol grid ──────────────────────────────────────────────────
   return (
     <div>
-      <p className="text-gray-400 text-sm mb-6">
-        Click a set to open the upload modal, then drag the symbol icon from{' '}
-        <a
-          href="https://www.pkmn.gg"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-yellow-400 hover:underline"
+      <GameBreadcrumb selectedGame={selectedGame} onChangeGame={() => setSelectedGame(null)} />
+
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-gray-400 text-sm">
+          Click a set to open the upload modal, then drag the symbol icon from{' '}
+          <a
+            href="https://www.pkmn.gg"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-yellow-400 hover:underline"
+          >
+            pkmn.gg
+          </a>{' '}
+          directly into the drop zone. Symbols appear as a small badge in the bottom-left of set cards.
+        </p>
+        <button
+          onClick={() => setGridRefreshKey((k) => k + 1)}
+          className="ml-4 shrink-0 text-xs text-gray-400 hover:text-yellow-400 transition-colors flex items-center gap-1"
         >
-          pkmn.gg
-        </a>{' '}
-        directly into the drop zone. Symbols appear as a small badge in the bottom-left of set cards.
-      </p>
+          ↻ Refresh
+        </button>
+      </div>
 
       <SetSymbolGrid
         onSetSelect={handleSetSelect}
         onSetsLoaded={setSetList}
         selectedSetId={selectedSet?.id}
         refreshKey={gridRefreshKey}
+        game={selectedGame}
       />
 
       <SetSymbolUploadModal
         set={selectedSet}
         isOpen={modalOpen}
-        onClose={handleModalClose}
+        onClose={() => setModalOpen(false)}
         onUploadSuccess={handleUploadSuccess}
         onNextSet={handleNextSet}
         hasNextSet={hasNextSet}
@@ -355,20 +150,15 @@ function SetSymbolsTab() {
 // Product Images Tab
 // ─────────────────────────────────────────────
 function ProductImagesTab() {
-  const [selectedSetId, setSelectedSetId]     = useState<string | null>(null)
-  const [selectedSetName, setSelectedSetName] = useState<string | null>(null)
-  const [selectedProduct, setSelectedProduct] = useState<ProductGridItem | null>(null)
-  const [productList, setProductList]         = useState<ProductGridItem[]>([])
-  const [modalOpen, setModalOpen]             = useState(false)
-  const [gridRefreshKey, setGridRefreshKey]   = useState(0)
-  const [selectorRefreshKey, setSelectorRefreshKey] = useState(0)
-  /**
-   * Cache-busted URLs returned by upload-product-image for products that were
-   * just uploaded.  Passed to ProductImageGrid so the new image is shown
-   * instantly even if the CDN still serves the old cached file at the stable
-   * R2 URL.  Cleared whenever the selected set changes.
-   */
-  const [imageOverrides, setImageOverrides]   = useState<Record<string, string>>({})
+  const [selectedGame, setSelectedGame]               = useState<GameSlug | null>(null)
+  const [selectedSetId, setSelectedSetId]             = useState<string | null>(null)
+  const [selectedSetName, setSelectedSetName]         = useState<string | null>(null)
+  const [selectedProduct, setSelectedProduct]         = useState<ProductGridItem | null>(null)
+  const [productList, setProductList]                 = useState<ProductGridItem[]>([])
+  const [modalOpen, setModalOpen]                     = useState(false)
+  const [gridRefreshKey, setGridRefreshKey]           = useState(0)
+  const [selectorRefreshKey, setSelectorRefreshKey]   = useState(0)
+  const [imageOverrides, setImageOverrides]           = useState<Record<string, string>>({})
 
   const handleSetSelect = (setId: string, setName: string) => {
     setSelectedSetId(setId)
@@ -384,23 +174,15 @@ function ProductImagesTab() {
   }
 
   const handleUploadSuccess = (_productId: string, imageUrl: string) => {
-    // Immediately patch the grid with the cache-busted URL from the upload
-    // response so the admin sees the new image without waiting for the CDN.
     setImageOverrides((prev) => ({ ...prev, [_productId]: imageUrl }))
-    // Keep productList in sync for "Next Product" navigation and also update
-    // selectedProduct so the modal "already has an image" notice reflects the
-    // new URL if the same product is opened again.
     setProductList((prev) =>
       prev.map((p) => (p.id === _productId ? { ...p, image_url: imageUrl } : p))
     )
     setSelectedProduct((prev) =>
       prev?.id === _productId ? { ...prev, image_url: imageUrl } : prev
     )
-    // Also trigger a full re-fetch so the summary bar and DB state stay in sync.
     setGridRefreshKey((k) => k + 1)
   }
-
-  const handleModalClose = () => setModalOpen(false)
 
   const handleNextProduct = () => {
     if (!selectedProduct || productList.length === 0) return
@@ -415,8 +197,27 @@ function ProductImagesTab() {
   const hasNextProduct =
     currentProductIndex >= 0 && currentProductIndex < productList.length - 1
 
+  // ── Step 1: choose game ──────────────────────────────────────────────────
+  if (!selectedGame) {
+    return (
+      <div>
+        <p className="text-gray-400 text-sm mb-6">
+          Choose a TCG first, then select a set to upload its sealed product images.
+        </p>
+        <h2 className="text-base font-semibold text-gray-200 flex items-center gap-2 mb-4">
+          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-yellow-500 text-black text-xs font-bold">1</span>
+          Choose a TCG
+        </h2>
+        <GamePicker selectedGame={null} onGameSelect={setSelectedGame} />
+      </div>
+    )
+  }
+
+  // ── Step 2+: set selector + product grid ────────────────────────────────
   return (
     <div>
+      <GameBreadcrumb selectedGame={selectedGame} onChangeGame={() => setSelectedGame(null)} />
+
       <p className="text-gray-400 text-sm mb-6">
         Choose a set, browse its sealed products, and click any product to upload or replace its image.
         Drag images directly from{' '}
@@ -445,6 +246,7 @@ function ProductImagesTab() {
           onSetSelect={handleSetSelect}
           selectedSetId={selectedSetId}
           refreshKey={selectorRefreshKey}
+          game={selectedGame}
         />
       </div>
 
@@ -475,7 +277,7 @@ function ProductImagesTab() {
       <ProductImageUploadModal
         product={selectedProduct}
         isOpen={modalOpen}
-        onClose={handleModalClose}
+        onClose={() => setModalOpen(false)}
         onUploadSuccess={handleUploadSuccess}
         onNextProduct={handleNextProduct}
         hasNextProduct={hasNextProduct}
@@ -490,7 +292,7 @@ function ProductImagesTab() {
 export default function ImageUploadPage() {
   const { user, profile, isLoading } = useAuthStore()
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<TabId>('card-images')
+  const [activeTab, setActiveTab] = useState<TabId>('images')
 
   // ── Auth guard ───────────────────────────────────────────────────────────
   useEffect(() => {
@@ -534,7 +336,7 @@ export default function ImageUploadPage() {
             {activeTabMeta.icon} Image Upload
           </h1>
           <p className="text-gray-400 mt-1 text-sm">
-            Switch between card images, set logos, set symbols, and product images using the tabs below.
+            Switch between image types using the tabs below. Each flow starts by choosing a TCG.
           </p>
         </div>
 
@@ -557,8 +359,7 @@ export default function ImageUploadPage() {
         </div>
 
         {/* Active tab content */}
-        {activeTab === 'card-images'    && <CardImagesTab />}
-        {activeTab === 'set-images'     && <SetImagesTab />}
+        {activeTab === 'images'         && <ImageUploadWizard />}
         {activeTab === 'set-symbols'    && <SetSymbolsTab />}
         {activeTab === 'product-images' && <ProductImagesTab />}
         {activeTab === 'source-images'  && <LinkSourceImagesTab />}

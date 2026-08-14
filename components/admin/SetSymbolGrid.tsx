@@ -15,9 +15,11 @@ interface Props {
   onSetsLoaded?: (sets: SetSymbolGridItem[]) => void
   selectedSetId?: string | null
   refreshKey?: number
+  /** Optional TCG filter — when provided only sets for that game are shown */
+  game?: string
 }
 
-export function SetSymbolGrid({ onSetSelect, onSetsLoaded, selectedSetId, refreshKey = 0 }: Props) {
+export function SetSymbolGrid({ onSetSelect, onSetsLoaded, selectedSetId, refreshKey = 0, game }: Props) {
   const [sets, setSets] = useState<SetSymbolGridItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -35,7 +37,8 @@ export function SetSymbolGrid({ onSetSelect, onSetsLoaded, selectedSetId, refres
 
     async function fetchSets() {
       try {
-        const res = await fetch('/api/sets')
+        const url = game ? `/api/sets?game=${encodeURIComponent(game)}` : '/api/sets'
+        const res = await fetch(url)
         if (!res.ok) throw new Error(`Failed to fetch sets: ${res.status}`)
         const data = await res.json()
         const raw: Array<{
@@ -64,7 +67,7 @@ export function SetSymbolGrid({ onSetSelect, onSetsLoaded, selectedSetId, refres
 
     fetchSets()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [refreshKey])
+  }, [refreshKey, game])
 
   if (loading) {
     return (
