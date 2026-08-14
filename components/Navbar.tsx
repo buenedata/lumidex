@@ -282,24 +282,16 @@ export default function Navbar() {
                               onClick={() => setSetsDropdownOpen(false)}
                               className="group relative flex flex-col rounded-xl overflow-hidden border border-gray-700/50 hover:border-accent/50 bg-gray-800/60 hover:bg-gray-800 transition-all duration-150 hover:scale-[1.02]"
                             >
-                              {/* Tall image area */}
-                              <div className="h-40 overflow-hidden bg-gray-800 relative">
-                                <img
-                                  src={game.cardBackImage}
-                                  alt={game.displayName}
-                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                />
-                                {/* Gradient overlay for text legibility */}
-                                <div className="absolute inset-0 bg-gradient-to-t from-gray-900/80 via-transparent to-transparent" />
-                                {/* Game logo overlay */}
-                                {game.logoUrl && (
-                                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2">
-                                    <img
-                                      src={game.logoUrl}
-                                      alt={`${game.displayName} logo`}
-                                      className="h-8 w-auto object-contain drop-shadow-lg"
-                                    />
-                                  </div>
+                              {/* Tall image area — game logo centered on plain dark bg */}
+                              <div className="h-40 bg-gray-800 flex items-center justify-center">
+                                {game.logoUrl ? (
+                                  <img
+                                    src={game.logoUrl}
+                                    alt={game.displayName}
+                                    className="h-16 w-auto object-contain drop-shadow-2xl"
+                                  />
+                                ) : (
+                                  <span className="text-lg font-bold text-primary">{game.displayName}</span>
                                 )}
                               </div>
                               {/* Game info below image */}
