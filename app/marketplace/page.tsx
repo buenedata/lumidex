@@ -38,7 +38,7 @@ export default function MarketplacePage() {
 
         {/* Tagline */}
         <p className="text-xl text-secondary mb-6 max-w-md leading-relaxed">
-          Buy and sell Pokémon cards directly on Lumidex.
+          Buy and sell trading cards directly on Lumidex.
         </p>
 
         {/* Body copy */}

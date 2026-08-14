@@ -133,7 +133,7 @@ export default function CollectionPage() {
           <p className="text-secondary text-sm">
             {userPokemonSets.length > 0
               ? `Tracking ${userPokemonSets.length} set${userPokemonSets.length !== 1 ? 's' : ''} in your collection`
-              : 'Start building your Pokémon card collection'}
+              : 'Start building your TCG card collection'}
           </p>
         </div>
 
@@ -188,7 +188,7 @@ export default function CollectionPage() {
                 No collection yet
               </h2>
               <p className="text-secondary text-sm max-w-xs mx-auto">
-                Start collecting cards to build your collection. Browse all available Pokémon sets to get started.
+                Start collecting cards to build your collection. Browse all available sets to get started.
               </p>
             </div>
             <Button variant="primary" size="lg" onClick={() => router.push('/sets')}>

@@ -21,8 +21,8 @@ const spaceGrotesk = Space_Grotesk({
 })
 
 export const metadata: Metadata = {
-  title: 'Lumidex — Pokémon TCG Collection Tracker',
-  description: 'Track, manage and value your Pokémon TCG collection with style.',
+  title: 'Lumidex — TCG Collection Tracker',
+  description: 'Track, manage and value your trading card game collections with style.',
 }
 
 export default function RootLayout({

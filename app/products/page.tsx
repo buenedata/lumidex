@@ -262,5 +262,5 @@ export default async function ProductsPage({ searchParams }: ProductsPageProps) 
 
 export const metadata = {
   title: 'Sealed Products | Lumidex',
-  description: 'Browse and track your Pokémon TCG sealed product collection.',
+  description: 'Browse and track your TCG sealed product collection.',
 }

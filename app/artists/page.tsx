@@ -3,7 +3,7 @@ import ArtistsPageClient from '@/components/ArtistsPageClient'
 
 export const metadata: Metadata = {
   title:       'Card Artists | Lumidex',
-  description: 'Browse all Pokémon TCG card artists and illustrators. Discover the talented creators behind the artwork on your favorite cards.',
+  description: 'Browse all TCG card artists and illustrators. Discover the talented creators behind the artwork on your favorite cards.',
 }
 
 // Artist data is fetched client-side; no server-side auth needed.
@@ -37,7 +37,7 @@ export default function ArtistsPage() {
                 Card Artists
               </h1>
               <p className="text-secondary text-sm max-w-xl">
-                Celebrating the talented illustrators behind every Pokémon TCG card.
+                Celebrating the talented illustrators behind every TCG card.
                 From classic watercolors to modern digital art — meet the creators.
               </p>
             </div>

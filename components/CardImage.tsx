@@ -57,7 +57,7 @@ export function CardImage({
   const dims = size ? sizeDims[size] : sizeDims.medium
 
   // Generate alt text if not provided
-  const altText = alt || `${card.name || 'Pokemon Card'} ${card.set_id ? `(${card.set_id.toUpperCase()})` : ''}`
+  const altText = alt || `${card.name || 'TCG Card'} ${card.set_id ? `(${card.set_id.toUpperCase()})` : ''}`
 
   return (
     // eslint-disable-next-line @next/next/no-img-element

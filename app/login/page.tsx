@@ -113,7 +113,7 @@ export default function LoginPage() {
           <h1 className="text-base font-semibold text-primary">
             {isLogin ? 'Sign in to your account' : 'Create your account'}
           </h1>
-          <p className="text-sm text-muted mt-1">Track your Pokémon card collection</p>
+          <p className="text-sm text-muted mt-1">Track your TCG card collection</p>
         </div>
 
         {/* ── Tab Toggle ───────────────────────────────────────────── */}

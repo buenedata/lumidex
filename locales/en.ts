@@ -35,7 +35,7 @@ const en = {
   nav_card_count_plural:   '{count} cards',
 
   // ── Footer ──────────────────────────────────────────────────────────────────
-  footer_brand_description:  'Your ultimate trading card collection tracker. Catalogue, track and showcase your Pokémon TCG collection with style.',
+  footer_brand_description:  'Your ultimate trading card game collection tracker. Catalogue, track and showcase your TCG collection with style.',
   footer_explore:            'Explore',
   footer_browse_cards:       'Browse Cards',
   footer_sets:               'Sets',
@@ -87,7 +87,7 @@ const en = {
 
   // ── Browse Hero ─────────────────────────────────────────────────────────────
   browse_headline:           'Find any card, artist or product',
-  browse_subheadline:        'Search the complete Pokémon TCG catalogue',
+  browse_subheadline:        'Search the complete TCG catalogue',
   browse_mode_cards:         'Cards',
   browse_mode_artists:       'Artists',
   browse_mode_products:      'Products',
@@ -314,7 +314,7 @@ const en = {
   feature_trade_hub_desc:      'List your duplicates, browse what friends have, and arrange trades directly on Lumidex — no middlemen, no fees.',
   feature_marketplace_title:   'Marketplace',
   feature_marketplace_tagline: 'Buy & sell with ease',
-  feature_marketplace_desc:    'A dedicated card marketplace to buy, sell and price-check any Pokémon card in your preferred local currency.',
+  feature_marketplace_desc:    'A dedicated card marketplace to buy, sell and price-check any TCG card in your preferred local currency.',
 
   // ── Wanted Board (dashboard widget) ──────────────────────────────────────────
   wb_title:           'Wanted Board',
@@ -359,7 +359,7 @@ const en = {
 
   // ── News / Stories ────────────────────────────────────────────────────────────
   news_heading:   'Stories',
-  news_subtitle:  'News, trivia and fun from the Pokémon TCG world.',
+  news_subtitle:  'News, trivia and fun from the TCG world.',
   news_view_all:  'View All',
 } as const
 

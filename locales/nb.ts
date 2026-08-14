@@ -34,7 +34,7 @@ const nb: TranslationDict = {
   nav_card_count_plural:   '{count} kort',
 
   // ── Footer ──────────────────────────────────────────────────────────────────
-  footer_brand_description:  'Den ultimate samlersporeren for Pokémon TCG-kort. Katalogiser, spor og vis frem samlingen din med stil.',
+  footer_brand_description:  'Den ultimate samlersporeren for kortspill. Katalogiser, spor og vis frem samlingen din med stil.',
   footer_explore:            'Utforsk',
   footer_browse_cards:       'Bla gjennom kort',
   footer_sets:               'Sett',
@@ -85,7 +85,7 @@ const nb: TranslationDict = {
 
   // ── Browse Hero ─────────────────────────────────────────────────────────────
   browse_headline:            'Finn ethvert kort, kunstner eller produkt',
-  browse_subheadline:         'Søk i hele Pokémon TCG-katalogen',
+  browse_subheadline:         'Søk i hele TCG-katalogen',
   browse_mode_cards:          'Kort',
   browse_mode_artists:        'Kunstnere',
   browse_mode_products:       'Produkter',
@@ -341,7 +341,7 @@ const nb: TranslationDict = {
 
   // ── News / Stories ────────────────────────────────────────────────────────────
   news_heading:  'Historier',
-  news_subtitle: 'Nyheter, trivia og moro fra Pokémon TCG-verdenen.',
+  news_subtitle: 'Nyheter, trivia og moro fra kortspillverdenen.',
   news_view_all: 'Se alle',
 }
 

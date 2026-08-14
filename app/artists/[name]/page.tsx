@@ -17,7 +17,7 @@ export async function generateMetadata(
 
   return {
     title:       `${artistName} | Lumidex Artists`,
-    description: `Explore all Pokémon cards illustrated by ${artistName}. Browse every card this artist has created for the Pokémon Trading Card Game.`,
+    description: `Explore all TCG cards illustrated by ${artistName}. Browse every card this artist has created for the trading card game.`,
   }
 }
 

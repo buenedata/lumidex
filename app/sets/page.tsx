@@ -75,7 +75,7 @@ export default async function SetsPage() {
           >
             Card Sets
           </h1>
-          <p className="text-secondary text-sm">Browse and collect Pokémon TCG sets</p>
+          <p className="text-secondary text-sm">Browse and collect TCG sets</p>
         </div>
 
         {sets.length === 0 ? (

@@ -206,7 +206,7 @@ function CardGlareImage({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={displaySrc}
-          alt={alt ?? 'Pokemon card'}
+          alt={alt ?? 'TCG card'}
           width={389}
           height={543}
           className="absolute inset-0 w-full h-full object-cover"
@@ -222,7 +222,7 @@ function CardGlareImage({
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={displayedVariantSrc}
-            alt={alt ?? 'Pokemon card variant'}
+            alt={alt ?? 'TCG card variant'}
             width={389}
             height={543}
             className="absolute inset-0 w-full h-full object-cover pointer-events-none"

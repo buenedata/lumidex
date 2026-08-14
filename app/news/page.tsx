@@ -141,7 +141,7 @@ export default function NewsPage() {
             Stories
           </h1>
           <p className="text-secondary mt-1.5 text-sm max-w-lg leading-relaxed">
-            News, trivia and fun from the Pokémon TCG world — curated for collectors and trainers.
+            News, trivia and fun from the TCG world — curated for collectors.
           </p>
         </div>
 
