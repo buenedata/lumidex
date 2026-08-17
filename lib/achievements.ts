@@ -30,6 +30,21 @@ export interface UserStats {
   hasAvatar: boolean
   /** Whether the user completed the first-time setup wizard */
   hasCompletedSetup: boolean
+  // ── TCG & general collecting stats ───────────────────────────────────────
+  /** Number of graded cards in user_graded_cards */
+  gradedCardCount: number
+  /** Sets tracked where sets.game = 'pokemon' */
+  pokemonSetsTracked: number
+  /** Completed sets where sets.game = 'pokemon' */
+  pokemonSetsCompleted: number
+  /** Sets tracked where sets.game = 'moomin' */
+  moominSetsTracked: number
+  /** Completed sets where sets.game = 'moomin' */
+  moominSetsCompleted: number
+  /** Count of distinct games the user has at least one set in */
+  gamesTracked: number
+  /** Number of custom lists in user_card_lists */
+  listCount: number
 }
 
 /**
@@ -96,6 +111,28 @@ const achievementChecks: AchievementCheck[] = [
   // ── Profile ───────────────────────────────────────────────────────────────
   { name: 'Picture Perfect', condition: s => s.hasAvatar },
   { name: 'Identity',        condition: s => s.hasCompletedSetup },
+
+  // ── Pokémon-specific ──────────────────────────────────────────────────────
+  { name: 'Pokémon Trainer', condition: s => s.pokemonSetsTracked >= 1 },
+  { name: 'Gym Leader',      condition: s => s.pokemonSetsCompleted >= 1 },
+  { name: 'Elite Four',      condition: s => s.pokemonSetsCompleted >= 4 },
+  { name: 'Champion',        condition: s => s.pokemonSetsCompleted >= 10 },
+  { name: 'Pokémon Master',  condition: s => s.pokemonSetsCompleted >= 25 },
+
+  // ── Moomin-specific ───────────────────────────────────────────────────────
+  { name: 'Moomin Explorer',  condition: s => s.moominSetsTracked >= 1 },
+  { name: 'Valley Dweller',   condition: s => s.moominSetsCompleted >= 1 },
+  { name: 'Moomin Collector', condition: s => s.moominSetsCompleted >= 3 },
+
+  // ── Graded Cards ──────────────────────────────────────────────────────────
+  { name: "Grader's Apprentice", condition: s => s.gradedCardCount >= 1 },
+  { name: 'Graded Investor',     condition: s => s.gradedCardCount >= 10 },
+  { name: 'Slab Master',         condition: s => s.gradedCardCount >= 50 },
+
+  // ── General / Multi-game ─────────────────────────────────────────────────
+  { name: 'World Collector', condition: s => s.gamesTracked >= 2 },
+  { name: 'List Maker',      condition: s => s.listCount >= 1 },
+  { name: 'Curator',         condition: s => s.listCount >= 5 },
 ]
 
 // ── Stats computation ─────────────────────────────────────────────────────────
@@ -133,8 +170,13 @@ export async function getUserStats(
   const userSetIds: string[] = setsData?.map((s: { set_id: string }) => s.set_id) ?? []
   const totalSets = userSetIds.length
 
-  // ── Completed sets ────────────────────────────────────────────────────────
-  let completedSets = 0
+  // ── Completed sets + per-game stats ───────────────────────────────────────
+  let completedSets        = 0
+  let pokemonSetsTracked   = 0
+  let pokemonSetsCompleted = 0
+  let moominSetsTracked    = 0
+  let moominSetsCompleted  = 0
+  let gamesTracked         = 0
 
   if (userSetIds.length > 0) {
     type CardCountRow = { set_id: string; card_count: number }
@@ -142,12 +184,12 @@ export async function getUserStats(
     const [setsResult, rpcResult] = await Promise.all([
       client
         .from('sets')
-        .select('set_id, "setComplete", "setTotal"')
+        .select('set_id, "setComplete", "setTotal", game')
         .in('set_id', userSetIds),
       client.rpc('get_user_card_counts_by_set', { p_user_id: userId }),
     ])
 
-    const setsInfo   = (setsResult.data ?? []) as Array<{ set_id: string; setComplete: number | null; setTotal: number | null }>
+    const setsInfo   = (setsResult.data ?? []) as Array<{ set_id: string; setComplete: number | null; setTotal: number | null; game: string }>
     const cardCounts = (rpcResult.data ?? []) as CardCountRow[]
 
     completedSets = setsInfo.filter(set => {
@@ -155,6 +197,28 @@ export async function getUserStats(
       const total = set.setComplete ?? set.setTotal ?? 0
       return total > 0 && owned >= total
     }).length
+
+    // Per-game stats — derived in-memory from already-fetched setsInfo (no extra DB calls)
+    const pokemonSets = setsInfo.filter(s => s.game === 'pokemon')
+    const moominSets  = setsInfo.filter(s => s.game === 'moomin')
+
+    pokemonSetsTracked = pokemonSets.length
+    moominSetsTracked  = moominSets.length
+
+    pokemonSetsCompleted = pokemonSets.filter(set => {
+      const owned = cardCounts.find(r => r.set_id === set.set_id)?.card_count ?? 0
+      const total = set.setComplete ?? set.setTotal ?? 0
+      return total > 0 && owned >= total
+    }).length
+
+    moominSetsCompleted = moominSets.filter(set => {
+      const owned = cardCounts.find(r => r.set_id === set.set_id)?.card_count ?? 0
+      const total = set.setComplete ?? set.setTotal ?? 0
+      return total > 0 && owned >= total
+    }).length
+
+    // Distinct games the user is actively tracking (at least 1 set)
+    gamesTracked = new Set(setsInfo.map(s => s.game)).size
   }
 
   // ── Friends ───────────────────────────────────────────────────────────────
@@ -166,8 +230,8 @@ export async function getUserStats(
 
   const friendCount = friendData?.length ?? 0
 
-  // ── Wanted cards, sealed products, profile — run in parallel ─────────────
-  const [wantedResult, sealedResult, profileResult] = await Promise.all([
+  // ── Wanted cards, sealed products, profile, graded cards, lists — parallel ─
+  const [wantedResult, sealedResult, profileResult, gradedResult, listResult] = await Promise.all([
     client
       .from('wanted_cards')
       .select('card_id', { count: 'exact', head: true })
@@ -181,12 +245,22 @@ export async function getUserStats(
       .select('avatar_url, setup_completed')
       .eq('id', userId)
       .single(),
+    client
+      .from('user_graded_cards')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId),
+    client
+      .from('user_card_lists')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId),
   ])
 
   const wantedCount        = wantedResult.count  ?? 0
   const sealedProductCount = sealedResult.count  ?? 0
   const hasAvatar          = Boolean(profileResult.data?.avatar_url)
   const hasCompletedSetup  = Boolean(profileResult.data?.setup_completed)
+  const gradedCardCount    = gradedResult.count  ?? 0
+  const listCount          = listResult.count    ?? 0
 
   return {
     totalCards,
@@ -199,6 +273,13 @@ export async function getUserStats(
     sealedProductCount,
     hasAvatar,
     hasCompletedSetup,
+    gradedCardCount,
+    pokemonSetsTracked,
+    pokemonSetsCompleted,
+    moominSetsTracked,
+    moominSetsCompleted,
+    gamesTracked,
+    listCount,
   }
 }
 

@@ -141,6 +141,10 @@ const en = {
   achieve_cat_sealed_products:  'Sealed Products',
   achieve_cat_social:           'Social',
   achieve_cat_profile:          'Profile',
+  achieve_cat_pokemon:          'Pokémon Trainer',
+  achieve_cat_moomin:           'Moomin Collector',
+  achieve_cat_graded:           'Graded Cards',
+  achieve_cat_general:          'General Collecting',
 
   // ── Settings Form ────────────────────────────────────────────────────────────
   settings_section_identity:       'Identity',

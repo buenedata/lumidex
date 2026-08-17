@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useAuthStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { checkAndUnlockAchievements } from '@/lib/achievements'
+import { GAMES, ALL_GAME_SLUGS } from '@/lib/games'
 import SetCard from '@/components/SetCard'
 import AchievementBadge from '@/components/AchievementBadge'
 import { Button } from '@/components/ui/Button'
@@ -67,6 +68,10 @@ const ACHIEVEMENT_CATEGORIES: { labelKey: TranslationKey; names: string[] }[] = 
   { labelKey: 'achieve_cat_sealed_products', names: ['Sealed Ambitions', 'Box Hoarder', 'Sealed Vault'] },
   { labelKey: 'achieve_cat_social',          names: ['Friend Finder', 'Social Butterfly', 'Network Builder', 'Community Pillar'] },
   { labelKey: 'achieve_cat_profile',         names: ['Picture Perfect', 'Identity'] },
+  { labelKey: 'achieve_cat_pokemon',         names: ['Pokémon Trainer', 'Gym Leader', 'Elite Four', 'Champion', 'Pokémon Master'] },
+  { labelKey: 'achieve_cat_moomin',          names: ['Moomin Explorer', 'Valley Dweller', 'Moomin Collector'] },
+  { labelKey: 'achieve_cat_graded',          names: ["Grader's Apprentice", 'Graded Investor', 'Slab Master'] },
+  { labelKey: 'achieve_cat_general',         names: ['World Collector', 'List Maker', 'Curator'] },
 ]
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -163,7 +168,7 @@ export default function ProfilePage() {
         const [setsResult, rpcResult] = await Promise.all([
           supabase
             .from('sets')
-            .select('id:set_id, name, series, total:setTotal, setComplete, release_date, logo_url, symbol_url, created_at')
+            .select('id:set_id, name, series, total:setTotal, setComplete, release_date, logo_url, symbol_url, created_at, game')
             .in('set_id', userSetIds),
           supabase.rpc('get_user_card_counts_by_set', { p_user_id: userId }),
         ])
@@ -449,6 +454,16 @@ export default function ProfilePage() {
       return dB - dA
     })
 
+  // Group sorted sets by TCG for per-game section headers
+  const setsByGame = ALL_GAME_SLUGS
+    .map(slug => ({
+      slug,
+      displayName: GAMES[slug].displayName,
+      logoUrl:     GAMES[slug].logoUrl,
+      sets:        displaySets.filter(s => s.game === slug),
+    }))
+    .filter(g => g.sets.length > 0)
+
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-base">
@@ -678,6 +693,35 @@ export default function ProfilePage() {
             {/* ── Last Activity ─────────────────────────────────────────────────── */}
             <LastActivitySection userId={userId} isOwnProfile={isOwnProfile} />
 
+            {/* ── Friends Section ───────────────────────────────────────────────── */}
+            <section className="mb-8">
+              <h2
+                className="text-xl font-bold text-primary mb-4"
+                style={{ fontFamily: 'var(--font-space-grotesk)' }}
+              >
+                {isOwnProfile
+                  ? t('profile_friends_heading')
+                  : t('profile_friends_heading_other', { name: displayName })}
+              </h2>
+
+              {friendsLoading ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i} className="bg-surface border border-subtle rounded-xl p-3 flex flex-col items-center gap-2">
+                      <div className="skeleton w-12 h-12 rounded-full" />
+                      <div className="skeleton h-3 w-16 rounded" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <FriendsList
+                  friends={acceptedFriends}
+                  isOwnProfile={isOwnProfile}
+                  onFindFriends={() => setShowAddFriendModal(true)}
+                />
+              )}
+            </section>
+
             {/* ── Friend Requests — incoming (own profile only) ─────────────────── */}
             {isOwnProfile && pendingIncoming.length > 0 && (
               <FriendRequests
@@ -806,35 +850,6 @@ export default function ProfilePage() {
               displayName={displayName}
             />
 
-            {/* ── Friends Section ───────────────────────────────────────────────── */}
-            <section className="mb-8">
-              <h2
-                className="text-xl font-bold text-primary mb-4"
-                style={{ fontFamily: 'var(--font-space-grotesk)' }}
-              >
-                {isOwnProfile
-                  ? t('profile_friends_heading')
-                  : t('profile_friends_heading_other', { name: displayName })}
-              </h2>
-
-              {friendsLoading ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3">
-                  {Array.from({ length: 4 }).map((_, i) => (
-                    <div key={i} className="bg-surface border border-subtle rounded-xl p-3 flex flex-col items-center gap-2">
-                      <div className="skeleton w-12 h-12 rounded-full" />
-                      <div className="skeleton h-3 w-16 rounded" />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <FriendsList
-                  friends={acceptedFriends}
-                  isOwnProfile={isOwnProfile}
-                  onFindFriends={() => setShowAddFriendModal(true)}
-                />
-              )}
-            </section>
-
             {/* ── Collection / Sets Section ──────────────────────────────────────── */}
             <section>
               <div className="flex items-center justify-between mb-4">
@@ -869,13 +884,32 @@ export default function ProfilePage() {
               {!setsCollapsed && (
                 <>
                   {displaySets.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                      {displaySets.map(set => (
-                        <SetCard
-                          key={set.id}
-                          set={set}
-                          progress={setProgressMap[set.id]}
-                        />
+                    <div className="space-y-8">
+                      {setsByGame.map(({ slug, displayName: gameName, logoUrl, sets }) => (
+                        <div key={slug}>
+                          {/* Per-TCG header */}
+                          <div className="flex items-center gap-2 mb-3">
+                            <img
+                              src={logoUrl}
+                              alt={gameName}
+                              className="h-6 w-auto object-contain"
+                            />
+                            <h3 className="text-sm font-semibold text-secondary uppercase tracking-wide">
+                              {gameName}
+                            </h3>
+                            <span className="text-xs text-muted">({sets.length})</span>
+                          </div>
+                          {/* Sets grid */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                            {sets.map(set => (
+                              <SetCard
+                                key={set.id}
+                                set={set}
+                                progress={setProgressMap[set.id]}
+                              />
+                            ))}
+                          </div>
+                        </div>
                       ))}
                     </div>
                   ) : (

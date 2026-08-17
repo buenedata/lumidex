@@ -135,6 +135,10 @@ const nb: TranslationDict = {
   achieve_cat_sealed_products:  'Forseglede produkter',
   achieve_cat_social:           'Sosialt',
   achieve_cat_profile:          'Profil',
+  achieve_cat_pokemon:          'Pokémon-trener',
+  achieve_cat_moomin:           'Moomin-samler',
+  achieve_cat_graded:           'Graderte kort',
+  achieve_cat_general:          'Generell samling',
 
   // ── Settings Form ────────────────────────────────────────────────────────────
   settings_section_identity:       'Identitet',
