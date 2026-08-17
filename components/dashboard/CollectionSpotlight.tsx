@@ -7,14 +7,14 @@ import { useLocale } from '@/contexts/LocaleContext'
 interface CollectionSpotlightProps {
   sets: PokemonSet[]
   getProgress: (setId: string) => SetProgress
-  completedSets: number
+  avgCompletion: number
   totalCardsToComplete: number
 }
 
 export default function CollectionSpotlight({
   sets,
   getProgress,
-  completedSets,
+  avgCompletion,
   totalCardsToComplete,
 }: CollectionSpotlightProps) {
   const { t } = useLocale()
@@ -155,7 +155,7 @@ export default function CollectionSpotlight({
         {/* ── Right: Stats ──────────────────────────────────────────── */}
         <div className="grid grid-cols-2 lg:grid-cols-2 lg:w-80 xl:w-96 gap-3 content-start shrink-0">
 
-          {/* ── Sets Complete ─────────────────────────────────────────── */}
+          {/* ── Avg Completion ────────────────────────────────────────── */}
           <div className="rounded-xl bg-surface border border-subtle p-3 flex flex-col gap-1.5 min-w-0">
             <div className="flex items-center gap-1.5">
               <span className="text-sm leading-none" role="img" aria-hidden>🎯</span>
@@ -163,9 +163,9 @@ export default function CollectionSpotlight({
                 {t('spotlight_sets_complete')}
               </p>
             </div>
-            <p className="text-sm font-bold text-primary truncate leading-tight">{completedSets}</p>
+            <p className="text-sm font-bold text-accent truncate leading-tight">{avgCompletion}%</p>
             <p className="text-xs text-muted truncate leading-tight">
-              {completedSets === 1 ? t('spotlight_1_set_finished') : t('spotlight_n_sets_finished', { n: completedSets })}
+              {t('spotlight_avg_subtitle')}
             </p>
           </div>
 

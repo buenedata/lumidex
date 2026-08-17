@@ -59,6 +59,15 @@ export default function DashboardPage() {
     return total > 0 && owned >= total
   }).length
 
+  // Average completion % across all tracked sets (0 when no sets tracked)
+  const avgCompletion = userPokemonSets.length === 0 ? 0 : Math.round(
+    userPokemonSets.reduce((sum, set) => {
+      const owned = userCardCountBySet.get(set.id) ?? 0
+      const total = set.total ?? 0
+      return sum + (total > 0 ? (owned / total) * 100 : 0)
+    }, 0) / userPokemonSets.length
+  )
+
   // Total cards still needed to complete all tracked sets
   const totalCardsToComplete = userPokemonSets.reduce((sum, set) => {
     const owned = userCardCountBySet.get(set.id) ?? 0
@@ -136,7 +145,7 @@ export default function DashboardPage() {
           <CollectionSpotlight
             sets={userPokemonSets}
             getProgress={calculateSetProgress}
-            completedSets={completedSets}
+            avgCompletion={avgCompletion}
             totalCardsToComplete={totalCardsToComplete}
           />
         </div>

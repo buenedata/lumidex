@@ -14,18 +14,19 @@ interface DashboardHeroProps {
 }
 
 interface TrainerRank {
-  labelKey: 'rank_master' | 'rank_elite' | 'rank_veteran' | 'rank_rising' | 'rank_new'
+  labelKey: 'rank_master' | 'rank_virtuoso' | 'rank_elite' | 'rank_veteran' | 'rank_rising' | 'rank_new'
   emoji: string
   colour: string
   bgColour: string
 }
 
 function getTrainerRank(totalCards: number): TrainerRank {
-  if (totalCards >= 1000) return { labelKey: 'rank_master',  emoji: '🏆', colour: 'text-amber-400',  bgColour: 'bg-amber-400/10  border-amber-400/30'  }
-  if (totalCards >=  500) return { labelKey: 'rank_elite',   emoji: '💎', colour: 'text-purple-400', bgColour: 'bg-purple-400/10 border-purple-400/30' }
-  if (totalCards >=  100) return { labelKey: 'rank_veteran', emoji: '🔥', colour: 'text-orange-400', bgColour: 'bg-orange-400/10 border-orange-400/30' }
-  if (totalCards >=    1) return { labelKey: 'rank_rising',  emoji: '⚡', colour: 'text-accent',     bgColour: 'bg-accent/10     border-accent/30'     }
-  return                         { labelKey: 'rank_new',     emoji: '🌱', colour: 'text-price',      bgColour: 'bg-price/10      border-price/30'      }
+  if (totalCards >= 15000) return { labelKey: 'rank_master',   emoji: '🏆', colour: 'text-amber-400',  bgColour: 'bg-amber-400/10  border-amber-400/30'  }
+  if (totalCards >=  7000) return { labelKey: 'rank_virtuoso', emoji: '✨', colour: 'text-sky-400',    bgColour: 'bg-sky-400/10    border-sky-400/30'    }
+  if (totalCards >=  2500) return { labelKey: 'rank_elite',    emoji: '💎', colour: 'text-purple-400', bgColour: 'bg-purple-400/10 border-purple-400/30' }
+  if (totalCards >=   500) return { labelKey: 'rank_veteran',  emoji: '🔥', colour: 'text-orange-400', bgColour: 'bg-orange-400/10 border-orange-400/30' }
+  if (totalCards >=     1) return { labelKey: 'rank_rising',   emoji: '⚡', colour: 'text-accent',     bgColour: 'bg-accent/10     border-accent/30'     }
+  return                          { labelKey: 'rank_new',      emoji: '🌱', colour: 'text-price',      bgColour: 'bg-price/10      border-price/30'      }
 }
 
 export default function DashboardHero({ totalCards, setsTracked, completedSets }: DashboardHeroProps) {
@@ -36,7 +37,7 @@ export default function DashboardHero({ totalCards, setsTracked, completedSets }
   const displayName = profile?.display_name
     || (user as any)?.user_metadata?.username
     || (user as any)?.email?.split('@')[0]
-    || 'Trainer'
+    || 'Collector'
 
   // Greeting based on time-of-day
   const hour = new Date().getHours()
@@ -121,10 +122,12 @@ export default function DashboardHero({ totalCards, setsTracked, completedSets }
                   <span className="text-accent font-bold">{setsTracked}</span>
                   &nbsp;{setsTracked === 1 ? t('hero_set_singular') : t('hero_set_plural')}
                 </span>
-                <span className="pill inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-surface border border-subtle text-secondary">
-                  <span className="text-price font-bold">{completedSets}</span>
-                  &nbsp;{completedSets === 1 ? t('hero_set_complete_singular') : t('hero_set_complete_plural')}
-                </span>
+                {completedSets > 0 && (
+                  <span className="pill inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full bg-surface border border-subtle text-secondary">
+                    <span className="text-price font-bold">{completedSets}</span>
+                    &nbsp;{completedSets === 1 ? t('hero_set_complete_singular') : t('hero_set_complete_plural')}
+                  </span>
+                )}
               </>
             )}
           </div>
