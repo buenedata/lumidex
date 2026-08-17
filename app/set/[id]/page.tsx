@@ -140,6 +140,9 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
   const set   = rawSetData as unknown as PokemonSet
   const setTotal = set.total || cards.length
 
+  // Build the back-link URL so non-Pokémon games return to their filtered view.
+  const backHref = set.game && set.game !== 'pokemon' ? `/sets?game=${set.game}` : '/sets'
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{ backgroundColor: 'var(--color-bg-base)' }} className="min-h-screen">
@@ -163,7 +166,7 @@ export default async function SetPage({ params, searchParams }: SetPageProps) {
         {/* Back link */}
         <div className="absolute top-4 left-6 z-20">
           <Link
-            href="/sets"
+            href={backHref}
             className="inline-flex items-center gap-1.5 text-sm text-secondary hover:text-primary transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
