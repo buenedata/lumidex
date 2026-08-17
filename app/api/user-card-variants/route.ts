@@ -104,6 +104,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Auto-add the set to user_sets so game-specific achievements
+    // (e.g. 'Pokémon Trainer') fire correctly. Look up set_id from
+    // cards rather than requiring the caller to pass it.
+    supabaseAdmin
+      .from('cards')
+      .select('set_id')
+      .eq('id', cardId)
+      .single()
+      .then(({ data: cardRow }) => {
+        if (cardRow?.set_id) {
+          supabaseAdmin
+            .from('user_sets')
+            .upsert({ user_id: userId, set_id: cardRow.set_id }, { onConflict: 'user_id,set_id' })
+            .then(({ error: setErr }) => {
+              if (setErr) console.error('[user-card-variants POST] user_sets upsert error:', setErr)
+            })
+        }
+      })
+
     logActivity(userId, cardId, variantId, oldQty, quantity)
     checkAndUnlockAchievements(userId, supabaseAdmin).catch(err =>
       console.error('[user-card-variants POST] achievement sync failed:', err)
@@ -182,6 +201,25 @@ export async function PATCH(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // Auto-add the set to user_sets so game-specific achievements
+    // (e.g. 'Pokémon Trainer') fire correctly. Look up set_id from
+    // cards rather than requiring the caller to pass it.
+    supabaseAdmin
+      .from('cards')
+      .select('set_id')
+      .eq('id', cardId)
+      .single()
+      .then(({ data: cardRow }) => {
+        if (cardRow?.set_id) {
+          supabaseAdmin
+            .from('user_sets')
+            .upsert({ user_id: userId, set_id: cardRow.set_id }, { onConflict: 'user_id,set_id' })
+            .then(({ error: setErr }) => {
+              if (setErr) console.error('[user-card-variants PATCH] user_sets upsert error:', setErr)
+            })
+        }
+      })
 
     logActivity(userId, cardId, variantId, base, newQuantity)
     checkAndUnlockAchievements(userId, supabaseAdmin).catch(err =>
