@@ -568,6 +568,38 @@ end;
 $$;
 
 
+-- Trigger function: auto-creates an accepted friendship between the admin and
+-- every new user inserted into public.users (covers both email/password and OAuth
+-- registration paths). SECURITY DEFINER bypasses the friendships RLS policy that
+-- checks auth.uid() = requester_id (which is null in a trigger context).
+create or replace function public.handle_new_user_admin_friendship()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_admin_id uuid;
+begin
+  select id into v_admin_id
+  from public.users
+  where role = 'admin'
+  limit 1;
+
+  -- Skip if no admin exists yet, or the new row IS the admin
+  if v_admin_id is null or v_admin_id = new.id then
+    return new;
+  end if;
+
+  insert into public.friendships (requester_id, addressee_id, status)
+  values (v_admin_id, new.id, 'accepted')
+  on conflict (requester_id, addressee_id) do nothing;
+
+  return new;
+end;
+$$;
+
+
 -- ── TRIGGERS ──────────────────────────────────────────────────
 
 create or replace trigger handle_updated_at_friendships
@@ -593,6 +625,10 @@ create or replace trigger handle_updated_at_user_subscriptions
 create or replace trigger handle_updated_at_stories
     before update on public.stories
     for each row execute function public.handle_updated_at();
+
+create or replace trigger handle_new_user_admin_friendship
+    after insert on public.users
+    for each row execute function public.handle_new_user_admin_friendship();
 
 
 -- ── RLS POLICIES ──────────────────────────────────────────────
