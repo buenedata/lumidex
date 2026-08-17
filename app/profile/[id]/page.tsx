@@ -58,7 +58,10 @@ function userToSettings(u: ProfileUser): SettingsValues {
 
 // ── Achievement categories ────────────────────────────────────────────────────
 // Maps achievement names (as stored in DB) to i18n label keys.
-const ACHIEVEMENT_CATEGORIES: { labelKey: TranslationKey; names: string[] }[] = [
+// `gameSlug` — when set, this category is only shown if the profile owner tracks at least
+// one set for that game. Omit for game-agnostic categories. Add a new entry here for each
+// future TCG; no other code changes are required.
+const ACHIEVEMENT_CATEGORIES: { labelKey: TranslationKey; names: string[]; gameSlug?: string }[] = [
   { labelKey: 'achieve_cat_collection_size', names: ['First Steps', 'Century Club', 'Enthusiast', 'Diamond Collector', 'Elite Collector', 'Master Vault', 'Legendary Hoard', 'Card Emperor'] },
   { labelKey: 'achieve_cat_unique_cards',    names: ['Card Hunter', 'Dedicated Collector', 'Thousand Faces', 'Card Archivist'] },
   { labelKey: 'achieve_cat_sets_tracked',    names: ['Collector', 'Set Explorer', 'Set Hoarder', 'Set Chronicler', 'Set Archivist'] },
@@ -68,8 +71,8 @@ const ACHIEVEMENT_CATEGORIES: { labelKey: TranslationKey; names: string[] }[] = 
   { labelKey: 'achieve_cat_sealed_products', names: ['Sealed Ambitions', 'Box Hoarder', 'Sealed Vault'] },
   { labelKey: 'achieve_cat_social',          names: ['Friend Finder', 'Social Butterfly', 'Network Builder', 'Community Pillar'] },
   { labelKey: 'achieve_cat_profile',         names: ['Picture Perfect', 'Identity'] },
-  { labelKey: 'achieve_cat_pokemon',         names: ['Pokémon Trainer', 'Gym Leader', 'Elite Four', 'Champion', 'Pokémon Master'] },
-  { labelKey: 'achieve_cat_moomin',          names: ['Moomin Explorer', 'Valley Dweller', 'Moomin Collector'] },
+  { labelKey: 'achieve_cat_pokemon', gameSlug: 'pokemon', names: ['Pokémon Trainer', 'Gym Leader', 'Elite Four', 'Champion', 'Pokémon Master'] },
+  { labelKey: 'achieve_cat_moomin',  gameSlug: 'moomin',  names: ['Moomin Explorer', 'Valley Dweller', 'Moomin Collector'] },
   { labelKey: 'achieve_cat_graded',          names: ["Grader's Apprentice", 'Graded Investor', 'Slab Master'] },
   { labelKey: 'achieve_cat_general',         names: ['World Collector', 'List Maker', 'Curator'] },
 ]
@@ -464,6 +467,24 @@ export default function ProfilePage() {
     }))
     .filter(g => g.sets.length > 0)
 
+  // ── Render helpers ────────────────────────────────────────────────────────────
+  // Derive which game slugs the profile owner is actively tracking (from already-
+  // fetched profileSets, which includes the `game` column). Used to hide TCG-
+  // specific achievement categories for users who don't collect that game.
+  const trackedGames = new Set(
+    profileSets
+      .map(s => (s as { game?: string }).game)
+      .filter((g): g is string => !!g),
+  )
+
+  // Visible achievement names = only categories that pass the game filter.
+  const visibleAchievementNames = new Set(
+    ACHIEVEMENT_CATEGORIES
+      .filter(c => !c.gameSlug || trackedGames.has(c.gameSlug))
+      .flatMap(c => c.names),
+  )
+  const visibleTotal = allAchievements.filter(a => visibleAchievementNames.has(a.name)).length
+
   // ── Render ────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-base">
@@ -757,7 +778,7 @@ export default function ProfilePage() {
                       ? 'bg-accent-dim text-accent border-[rgba(109,95,255,0.3)]'
                       : 'bg-surface text-muted border-subtle'
                   )}>
-                    {userAchievements.length} / {allAchievements.length || '?'}
+                    {userAchievements.length} / {visibleTotal || '?'}
                   </span>
                 </div>
                 <svg
@@ -776,6 +797,8 @@ export default function ProfilePage() {
               {!achievementsCollapsed && allAchievements.length > 0 ? (
                 <div className="space-y-5">
                   {ACHIEVEMENT_CATEGORIES.map(category => {
+                    // Hide TCG-specific categories if the user doesn't track that game
+                    if (category.gameSlug && !trackedGames.has(category.gameSlug)) return null
                     const categoryAll = allAchievements.filter(a => category.names.includes(a.name))
                     if (categoryAll.length === 0) return null
                     const earnedIds   = new Set(userAchievements.map(a => a.id))
