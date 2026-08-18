@@ -317,12 +317,13 @@ export function MtgSetImport() {
 
                     {/* Action */}
                     <td className="p-4 text-right">
-                      {isImported ? (
-                        <span className="inline-flex items-center gap-1 text-green-400 text-xs font-medium">
-                          <span>✓</span>
-                          <span>Imported</span>
-                        </span>
-                      ) : (
+                      <div className="inline-flex items-center gap-2 justify-end flex-wrap">
+                        {isImported && !isThis && (
+                          <span className="inline-flex items-center gap-1 text-green-400 text-xs font-medium shrink-0">
+                            <span>✓</span>
+                            <span>Imported</span>
+                          </span>
+                        )}
                         <button
                           onClick={() => handleImport(s.code)}
                           disabled={!!importingCode}
@@ -331,12 +332,14 @@ export function MtgSetImport() {
                               ? 'bg-yellow-500/20 text-yellow-300 cursor-not-allowed'
                               : importingCode
                               ? 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                              : isImported
+                              ? 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white'
                               : 'bg-yellow-500 text-black hover:bg-yellow-400'
                           }`}
                         >
-                          {isThis ? 'Importing…' : 'Import'}
+                          {isThis ? 'Importing…' : isImported ? 'Re-import' : 'Import'}
                         </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 )
