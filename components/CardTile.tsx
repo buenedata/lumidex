@@ -161,7 +161,7 @@ function CardTileInner({
             key={variant.id}
             onClick={(e) => {
               e.stopPropagation()
-              if (variant.color === 'gray' || variant.card_id != null) {
+              if (variant.color === 'gray') {
                 onVariantGrayClick(card)
               } else {
                 onVariantClick(e, card.id, variant.id)
@@ -170,7 +170,7 @@ function CardTileInner({
             onContextMenu={(e) => {
               e.preventDefault()
               e.stopPropagation()
-              if (variant.color === 'gray' || variant.card_id != null) {
+              if (variant.color === 'gray') {
                 onVariantGrayClick(card)
               } else {
                 onVariantContextMenu(e, card.id, variant.id)
