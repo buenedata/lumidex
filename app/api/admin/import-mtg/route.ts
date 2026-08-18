@@ -111,15 +111,38 @@ export async function POST(request: NextRequest) {
           emit({ type: 'progress', current: fetched, total })
         })
 
-        emit({ type: 'status', message: `Fetched ${cards.length} cards. Importing into database…` })
+        emit({ type: 'status', message: `Fetched ${cards.length} cards. Checking for existing records…` })
 
-        // ── 4. Upsert cards ─────────────────────────────────────────────────
+        // ── 4. Fetch existing card numbers for this set ─────────────────────
+        // cards table has no UNIQUE(set_id, number) constraint, so we use the
+        // same pattern as /api/admin/import-cards: lookup first, insert only new.
+        const { data: existingCards, error: existingError } = await supabaseAdmin
+          .from('cards')
+          .select('number')
+          .eq('set_id', lumidexSetId)
+
+        if (existingError) {
+          emit({ type: 'error', message: `Failed to check existing cards: ${existingError.message}` })
+          controller.close()
+          return
+        }
+
+        const existingNumbers = new Set((existingCards ?? []).map((c) => c.number))
+        const toInsert = cards.filter((c) => !existingNumbers.has(c.collector_number))
+        const cardsSkipped = cards.length - toInsert.length
+
+        if (cardsSkipped > 0) {
+          emit({ type: 'status', message: `${cardsSkipped} cards already in DB — inserting ${toInsert.length} new cards…` })
+        } else {
+          emit({ type: 'status', message: `Inserting ${toInsert.length} cards…` })
+        }
+
+        // ── 5. Insert new cards in batches ──────────────────────────────────
         let cardsCreated = 0
-        let cardsSkipped = 0
         const BATCH_SIZE = 50
 
-        for (let i = 0; i < cards.length; i += BATCH_SIZE) {
-          const batch = cards.slice(i, i + BATCH_SIZE)
+        for (let i = 0; i < toInsert.length; i += BATCH_SIZE) {
+          const batch = toInsert.slice(i, i + BATCH_SIZE)
 
           const rows = batch.map((card) => ({
             set_id: lumidexSetId,
@@ -133,23 +156,24 @@ export async function POST(request: NextRequest) {
             // hp, subtypes, supertype intentionally omitted (not in MTG)
           }))
 
-          // Upsert by (set_id, number) — idempotent re-runs update existing cards
-          const { data: upserted, error: cardError } = await supabaseAdmin
+          const { data: inserted, error: cardError } = await supabaseAdmin
             .from('cards')
-            .upsert(rows, { onConflict: 'set_id,number', ignoreDuplicates: false })
+            .insert(rows)
             .select('id')
 
           if (cardError) {
-            console.error(`[import-mtg] card upsert error (batch ${i}):`, cardError)
-            cardsSkipped += batch.length
+            // Emit the actual error so it's visible in the import log
+            emit({ type: 'error', message: `Card insert error (batch starting at ${i}): ${cardError.message}` })
+            console.error(`[import-mtg] card insert error (batch ${i}):`, cardError)
+            // Continue — don't abort the whole import for one bad batch
           } else {
-            cardsCreated += upserted?.length ?? batch.length
+            cardsCreated += inserted?.length ?? batch.length
           }
 
           emit({
             type: 'progress',
-            current: Math.min(i + BATCH_SIZE, cards.length),
-            total: cards.length,
+            current: Math.min(i + BATCH_SIZE, toInsert.length),
+            total: toInsert.length,
           })
         }
 

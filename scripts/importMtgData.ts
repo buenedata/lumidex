@@ -169,15 +169,31 @@ async function main() {
 
     totalSetsCreated++
 
-    // Upsert cards in batches of 100
-    const BATCH = 100
-    let setCardsCreated = 0
-    let setCardsSkipped = 0
+    // Check which card numbers already exist for this set.
+    // cards has no UNIQUE(set_id, number) constraint, so we deduplicate
+    // manually to avoid duplicate rows on re-runs.
+    const { data: existingCards, error: existingErr } = await supabase
+      .from('cards')
+      .select('number')
+      .eq('set_id', lumidexSetId)
 
-    // Sort by collector_number for consistent ordering
-    const sorted = [...cards].sort((a, b) =>
-      a.collector_number.localeCompare(b.collector_number, undefined, { numeric: true }),
-    )
+    if (existingErr) {
+      console.error(`\n  ✗ Failed to check existing cards: ${existingErr.message}`)
+      continue
+    }
+
+    const existingNumbers = new Set((existingCards ?? []).map((c: { number: string }) => c.number))
+
+    // Sort by collector_number and exclude already-imported cards
+    const sorted = [...cards]
+      .sort((a, b) =>
+        a.collector_number.localeCompare(b.collector_number, undefined, { numeric: true }),
+      )
+      .filter((c) => !existingNumbers.has(c.collector_number))
+
+    const setCardsSkipped = cards.length - sorted.length
+    let setCardsCreated = 0
+    const BATCH = 100
 
     for (let i = 0; i < sorted.length; i += BATCH) {
       const batch = sorted.slice(i, i + BATCH)
@@ -192,20 +208,19 @@ async function main() {
         api_id: card.id,
       }))
 
-      const { data: upserted, error: cardError } = await supabase
+      const { data: inserted, error: cardError } = await supabase
         .from('cards')
-        .upsert(rows, { onConflict: 'set_id,number', ignoreDuplicates: false })
+        .insert(rows)
         .select('id')
 
       if (cardError) {
-        console.error(`\n  ✗ Card batch upsert error: ${cardError.message}`)
-        setCardsSkipped += batch.length
+        console.error(`\n  ✗ Card insert error (batch at ${i}): ${cardError.message}`)
       } else {
-        setCardsCreated += upserted?.length ?? batch.length
+        setCardsCreated += inserted?.length ?? batch.length
       }
     }
 
-    console.log(`✓ (${setCardsCreated} cards, ${setCardsSkipped} skipped)`)
+    console.log(`✓ (${setCardsCreated} new${setCardsSkipped > 0 ? `, ${setCardsSkipped} already existed` : ''})`)
     totalCardsCreated += setCardsCreated
     totalCardsSkipped += setCardsSkipped
   }
