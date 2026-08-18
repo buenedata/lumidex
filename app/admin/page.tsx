@@ -79,6 +79,14 @@ const ADMIN_TOOLS: AdminTool[] = [
       'Import set and card data via JSON for any non-Pokémon game (Moomin, etc.). Idempotent — safe to re-run without creating duplicates.',
     badge: 'Import',
   },
+  {
+    href: '/admin/mtg-import',
+    icon: '🧙',
+    title: 'MTG Set Import',
+    description:
+      'Import Magic: The Gathering sets and cards directly from the Scryfall API. Shows the 20 most recent expansion, core, and Masters sets. One-click per set with real-time progress.',
+    badge: 'Import',
+  },
 ]
 
 export default function AdminHubPage() {

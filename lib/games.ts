@@ -1,4 +1,4 @@
-export type GameSlug = 'pokemon' | 'moomin';
+export type GameSlug = 'pokemon' | 'moomin' | 'mtg';
 
 export interface GameConfig {
   slug: GameSlug;
@@ -31,6 +31,14 @@ export const GAMES: Record<GameSlug, GameConfig> = {
     defaultLanguage: 'en',
     logoUrl: '/images/games/moomin-logo.jpg',
     description: 'Track your Moomin TCG collection.',
+  },
+  mtg: {
+    slug: 'mtg',
+    displayName: 'Magic: The Gathering',
+    cardBackImage: '/mtg_card_backside.jpg',
+    defaultLanguage: 'en',
+    logoUrl: '/mtg_card_backside.jpg',
+    description: 'Collect cards from every Magic: The Gathering set — from Alpha to the latest expansion.',
   },
 };
 

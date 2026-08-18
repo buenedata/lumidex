@@ -9,6 +9,7 @@
     "start": "cross-env NODE_OPTIONS=--max-old-space-size=6144 next start",
     "lint": "next lint",
     "import:pokemon": "tsx scripts/importPokemonData.ts",
+    "import:mtg": "tsx scripts/importMtgData.ts",
     "import:card-types": "tsx scripts/importCardTypes.ts",
     "import:rarity": "tsx scripts/importRarityOnly.ts",
     "test:manual": "tsx scripts/testManualData.ts"

@@ -150,12 +150,23 @@ function getMoominVariantIds(allVariants: Variant[]): string[] {
 }
 
 /**
+ * Returns the variant IDs that apply to an MTG card.
+ * All MTG cards get 'normal' (nonfoil) + 'foil' globally.
+ * The 'etched' variant is applied per-card via card_variant_availability
+ * by the admin after import (only a subset of sets/cards have etched foils).
+ */
+function getMtgVariantIds(allVariants: Variant[]): string[] {
+  return allVariants
+    .filter(v => v.key === 'normal' || v.key === 'foil')
+    .map(v => v.id)
+}
+
+/**
  * Game-aware variant resolution strategy.
  *
  * Pokémon uses the existing rarity-based rules (EX/V, secret rare, holo detection)
- * unchanged.  Moomin and unknown games return only the universally-applicable
- * variants (those whose `key` is `'normal'` or an explicitly confirmed game-specific
- * parallel).
+ * unchanged.  MTG cards get normal + foil globally.  Moomin and unknown games
+ * return only the universally-applicable 'normal' variant.
  *
  * This is the canonical entry-point for all new code.  Existing callers that
  * already pass `'pokemon'` will get identical results to `getAvailableVariantIds()`.
@@ -169,6 +180,8 @@ export function getAvailableVariantIdsForGame(
   switch (game) {
     case 'pokemon':
       return getAvailableVariantIds(card, setTotal, allVariants)
+    case 'mtg':
+      return getMtgVariantIds(allVariants)
     case 'moomin':
       return getMoominVariantIds(allVariants)
     default:
