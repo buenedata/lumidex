@@ -28,6 +28,7 @@ export async function compressImageToWebP(input: ArrayBuffer | Buffer): Promise<
   const buf = Buffer.isBuffer(input) ? input : Buffer.from(input)
 
   return sharp(buf)
+    .rotate()
     .resize({
       width: MAX_WIDTH,
       // Never upscale images that are already smaller than MAX_WIDTH
