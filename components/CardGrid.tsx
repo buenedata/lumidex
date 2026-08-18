@@ -382,6 +382,8 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
   const [variantEditError, setVariantEditError]    = useState<string | null>(null)
   const [confirmDeleteId,  setConfirmDeleteId]     = useState<string | null>(null)
   const [isSavingEdit,     setIsSavingEdit]        = useState(false)
+  // Admin: tracks which card-specific variant dot-toggle is currently being saved
+  const [savingDotToggleId, setSavingDotToggleId]  = useState<string | null>(null)
   const editPopupRef = useRef<HTMLDivElement>(null)
   // Admin: per-card quick-add (default_variant_id) for the currently open card.
   // Initialised from selectedCard.default_variant_id when a card modal opens.
@@ -565,6 +567,33 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
     finally { setIsSavingDefaultVariant(false) }
   }
 
+  // Admin: toggle whether a card-specific variant shows as a coloured dot under the
+  // card image on the set/browse page.
+  // Calls PATCH /api/variants to flip variants.show_as_dot, then reloads the dots for
+  // this card so the change is immediately reflected on the card grid without a page refresh.
+  async function handleToggleShowAsDot(variantId: string, currentValue: boolean) {
+    if (!selectedCard || savingDotToggleId) return
+    setSavingDotToggleId(variantId)
+    try {
+      const res = await fetch('/api/variants', {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ id: variantId, show_as_dot: !currentValue }),
+      })
+      if (!res.ok) return
+      // Optimistically update the modal variant list so the toggle reflects instantly
+      setCardVariants(prev => {
+        const m  = new Map(prev)
+        const vs = m.get(selectedCard.id)
+        if (vs) m.set(selectedCard.id, vs.map(v => v.id === variantId ? { ...v, show_as_dot: !currentValue } : v))
+        return m
+      })
+      // Reload dots so the card tile on the grid updates immediately
+      await reloadCardDots(selectedCard.id)
+    } catch { /* non-critical */ }
+    finally { setSavingDotToggleId(null) }
+  }
+
   // Admin: helper — reload dots + full variant list for a card after availability change.
   async function reloadCardDots(cardId: string) {
     try {
@@ -588,6 +617,14 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
         }))
       setCardVariantDots(prev => new Map(prev).set(cardId, dots))
       setCardVariants(prev => new Map(prev).set(cardId, newDots as VariantWithQuantity[]))
+      // Refresh the +N badge count so it reflects any dot-visibility changes
+      const customCount = dots.filter(v => v.card_id != null && !v.is_configured_as_dot).length
+      setCardCustomVariantCounts(prev => {
+        const m = new Map(prev)
+        if (customCount > 0) m.set(cardId, customCount)
+        else m.delete(cardId)
+        return m
+      })
     } catch { /* non-critical */ }
   }
 
@@ -1744,6 +1781,30 @@ export default function CardGrid({ cards, userCards: propsUserCards, filter = 'a
                                 ${isSavingDefaultVariant ? 'cursor-wait' : 'cursor-pointer'}`}
                             >
                               ⚡
+                            </button>
+                          )}
+                          {/* Admin: ⬤ dot toggle — card-specific variants only.
+                              When on the variant shows as a coloured quantity dot under the card
+                              image; when off it is counted in the +N variants badge instead. */}
+                          {isAdmin && variant.card_id != null && (
+                            <button
+                              onClick={e => {
+                                e.stopPropagation()
+                                handleToggleShowAsDot(variant.id, variant.show_as_dot ?? false)
+                              }}
+                              disabled={savingDotToggleId === variant.id}
+                              title={
+                                (variant.show_as_dot ?? false)
+                                  ? 'Showing as dot on card grid — click to hide'
+                                  : 'Hidden from card grid (counted in +N badge) — click to show as dot'
+                              }
+                              className={`shrink-0 w-5 h-5 flex items-center justify-center rounded transition-all text-sm leading-none
+                                ${(variant.show_as_dot ?? false)
+                                  ? 'text-sky-400 opacity-100'
+                                  : 'text-muted opacity-30 hover:opacity-80 hover:text-sky-400'}
+                                ${savingDotToggleId === variant.id ? 'cursor-wait' : 'cursor-pointer'}`}
+                            >
+                              ⬤
                             </button>
                           )}
                           {/* Variant colour dot */}

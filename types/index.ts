@@ -199,6 +199,10 @@ export interface Variant {
   card_id?: string | null;
   /** Per-card variant image URL (from card_variant_images table). Populated by /api/variants. */
   variant_image_url?: string | null;
+  /** When true, this variant is rendered as a coloured quantity dot under the card image on
+   *  set/browse pages.  Global variants (card_id IS NULL) default to true; card-specific
+   *  variants default to false until an admin enables them from the card details modal. */
+  show_as_dot?: boolean;
 }
 
 export interface UserCardVariant {

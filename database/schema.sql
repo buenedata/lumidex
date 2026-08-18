@@ -1,973 +1,1211 @@
--- ============================================================
--- Lumidex – Current Database Schema
--- Last updated: 2026-04-17
--- Generated from: live Supabase database introspection
--- WARNING: This schema is for context only and is not meant to be run.
---          Table order and constraints may not be valid for execution.
--- ============================================================
---
--- Tables (in dependency order):
---   sets, cards*, variants*, users, achievements,
---   set_products,
---   card_variant_availability, card_variant_images,
---   friendships, wanted_cards,
---   user_achievements, user_card_variants, user_cards,
---   user_card_activity_log, user_sets, user_sealed_products,
---   user_graded_cards, user_card_lists, user_card_list_items,
---   trade_proposals, trade_proposal_items, variant_suggestions,
---   stories, user_subscriptions
---
--- * cards ↔ variants have a circular FK:
---     cards.default_variant_id → variants.id  (added via ALTER TABLE below)
---     variants.card_id         → cards.id
--- ============================================================
+-- =============================================================================
+-- Lumidex Database Schema
+-- Generated from live Supabase project: ysvskytxewtlxpxeiskf
+-- Last updated: 2026-08-18
+-- =============================================================================
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- FUNCTIONS
+-- ─────────────────────────────────────────────────────────────────────────────
 
--- ── TABLES ───────────────────────────────────────────────────
-
--- Sets
--- NOTE: primary key is set_id (text), not a UUID.
---       setTotal    = cards excluding secret rares.
---       setComplete = cards including secret rares.
-create table if not exists public.sets (
-    set_id       text        primary key,
-    name         text        not null,
-    series       text,
-    "setTotal"   integer,
-    release_date date,
-    created_at   timestamp   default now(),
-    "setComplete" integer,
-    logo_url     text,
-    symbol_url   text,
-    language     text        not null default 'en',
-    api_set_id   text        -- tcggo.com / cardmarket-api-tcg RapidAPI episode ID
-);
-
--- Cards
--- NOTE: id is a UUID (gen_random_uuid()).
---       set_id is a text FK referencing sets.set_id.
---       subtypes is a text[] array (e.g. {"Stage 1","Pokémon"}).
---       source_card_id: nullable self-FK. Used for reprint/Prize-Pack sets so they
---         inherit the source card's image without re-uploading.
---       default_variant_id: nullable FK to variants.id (added via ALTER TABLE below
---         to break the circular dependency).
---       api_id: unique external API identifier (nullable; unique WHERE NOT NULL).
-create table if not exists public.cards (
-    id                 uuid        not null default gen_random_uuid() primary key,
-    set_id             text        not null references public.sets(set_id),
-    name               text        not null,
-    number             text,
-    rarity             text,
-    type               text,           -- element type, e.g. "Grass", "Fire"
-    created_at         timestamp   default now(),
-    artist             text,
-    image              text,           -- card's own uploaded image URL
-    hp                 text,
-    supertype          text,           -- e.g. "Pokémon", "Trainer", "Energy"
-    subtypes           text[],         -- e.g. '{"Stage 1","Pokémon"}'
-    default_variant_id uuid,           -- FK → variants.id ON DELETE SET NULL (added below)
-    api_id             text,           -- unique external API card ID
-    source_card_id     uuid        references public.cards(id),
-    tcggo_id           integer         -- tcggo.com / cardmarket-api-tcg RapidAPI internal card ID
-);
-
--- Variants (global catalog of card variant types)
--- NOTE: card_id is nullable. NULL = global variant (applies to all cards).
---       Non-null card_id = card-specific variant.
---       key must be globally unique across all variants.
-create table if not exists public.variants (
-    id           uuid        not null default gen_random_uuid() primary key,
-    variant_type text,                 -- legacy column
-    created_at   timestamp   default now(),
-    name         text        not null,
-    key          text        not null unique,
-    description  text,
-    color        text        not null default 'gray'
-                   check (color in ('green','blue','purple','red','pink','yellow','gray','orange','teal')),
-    short_label  text,
-    is_quick_add boolean     not null default false,
-    sort_order   integer     not null default 0,
-    is_official  boolean     not null default true,
-    created_by   uuid,                 -- FK → users.id (nullable)
-    card_id      uuid        references public.cards(id)
-);
-
--- Resolve the circular FK: cards.default_variant_id → variants.id
-do $$
-begin
-    if not exists (
-        select 1 from information_schema.table_constraints
-        where constraint_name = 'cards_default_variant_id_fkey'
-          and table_schema = 'public'
-    ) then
-        alter table public.cards
-            add constraint cards_default_variant_id_fkey
-            foreign key (default_variant_id)
-            references public.variants(id)
-            on delete set null;
-    end if;
-end;
-$$;
-
--- Users (extends auth.users)
--- NOTE: id references auth.users.id (auth schema FK, ON DELETE CASCADE).
-create table if not exists public.users (
-    id                      uuid        primary key references auth.users(id),
-    username                text        unique,
-    email                   text,
-    avatar_url              text,
-    created_at              timestamp   default now(),
-    role                    text        not null default 'user'
-                                check (role in ('user','admin')),
-    display_name            text,
-    banner_url              text,
-    bio                     text,
-    location                text,
-    setup_completed         boolean     not null default false,
-    preferred_language      text        not null default 'en',
-    preferred_currency      text        not null default 'USD',
-    grey_out_unowned        boolean     not null default true,
-    profile_private         boolean     not null default false,
-    lists_public_by_default boolean     not null default false,
-    social_cardmarket       text,
-    social_instagram        text,
-    social_facebook         text
-);
-
--- Achievements
-create table if not exists public.achievements (
-    id          uuid        not null default gen_random_uuid() primary key,
-    name        text        not null,
-    description text        not null,
-    icon        text        not null,
-    created_at  timestamptz not null default timezone('utc'::text, now())
-);
-
--- Set products (sealed product catalog per set)
--- NOTE: set_id is a text reference to sets.set_id (no FK enforced at DB level).
---       api_product_id is the external API product identifier (unique).
-create table if not exists public.set_products (
-    id             uuid        not null default gen_random_uuid() primary key,
-    set_id         text        not null,    -- text ref → sets.set_id (no FK)
-    api_product_id text        unique,
-    name           text        not null,
-    product_type   text,
-    updated_at     timestamptz not null default now(),
-    image_url      text
-);
-
--- Card variant availability (which variants are available for a given card)
-create table if not exists public.card_variant_availability (
-    id         uuid        not null default gen_random_uuid() primary key,
-    card_id    uuid        not null references public.cards(id),
-    variant_id uuid        not null references public.variants(id),
-    created_by uuid        references auth.users(id),
-    created_at timestamptz default now()
-);
-
--- Card variant images (custom images per card+variant combo)
-create table if not exists public.card_variant_images (
-    id         uuid        not null default gen_random_uuid() primary key,
-    card_id    uuid        not null references public.cards(id),
-    variant_id uuid        not null references public.variants(id),
-    image_url  text        not null,
-    created_by uuid        references auth.users(id),
-    created_at timestamptz not null default now()
-);
-
--- Friendships
--- NOTE: unique on (requester_id, addressee_id) — ordered pair.
---       status: 'pending' | 'accepted' | 'declined' | 'blocked'
-create table if not exists public.friendships (
-    id           uuid        not null default gen_random_uuid() primary key,
-    requester_id uuid        not null references public.users(id),
-    addressee_id uuid        not null references public.users(id),
-    status       text        not null default 'pending'
-                     check (status in ('pending','accepted','declined','blocked')),
-    created_at   timestamptz not null default now(),
-    updated_at   timestamptz not null default now()
-);
-
--- Wanted cards (user wishlist)
-create table if not exists public.wanted_cards (
-    id         uuid        not null default gen_random_uuid() primary key,
-    user_id    uuid        not null references public.users(id),
-    card_id    uuid        not null references public.cards(id),
-    created_at timestamptz not null default now()
-);
-
--- User achievements
-create table if not exists public.user_achievements (
-    id             uuid        not null default gen_random_uuid() primary key,
-    user_id        uuid        not null references public.users(id),
-    achievement_id uuid        not null references public.achievements(id),
-    unlocked_at    timestamptz not null default timezone('utc'::text, now())
-);
-
--- User-owned card variants (primary collection tracking table)
--- NOTE: card_id and variant_id are uuid FKs.
---       variant_type is a legacy text column kept alongside variant_id.
---       quantity_delta holds the last change increment (for activity logging).
-create table if not exists public.user_card_variants (
-    id             uuid        not null default gen_random_uuid() primary key,
-    user_id        uuid        references public.users(id),
-    card_id        uuid        references public.cards(id),
-    variant_type   text,                -- legacy column
-    created_at     timestamp   default now(),
-    variant_id     uuid        references public.variants(id),
-    quantity       integer     default 0,
-    updated_at     timestamp   default now(),
-    quantity_delta integer             -- last increment/decrement applied
-);
-
--- User cards (legacy — quantity mirrors sum in user_card_variants for backwards compat.)
-create table if not exists public.user_cards (
-    id         uuid        not null default gen_random_uuid() primary key,
-    user_id    uuid        references public.users(id),
-    card_id    uuid        references public.cards(id),
-    created_at timestamp   default now(),
-    quantity   integer     not null default 0
-);
-
--- User card activity log (audit log of quantity changes)
--- NOTE: no FK constraints enforced at DB level — logged by application.
-create table if not exists public.user_card_activity_log (
-    id           uuid        not null default gen_random_uuid() primary key,
-    user_id      uuid        not null,
-    card_id      uuid        not null,
-    variant_id   uuid        not null,
-    variant_type text,
-    old_quantity integer     not null default 0,
-    new_quantity integer     not null,
-    changed_at   timestamptz not null default now()
-);
-
--- User sets (which sets a user is tracking + their collection goal)
--- NOTE: collection_goal: 'normal' | 'masterset' | 'grandmasterset'
-create table if not exists public.user_sets (
-    id              uuid        not null default gen_random_uuid() primary key,
-    user_id         uuid        references public.users(id),
-    set_id          text        references public.sets(set_id),
-    created_at      timestamp   default now(),
-    collection_goal text        not null default 'normal'
-                        check (collection_goal in ('normal','masterset','grandmasterset'))
-);
-
--- User sealed products (tracks which sealed products a user owns)
--- NOTE: product_id is text — references set_products conceptually,
---       but no DB-level FK enforced.
-create table if not exists public.user_sealed_products (
-    id         uuid        not null default gen_random_uuid() primary key,
-    user_id    uuid        not null,
-    product_id text        not null,
-    quantity   integer     not null default 1 check (quantity >= 0),
-    created_at timestamp   default now(),
-    updated_at timestamp   default now()
-);
-
--- User graded cards (PSA/CGC/etc. graded cards owned by user)
-create table if not exists public.user_graded_cards (
-    id              uuid        not null default gen_random_uuid() primary key,
-    user_id         uuid        not null references public.users(id),
-    card_id         uuid        not null references public.cards(id),
-    variant_id      uuid        references public.variants(id),
-    grading_company text        not null
-                        check (grading_company in ('PSA','BECKETT','CGC','TAG','ACE')),
-    grade           text        not null,
-    quantity        integer     not null default 1 check (quantity >= 1),
-    created_at      timestamptz not null default now(),
-    updated_at      timestamptz not null default now()
-);
-
--- User card lists (custom named card lists, e.g. "Yuka Collection")
-create table if not exists public.user_card_lists (
-    id          uuid        primary key default gen_random_uuid(),
-    user_id     uuid        not null references public.users(id),
-    name        text        not null,
-    description text,
-    is_public   boolean     not null default false,
-    created_at  timestamptz not null default now(),
-    updated_at  timestamptz not null default now()
-);
-
--- User card list items (cards inside a custom list)
-create table if not exists public.user_card_list_items (
-    id       uuid        primary key default gen_random_uuid(),
-    list_id  uuid        not null references public.user_card_lists(id),
-    card_id  uuid        not null references public.cards(id),
-    added_at timestamptz not null default now()
-);
-
--- Trade proposals
--- NOTE: status: 'pending' | 'accepted' | 'declined' | 'withdrawn'
---       currency_code: ISO 4217 (limited to the supported list below).
-create table if not exists public.trade_proposals (
-    id             uuid        not null default gen_random_uuid() primary key,
-    proposer_id    uuid        not null references public.users(id),
-    receiver_id    uuid        not null references public.users(id),
-    status         text        not null default 'pending'
-                       check (status in ('pending','accepted','declined','withdrawn')),
-    notes          text,
-    created_at     timestamptz not null default now(),
-    updated_at     timestamptz not null default now(),
-    cash_offered   numeric     not null default 0 check (cash_offered >= 0),
-    cash_requested numeric     not null default 0 check (cash_requested >= 0),
-    currency_code  text        not null default 'EUR'
-                       check (currency_code in ('EUR','USD','GBP','NOK','SEK','DKK','CAD','AUD','JPY','CHF'))
-);
-
--- Trade proposal items (individual cards in a trade)
--- NOTE: direction: 'offering' (proposer sends) | 'requesting' (proposer wants)
-create table if not exists public.trade_proposal_items (
-    id          uuid        not null default gen_random_uuid() primary key,
-    proposal_id uuid        not null references public.trade_proposals(id),
-    card_id     uuid        not null references public.cards(id),
-    direction   text        not null check (direction in ('offering','requesting')),
-    quantity    integer     not null default 1 check (quantity >= 1)
-);
-
--- Variant suggestions (submitted by users, reviewed by admins)
-create table if not exists public.variant_suggestions (
-    id          uuid        not null default gen_random_uuid() primary key,
-    name        text,
-    key         text,
-    status      text        default 'pending',
-    created_by  uuid        references public.users(id),
-    created_at  timestamp   default now(),
-    card_id     text,       -- text reference (not a UUID FK)
-    description text
-);
-
--- Stories (CMS news/articles table)
--- NOTE: content is a JSONB array of typed blocks (paragraphs, headings, lists, etc.)
---       is_published defaults to true — no draft mode needed.
-create table if not exists public.stories (
-    id              uuid        not null default gen_random_uuid() primary key,
-    slug            text        not null unique,
-    category        text        not null,
-    category_icon   text        not null,
-    title           text        not null,
-    description     text        not null,
-    gradient        text        not null,
-    accent_colour   text        not null default 'text-indigo-300',
-    cover_image_url text,
-    content         jsonb       not null default '[]',
-    is_published    boolean     not null default true,
-    published_at    timestamptz not null default now(),
-    created_at      timestamptz not null default now(),
-    updated_at      timestamptz not null default now()
-);
-
--- User subscriptions (membership tier: free / pro)
--- NOTE: A missing row is treated as free tier by the application.
---       Stripe billing metadata stored for Pro subscribers.
-create table if not exists public.user_subscriptions (
-    id                     uuid        not null default gen_random_uuid() primary key,
-    user_id                uuid        not null unique references public.users(id),
-    tier                   text        not null default 'free'
-                               check (tier in ('free','pro')),
-    billing_period         text        check (billing_period in ('monthly','annual')),
-    current_period_start   timestamptz,
-    current_period_end     timestamptz,
-    stripe_customer_id     text,
-    stripe_subscription_id text,
-    created_at             timestamptz not null default now(),
-    updated_at             timestamptz not null default now()
-);
-
-
--- ── ROW LEVEL SECURITY ────────────────────────────────────────
-
-alter table public.achievements              enable row level security;
-alter table public.card_variant_availability enable row level security;
-alter table public.card_variant_images       enable row level security;
-alter table public.friendships               enable row level security;
-alter table public.set_products              enable row level security;
-alter table public.sets                      enable row level security;
-alter table public.trade_proposal_items      enable row level security;
-alter table public.trade_proposals           enable row level security;
-alter table public.user_achievements         enable row level security;
-alter table public.user_card_activity_log    enable row level security;
-alter table public.user_card_list_items      enable row level security;
-alter table public.user_card_lists           enable row level security;
-alter table public.user_card_variants        enable row level security;
-alter table public.user_cards                enable row level security;
-alter table public.user_graded_cards         enable row level security;
-alter table public.user_sealed_products      enable row level security;
-alter table public.user_sets                 enable row level security;
-alter table public.users                     enable row level security;
-alter table public.variant_suggestions       enable row level security;
-alter table public.variants                  enable row level security;
-alter table public.wanted_cards              enable row level security;
-alter table public.stories                   enable row level security;
-alter table public.user_subscriptions        enable row level security;
-
-
--- ── FUNCTIONS ─────────────────────────────────────────────────
-
--- Returns true if the current user has role = 'admin'
-create or replace function public.is_admin()
-returns boolean
-language plpgsql
-security definer
-as $$
-begin
-    return exists (
-        select 1 from public.users
-        where id = auth.uid()
-        and role = 'admin'
+-- Check if current authenticated user is admin
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN EXISTS (
+        SELECT 1
+        FROM public.users
+        WHERE id = auth.uid()
+        AND role = 'admin'
     );
-end;
+END;
 $$;
 
--- Returns true if the given user_id has role = 'admin'
-create or replace function public.is_admin_by_user_id(user_id uuid)
-returns boolean
-language plpgsql
-security definer
-as $$
+-- Check if a given user_id belongs to an admin
+CREATE OR REPLACE FUNCTION public.is_admin_by_user_id(user_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
 begin
     return exists (
-        select 1 from public.users
+        select 1
+        from public.users
         where id = user_id
         and role = 'admin'
     );
 end;
 $$;
 
--- Returns true if current user owns the resource or is admin
-create or replace function public.is_admin_or_owner(user_id uuid)
-returns boolean
-language plpgsql
-security definer
-as $$
-begin
-    return auth.uid() = user_id or public.is_admin();
-end;
+-- Check if current user is admin or the specified user
+CREATE OR REPLACE FUNCTION public.is_admin_or_owner(user_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN auth.uid() = user_id OR public.is_admin();
+END;
 $$;
 
--- Returns image coverage statistics per set (used by admin image upload tool)
-create or replace function public.get_set_image_stats()
-returns table(
-    set_id            text,
-    total_cards       bigint,
-    cards_with_images bigint
+-- Generic updated_at trigger function (sets to UTC now)
+CREATE OR REPLACE FUNCTION public.handle_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    NEW.updated_at = timezone('utc'::text, now());
+    RETURN NEW;
+END;
+$$;
+
+-- Generic updated_at trigger function (sets to now())
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+-- Stories-specific updated_at trigger function
+CREATE OR REPLACE FUNCTION public.stories_set_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+-- Atomically increment/decrement a user_card_variant quantity
+CREATE OR REPLACE FUNCTION public.increment_user_card_variant(
+  p_user_id uuid,
+  p_card_id uuid,
+  p_variant_id uuid,
+  p_increment integer
 )
-language sql
-stable
-as $$
-    select
-        set_id,
-        count(*)     as total_cards,
-        count(image) as cards_with_images  -- count() ignores NULLs
-    from cards
-    group by set_id;
+RETURNS integer
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_new_qty integer;
+BEGIN
+  IF p_increment > 0 THEN
+    INSERT INTO user_card_variants
+      (user_id, card_id, variant_id, quantity, quantity_delta, updated_at)
+    VALUES
+      (p_user_id, p_card_id, p_variant_id, p_increment, p_increment, now())
+    ON CONFLICT (user_id, card_id, variant_id)
+    DO UPDATE SET
+      quantity       = GREATEST(0, user_card_variants.quantity + p_increment),
+      quantity_delta = p_increment,
+      updated_at     = now()
+    RETURNING quantity INTO v_new_qty;
+
+  ELSE
+    UPDATE user_card_variants
+    SET
+      quantity       = GREATEST(0, quantity + p_increment),
+      quantity_delta = p_increment,
+      updated_at     = now()
+    WHERE user_id    = p_user_id
+      AND card_id    = p_card_id
+      AND variant_id = p_variant_id
+    RETURNING quantity INTO v_new_qty;
+
+    v_new_qty := COALESCE(v_new_qty, 0);
+  END IF;
+
+  IF COALESCE(v_new_qty, 0) = 0 THEN
+    DELETE FROM user_card_variants
+    WHERE user_id    = p_user_id
+      AND card_id    = p_card_id
+      AND variant_id = p_variant_id;
+  END IF;
+
+  RETURN COALESCE(v_new_qty, 0);
+END;
 $$;
 
--- Returns distinct owned card counts per set for a user (used for collection stats)
-create or replace function public.get_user_card_counts_by_set(p_user_id uuid)
-returns table(set_id text, card_count bigint)
-language sql
-stable
-security definer
-as $$
-    select
-        c.set_id,
-        count(distinct ucv.card_id) as card_count
-    from user_card_variants ucv
-    join cards c on ucv.card_id = c.id
-    where ucv.user_id = p_user_id
-      and ucv.quantity > 0
-    group by c.set_id;
+-- Trigger: create public profile when a user confirms their email
+CREATE OR REPLACE FUNCTION public.handle_new_confirmed_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  IF OLD.email_confirmed_at IS NULL AND NEW.email_confirmed_at IS NOT NULL THEN
+    INSERT INTO public.users (id, username, avatar_url)
+    VALUES (
+      NEW.id,
+      COALESCE(NEW.raw_user_meta_data->>'username', split_part(NEW.email, '@', 1)),
+      NEW.raw_user_meta_data->>'avatar_url'
+    )
+    ON CONFLICT (id) DO NOTHING;
+  END IF;
+  RETURN NEW;
+END;
 $$;
 
-grant execute on function public.get_user_card_counts_by_set(uuid) to anon, authenticated;
-
--- Atomic increment/decrement for user_card_variants.
--- Replaces the old read→compute→write pattern with a single DB round-trip.
--- Cleans up zero-quantity rows automatically.
-create or replace function public.increment_user_card_variant(
-    p_user_id    uuid,
-    p_card_id    uuid,
-    p_variant_id uuid,
-    p_increment  integer
-)
-returns integer
-language plpgsql
-as $$
-declare
-    v_new_qty integer;
-begin
-    if p_increment > 0 then
-        insert into user_card_variants
-            (user_id, card_id, variant_id, quantity, quantity_delta, updated_at)
-        values
-            (p_user_id, p_card_id, p_variant_id, p_increment, p_increment, now())
-        on conflict (user_id, card_id, variant_id)
-        do update set
-            quantity       = greatest(0, user_card_variants.quantity + p_increment),
-            quantity_delta = p_increment,
-            updated_at     = now()
-        returning quantity into v_new_qty;
-    else
-        update user_card_variants
-        set
-            quantity       = greatest(0, quantity + p_increment),
-            quantity_delta = p_increment,
-            updated_at     = now()
-        where user_id    = p_user_id
-          and card_id    = p_card_id
-          and variant_id = p_variant_id
-        returning quantity into v_new_qty;
-
-        v_new_qty := coalesce(v_new_qty, 0);
-    end if;
-
-    if coalesce(v_new_qty, 0) = 0 then
-        delete from user_card_variants
-        where user_id    = p_user_id
-          and card_id    = p_card_id
-          and variant_id = p_variant_id;
-    end if;
-
-    return coalesce(v_new_qty, 0);
-end;
-$$;
-
--- Trigger function: sets updated_at to current UTC timestamp
-create or replace function public.handle_updated_at()
-returns trigger
-language plpgsql
-as $$
-begin
-    new.updated_at = timezone('utc'::text, now());
-    return new;
-end;
-$$;
-
--- Trigger function: auto-creates public.users profile on email confirmation
--- NOTE: This function is invoked by a trigger on auth.users (not in public schema).
---       The trigger itself is managed outside this file.
-create or replace function public.handle_new_confirmed_user()
-returns trigger
-language plpgsql
-security definer
-as $$
-begin
-    if old.email_confirmed_at is null and new.email_confirmed_at is not null then
-        insert into public.users (id, username, avatar_url)
-        values (
-            new.id,
-            coalesce(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1)),
-            new.raw_user_meta_data->>'avatar_url'
-        )
-        on conflict (id) do nothing;
-    end if;
-    return new;
-end;
-$$;
-
-
--- Trigger function: auto-creates an accepted friendship between the admin and
--- every new user inserted into public.users (covers both email/password and OAuth
--- registration paths). SECURITY DEFINER bypasses the friendships RLS policy that
--- checks auth.uid() = requester_id (which is null in a trigger context).
-create or replace function public.handle_new_user_admin_friendship()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
+-- Trigger: auto-friend every new user with the first admin account
+CREATE OR REPLACE FUNCTION public.handle_new_user_admin_friendship()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
   v_admin_id uuid;
-begin
-  select id into v_admin_id
-  from public.users
-  where role = 'admin'
-  limit 1;
+BEGIN
+  SELECT id INTO v_admin_id
+  FROM public.users
+  WHERE role = 'admin'
+  LIMIT 1;
 
-  -- Skip if no admin exists yet, or the new row IS the admin
-  if v_admin_id is null or v_admin_id = new.id then
-    return new;
-  end if;
+  IF v_admin_id IS NULL OR v_admin_id = NEW.id THEN
+    RETURN NEW;
+  END IF;
 
-  insert into public.friendships (requester_id, addressee_id, status)
-  values (v_admin_id, new.id, 'accepted')
-  on conflict (requester_id, addressee_id) do nothing;
+  INSERT INTO public.friendships (requester_id, addressee_id, status)
+  VALUES (v_admin_id, NEW.id, 'accepted')
+  ON CONFLICT (requester_id, addressee_id) DO NOTHING;
 
-  return new;
-end;
+  RETURN NEW;
+END;
+$$;
+
+-- RPC: artist card counts with sample images (search + limit supported)
+CREATE OR REPLACE FUNCTION public.get_artist_card_counts(
+  p_search text DEFAULT NULL::text,
+  p_limit integer DEFAULT 1000
+)
+RETURNS TABLE(name text, card_count bigint, sample_images text[])
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+  SELECT
+    c.artist                                                         AS name,
+    COUNT(*)                                                         AS card_count,
+    ARRAY_REMOVE(
+      (ARRAY_AGG(c.image ORDER BY (c.image IS NULL) ASC, c.created_at DESC))[1:3],
+      NULL
+    )                                                                AS sample_images
+  FROM public.cards c
+  WHERE
+    c.artist IS NOT NULL
+    AND c.artist <> ''
+    AND LOWER(TRIM(c.artist)) <> 'n/a'
+    AND (p_search IS NULL OR c.artist ILIKE '%' || p_search || '%')
+  GROUP BY c.artist
+  ORDER BY card_count DESC
+  LIMIT p_limit;
+$$;
+
+-- RPC: image coverage stats per set
+CREATE OR REPLACE FUNCTION public.get_set_image_stats()
+RETURNS TABLE(set_id text, total_cards bigint, cards_with_images bigint)
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT
+    set_id,
+    COUNT(*)       AS total_cards,
+    COUNT(image)   AS cards_with_images
+  FROM cards
+  GROUP BY set_id;
+$$;
+
+-- RPC: card counts grouped by set for a user
+CREATE OR REPLACE FUNCTION public.get_user_card_counts_by_set(p_user_id uuid)
+RETURNS TABLE(set_id text, card_count bigint)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+AS $$
+  select
+    c.set_id,
+    count(distinct ucv.card_id) as card_count
+  from user_card_variants ucv
+  join cards c on ucv.card_id = c.id
+  where ucv.user_id = p_user_id
+    and ucv.quantity > 0
+  group by c.set_id;
+$$;
+
+-- RPC: total quantity and distinct card count for a user
+CREATE OR REPLACE FUNCTION public.get_user_collection_stats(p_user_id uuid)
+RETURNS TABLE(total_quantity bigint, distinct_cards bigint)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+  SELECT
+    COALESCE(SUM(quantity), 0)::bigint  AS total_quantity,
+    COUNT(DISTINCT card_id)::bigint     AS distinct_cards
+  FROM user_card_variants
+  WHERE user_id = p_user_id
+    AND quantity > 0;
 $$;
 
 
--- ── TRIGGERS ──────────────────────────────────────────────────
+-- ─────────────────────────────────────────────────────────────────────────────
+-- TABLES
+-- ─────────────────────────────────────────────────────────────────────────────
 
-create or replace trigger handle_updated_at_friendships
-    before update on public.friendships
-    for each row execute function public.handle_updated_at();
+-- users (public profile, references auth.users)
+CREATE TABLE public.users (
+  id                    uuid        NOT NULL,
+  username              text,
+  email                 text,
+  avatar_url            text,
+  created_at            timestamp   DEFAULT now(),
+  role                  text        NOT NULL DEFAULT 'user',
+  display_name          text,
+  banner_url            text,
+  bio                   text,
+  location              text,
+  setup_completed       boolean     NOT NULL DEFAULT false,
+  preferred_language    text        NOT NULL DEFAULT 'en',
+  preferred_currency    text        NOT NULL DEFAULT 'USD',
+  grey_out_unowned      boolean     NOT NULL DEFAULT true,
+  profile_private       boolean     NOT NULL DEFAULT false,
+  lists_public_by_default boolean   NOT NULL DEFAULT false,
+  social_cardmarket     text,
+  social_instagram      text,
+  social_facebook       text,
+  CONSTRAINT users_pkey PRIMARY KEY (id),
+  CONSTRAINT users_username_key UNIQUE (username),
+  CONSTRAINT users_role_check CHECK (role = ANY (ARRAY['user'::text, 'admin'::text])),
+  CONSTRAINT users_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE
+);
 
-create or replace trigger handle_updated_at_set_products
-    before update on public.set_products
-    for each row execute function public.handle_updated_at();
+-- sets (TCG / card sets)
+CREATE TABLE public.sets (
+  set_id          text      NOT NULL,
+  name            text      NOT NULL,
+  series          text,
+  "setTotal"      integer,
+  release_date    date,
+  created_at      timestamp DEFAULT now(),
+  "setComplete"   integer,
+  logo_url        text,
+  symbol_url      text,
+  language        text      NOT NULL DEFAULT 'en',
+  api_set_id      text,
+  game            text      NOT NULL DEFAULT 'pokemon',
+  CONSTRAINT sets_pkey PRIMARY KEY (set_id)
+);
 
-create or replace trigger handle_updated_at_trade_proposals
-    before update on public.trade_proposals
-    for each row execute function public.handle_updated_at();
+-- cards (individual cards within sets)
+-- NOTE: default_variant_id FK added via ALTER TABLE after variants is created
+CREATE TABLE public.cards (
+  id                uuid      NOT NULL DEFAULT gen_random_uuid(),
+  set_id            text      NOT NULL,
+  name              text      NOT NULL,
+  number            text,
+  rarity            text,
+  type              text,
+  created_at        timestamp DEFAULT now(),
+  artist            text,
+  image             text,
+  hp                text,
+  supertype         text,
+  subtypes          text[],
+  default_variant_id uuid,
+  api_id            text,
+  source_card_id    uuid,
+  tcggo_id          integer,
+  CONSTRAINT cards_pkey PRIMARY KEY (id),
+  CONSTRAINT cards_set_id_fkey FOREIGN KEY (set_id)
+    REFERENCES public.sets(set_id) ON DELETE CASCADE,
+  CONSTRAINT cards_source_card_id_fkey FOREIGN KEY (source_card_id)
+    REFERENCES public.cards(id) ON DELETE SET NULL
+);
 
-create or replace trigger handle_updated_at_user_sealed_products
-    before update on public.user_sealed_products
-    for each row execute function public.handle_updated_at();
+-- variants (card variants: holo, reverse holo, etc.)
+CREATE TABLE public.variants (
+  id            uuid      NOT NULL DEFAULT gen_random_uuid(),
+  variant_type  text,
+  created_at    timestamp DEFAULT now(),
+  name          text      NOT NULL,
+  key           text      NOT NULL,
+  description   text,
+  color         text      NOT NULL DEFAULT 'gray',
+  short_label   text,
+  is_quick_add  boolean   NOT NULL DEFAULT false,
+  sort_order    integer   NOT NULL DEFAULT 0,
+  is_official   boolean   NOT NULL DEFAULT true,
+  created_by    uuid,
+  card_id       uuid,
+  game          text,
+  CONSTRAINT variants_pkey PRIMARY KEY (id),
+  CONSTRAINT variants_key_unique UNIQUE (key),
+  CONSTRAINT variants_color_check CHECK (
+    color = ANY (ARRAY[
+      'green'::text, 'blue'::text, 'purple'::text, 'red'::text, 'pink'::text,
+      'yellow'::text, 'gray'::text, 'orange'::text, 'teal'::text
+    ])
+  ),
+  CONSTRAINT variants_card_id_fkey FOREIGN KEY (card_id)
+    REFERENCES public.cards(id) ON DELETE CASCADE
+);
 
-create or replace trigger handle_updated_at_user_subscriptions
-    before update on public.user_subscriptions
-    for each row execute function public.handle_updated_at();
+-- Resolve circular dependency: cards ↔ variants
+ALTER TABLE public.cards
+  ADD CONSTRAINT cards_default_variant_id_fkey
+    FOREIGN KEY (default_variant_id) REFERENCES public.variants(id) ON DELETE SET NULL;
 
-create or replace trigger handle_updated_at_stories
-    before update on public.stories
-    for each row execute function public.handle_updated_at();
+-- achievements (badge definitions)
+CREATE TABLE public.achievements (
+  id          uuid        NOT NULL DEFAULT gen_random_uuid(),
+  name        text        NOT NULL,
+  description text        NOT NULL,
+  icon        text        NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT achievements_pkey PRIMARY KEY (id),
+  CONSTRAINT achievements_name_key UNIQUE (name)
+);
 
-create or replace trigger handle_new_user_admin_friendship
-    after insert on public.users
-    for each row execute function public.handle_new_user_admin_friendship();
+-- stories (CMS articles / blog posts)
+CREATE TABLE public.stories (
+  id              uuid        NOT NULL DEFAULT gen_random_uuid(),
+  slug            text        NOT NULL,
+  category        text        NOT NULL,
+  category_icon   text        NOT NULL,
+  title           text        NOT NULL,
+  description     text        NOT NULL,
+  gradient        text        NOT NULL,
+  accent_colour   text        NOT NULL DEFAULT 'text-indigo-300',
+  cover_image_url text,
+  content         jsonb       NOT NULL DEFAULT '[]'::jsonb,
+  is_published    boolean     NOT NULL DEFAULT true,
+  published_at    timestamptz NOT NULL DEFAULT now(),
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT stories_pkey PRIMARY KEY (id),
+  CONSTRAINT stories_slug_key UNIQUE (slug)
+);
+
+-- set_products (booster boxes, tins, etc. for a set)
+CREATE TABLE public.set_products (
+  id              uuid        NOT NULL DEFAULT gen_random_uuid(),
+  set_id          text        NOT NULL,
+  api_product_id  text,
+  name            text        NOT NULL,
+  product_type    text,
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+  image_url       text,
+  CONSTRAINT set_products_pkey PRIMARY KEY (id),
+  CONSTRAINT set_products_api_product_id_key UNIQUE (api_product_id)
+);
+
+-- missing_card_suggestions (user-submitted requests for missing cards)
+CREATE TABLE public.missing_card_suggestions (
+  id          uuid        NOT NULL DEFAULT gen_random_uuid(),
+  card_name   text        NOT NULL,
+  set_name    text,
+  card_number text,
+  variant     text,
+  submitted_by uuid,
+  status      text        NOT NULL DEFAULT 'pending',
+  resolved_at timestamptz,
+  resolved_by uuid,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT missing_card_suggestions_pkey PRIMARY KEY (id),
+  CONSTRAINT missing_card_suggestions_status_check CHECK (
+    status = ANY (ARRAY['pending'::text, 'resolved'::text, 'dismissed'::text])
+  ),
+  CONSTRAINT missing_card_suggestions_submitted_by_fkey FOREIGN KEY (submitted_by)
+    REFERENCES public.users(id) ON DELETE SET NULL,
+  CONSTRAINT missing_card_suggestions_resolved_by_fkey FOREIGN KEY (resolved_by)
+    REFERENCES public.users(id) ON DELETE SET NULL
+);
+
+-- variant_suggestions (user-submitted variant proposals)
+CREATE TABLE public.variant_suggestions (
+  id          uuid      NOT NULL DEFAULT gen_random_uuid(),
+  name        text,
+  key         text,
+  status      text      DEFAULT 'pending',
+  created_by  uuid,
+  created_at  timestamp DEFAULT now(),
+  card_id     text,
+  description text,
+  CONSTRAINT variant_suggestions_pkey PRIMARY KEY (id),
+  CONSTRAINT variant_suggestions_created_by_fkey FOREIGN KEY (created_by)
+    REFERENCES public.users(id) ON DELETE SET NULL
+);
+
+-- card_variant_availability (which variants are available for a card)
+CREATE TABLE public.card_variant_availability (
+  id          uuid        NOT NULL DEFAULT gen_random_uuid(),
+  card_id     uuid        NOT NULL,
+  variant_id  uuid        NOT NULL,
+  created_by  uuid,
+  created_at  timestamptz DEFAULT now(),
+  CONSTRAINT card_variant_availability_pkey PRIMARY KEY (id),
+  CONSTRAINT unique_card_variant UNIQUE (card_id, variant_id),
+  CONSTRAINT card_variant_availability_card_id_fkey FOREIGN KEY (card_id)
+    REFERENCES public.cards(id) ON DELETE CASCADE,
+  CONSTRAINT card_variant_availability_variant_id_fkey FOREIGN KEY (variant_id)
+    REFERENCES public.variants(id) ON DELETE CASCADE,
+  CONSTRAINT card_variant_availability_created_by_fkey FOREIGN KEY (created_by)
+    REFERENCES public.users(id) ON DELETE NO ACTION
+);
+
+-- card_variant_images (custom images per card+variant)
+CREATE TABLE public.card_variant_images (
+  id          uuid        NOT NULL DEFAULT gen_random_uuid(),
+  card_id     uuid        NOT NULL,
+  variant_id  uuid        NOT NULL,
+  image_url   text        NOT NULL,
+  created_by  uuid,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT card_variant_images_pkey PRIMARY KEY (id),
+  CONSTRAINT unique_card_variant_image UNIQUE (card_id, variant_id),
+  CONSTRAINT card_variant_images_card_id_fkey FOREIGN KEY (card_id)
+    REFERENCES public.cards(id) ON DELETE CASCADE,
+  CONSTRAINT card_variant_images_variant_id_fkey FOREIGN KEY (variant_id)
+    REFERENCES public.variants(id) ON DELETE CASCADE,
+  CONSTRAINT card_variant_images_created_by_fkey FOREIGN KEY (created_by)
+    REFERENCES public.users(id) ON DELETE NO ACTION
+);
+
+-- friendships (friend requests / relationships between users)
+CREATE TABLE public.friendships (
+  id            uuid        NOT NULL DEFAULT gen_random_uuid(),
+  requester_id  uuid        NOT NULL,
+  addressee_id  uuid        NOT NULL,
+  status        text        NOT NULL DEFAULT 'pending',
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  updated_at    timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT friendships_pkey PRIMARY KEY (id),
+  CONSTRAINT friendships_pair_key UNIQUE (requester_id, addressee_id),
+  CONSTRAINT friendships_no_self CHECK (requester_id <> addressee_id),
+  CONSTRAINT friendships_status_check CHECK (
+    status = ANY (ARRAY['pending'::text, 'accepted'::text, 'declined'::text, 'blocked'::text])
+  ),
+  CONSTRAINT friendships_requester_id_fkey FOREIGN KEY (requester_id)
+    REFERENCES public.users(id) ON DELETE CASCADE,
+  CONSTRAINT friendships_addressee_id_fkey FOREIGN KEY (addressee_id)
+    REFERENCES public.users(id) ON DELETE CASCADE
+);
+
+-- trade_proposals (card trade offers between users)
+CREATE TABLE public.trade_proposals (
+  id              uuid        NOT NULL DEFAULT gen_random_uuid(),
+  proposer_id     uuid        NOT NULL,
+  receiver_id     uuid        NOT NULL,
+  status          text        NOT NULL DEFAULT 'pending',
+  notes           text,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+  cash_offered    numeric     NOT NULL DEFAULT 0,
+  cash_requested  numeric     NOT NULL DEFAULT 0,
+  currency_code   text        NOT NULL DEFAULT 'EUR',
+  CONSTRAINT trade_proposals_pkey PRIMARY KEY (id),
+  CONSTRAINT trade_proposals_no_self CHECK (proposer_id <> receiver_id),
+  CONSTRAINT trade_proposals_status_check CHECK (
+    status = ANY (ARRAY['pending'::text, 'accepted'::text, 'declined'::text, 'withdrawn'::text])
+  ),
+  CONSTRAINT trade_proposals_cash_offered_check CHECK (cash_offered >= 0::numeric),
+  CONSTRAINT trade_proposals_cash_requested_check CHECK (cash_requested >= 0::numeric),
+  CONSTRAINT trade_proposals_currency_code_check CHECK (
+    currency_code = ANY (ARRAY[
+      'EUR'::text, 'USD'::text, 'GBP'::text, 'NOK'::text, 'SEK'::text,
+      'DKK'::text, 'CAD'::text, 'AUD'::text, 'JPY'::text, 'CHF'::text
+    ])
+  ),
+  CONSTRAINT trade_proposals_proposer_id_fkey FOREIGN KEY (proposer_id)
+    REFERENCES public.users(id) ON DELETE CASCADE,
+  CONSTRAINT trade_proposals_receiver_id_fkey FOREIGN KEY (receiver_id)
+    REFERENCES public.users(id) ON DELETE CASCADE
+);
+
+-- trade_proposal_items (individual cards within a trade proposal)
+CREATE TABLE public.trade_proposal_items (
+  id          uuid    NOT NULL DEFAULT gen_random_uuid(),
+  proposal_id uuid    NOT NULL,
+  card_id     uuid    NOT NULL,
+  direction   text    NOT NULL,
+  quantity    integer NOT NULL DEFAULT 1,
+  CONSTRAINT trade_proposal_items_pkey PRIMARY KEY (id),
+  CONSTRAINT trade_proposal_items_direction_check CHECK (
+    direction = ANY (ARRAY['offering'::text, 'requesting'::text])
+  ),
+  CONSTRAINT trade_proposal_items_quantity_check CHECK (quantity >= 1),
+  CONSTRAINT trade_proposal_items_proposal_id_fkey FOREIGN KEY (proposal_id)
+    REFERENCES public.trade_proposals(id) ON DELETE CASCADE,
+  CONSTRAINT trade_proposal_items_card_id_fkey FOREIGN KEY (card_id)
+    REFERENCES public.cards(id) ON DELETE CASCADE
+);
+
+-- user_achievements (unlocked achievements per user)
+CREATE TABLE public.user_achievements (
+  id              uuid        NOT NULL DEFAULT gen_random_uuid(),
+  user_id         uuid        NOT NULL,
+  achievement_id  uuid        NOT NULL,
+  unlocked_at     timestamptz NOT NULL DEFAULT timezone('utc'::text, now()),
+  CONSTRAINT user_achievements_pkey PRIMARY KEY (id),
+  CONSTRAINT user_achievements_user_id_achievement_id_key UNIQUE (user_id, achievement_id),
+  CONSTRAINT user_achievements_achievement_id_fkey FOREIGN KEY (achievement_id)
+    REFERENCES public.achievements(id) ON DELETE CASCADE
+);
+
+-- user_card_activity_log (history of quantity changes per user+card+variant)
+CREATE TABLE public.user_card_activity_log (
+  id            uuid        NOT NULL DEFAULT gen_random_uuid(),
+  user_id       uuid        NOT NULL,
+  card_id       uuid        NOT NULL,
+  variant_id    uuid        NOT NULL,
+  variant_type  text,
+  old_quantity  integer     NOT NULL DEFAULT 0,
+  new_quantity  integer     NOT NULL,
+  changed_at    timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT user_card_activity_log_pkey PRIMARY KEY (id)
+);
+
+-- user_card_lists (custom card lists / wishlists)
+CREATE TABLE public.user_card_lists (
+  id          uuid        NOT NULL DEFAULT gen_random_uuid(),
+  user_id     uuid        NOT NULL,
+  name        text        NOT NULL,
+  description text,
+  is_public   boolean     NOT NULL DEFAULT false,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT user_card_lists_pkey PRIMARY KEY (id),
+  CONSTRAINT user_card_lists_user_id_fkey FOREIGN KEY (user_id)
+    REFERENCES public.users(id) ON DELETE CASCADE
+);
+
+-- user_card_list_items (cards within a user's custom list)
+CREATE TABLE public.user_card_list_items (
+  id        uuid        NOT NULL DEFAULT gen_random_uuid(),
+  list_id   uuid        NOT NULL,
+  card_id   uuid        NOT NULL,
+  added_at  timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT user_card_list_items_pkey PRIMARY KEY (id),
+  CONSTRAINT user_card_list_items_list_card_key UNIQUE (list_id, card_id),
+  CONSTRAINT user_card_list_items_list_id_fkey FOREIGN KEY (list_id)
+    REFERENCES public.user_card_lists(id) ON DELETE CASCADE,
+  CONSTRAINT user_card_list_items_card_id_fkey FOREIGN KEY (card_id)
+    REFERENCES public.cards(id) ON DELETE CASCADE
+);
+
+-- user_card_variants (quantity of each variant a user owns)
+CREATE TABLE public.user_card_variants (
+  id              uuid      NOT NULL DEFAULT gen_random_uuid(),
+  user_id         uuid,
+  card_id         uuid,
+  variant_type    text,
+  created_at      timestamp DEFAULT now(),
+  variant_id      uuid,
+  quantity        integer   DEFAULT 0,
+  updated_at      timestamp DEFAULT now(),
+  quantity_delta  integer,
+  CONSTRAINT user_card_variants_pkey PRIMARY KEY (id),
+  CONSTRAINT user_card_variants_unique UNIQUE (user_id, card_id, variant_id),
+  CONSTRAINT user_card_variants_user_id_fkey FOREIGN KEY (user_id)
+    REFERENCES public.users(id) ON DELETE CASCADE,
+  CONSTRAINT user_card_variants_card_id_fkey FOREIGN KEY (card_id)
+    REFERENCES public.cards(id) ON DELETE CASCADE,
+  CONSTRAINT user_card_variants_variant_id_fkey FOREIGN KEY (variant_id)
+    REFERENCES public.variants(id) ON DELETE CASCADE
+);
+
+-- user_cards (denormalized: whether a user has any copy of a card)
+CREATE TABLE public.user_cards (
+  id          uuid      NOT NULL DEFAULT gen_random_uuid(),
+  user_id     uuid,
+  card_id     uuid,
+  created_at  timestamp DEFAULT now(),
+  quantity    integer   NOT NULL DEFAULT 0,
+  CONSTRAINT user_cards_pkey PRIMARY KEY (id),
+  CONSTRAINT user_cards_user_id_card_id_key UNIQUE (user_id, card_id),
+  CONSTRAINT user_cards_card_id_fkey FOREIGN KEY (card_id)
+    REFERENCES public.cards(id) ON DELETE CASCADE
+);
+
+-- user_graded_cards (graded/slabbed cards owned by a user)
+CREATE TABLE public.user_graded_cards (
+  id              uuid        NOT NULL DEFAULT gen_random_uuid(),
+  user_id         uuid        NOT NULL,
+  card_id         uuid        NOT NULL,
+  variant_id      uuid,
+  grading_company text        NOT NULL,
+  grade           text        NOT NULL,
+  quantity        integer     NOT NULL DEFAULT 1,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT user_graded_cards_pkey PRIMARY KEY (id),
+  CONSTRAINT user_graded_cards_unique UNIQUE (user_id, card_id, variant_id, grading_company, grade),
+  CONSTRAINT user_graded_cards_grading_company_check CHECK (
+    grading_company = ANY (ARRAY['PSA'::text, 'BECKETT'::text, 'CGC'::text, 'TAG'::text, 'ACE'::text])
+  ),
+  CONSTRAINT user_graded_cards_quantity_check CHECK (quantity >= 1),
+  CONSTRAINT user_graded_cards_user_id_fkey FOREIGN KEY (user_id)
+    REFERENCES public.users(id) ON DELETE CASCADE,
+  CONSTRAINT user_graded_cards_card_id_fkey FOREIGN KEY (card_id)
+    REFERENCES public.cards(id) ON DELETE CASCADE,
+  CONSTRAINT user_graded_cards_variant_id_fkey FOREIGN KEY (variant_id)
+    REFERENCES public.variants(id) ON DELETE SET NULL
+);
+
+-- user_sealed_products (sealed booster boxes / tins owned by a user)
+CREATE TABLE public.user_sealed_products (
+  id          uuid      NOT NULL DEFAULT gen_random_uuid(),
+  user_id     uuid      NOT NULL,
+  product_id  text      NOT NULL,
+  quantity    integer   NOT NULL DEFAULT 1,
+  created_at  timestamp DEFAULT now(),
+  updated_at  timestamp DEFAULT now(),
+  CONSTRAINT user_sealed_products_pkey PRIMARY KEY (id),
+  CONSTRAINT user_sealed_products_user_id_product_id_key UNIQUE (user_id, product_id),
+  CONSTRAINT user_sealed_products_quantity_check CHECK (quantity >= 0)
+);
+
+-- user_sets (sets a user is tracking in their collection)
+CREATE TABLE public.user_sets (
+  id              uuid      NOT NULL DEFAULT gen_random_uuid(),
+  user_id         uuid,
+  set_id          text,
+  created_at      timestamp DEFAULT now(),
+  collection_goal text      NOT NULL DEFAULT 'normal',
+  CONSTRAINT user_sets_pkey PRIMARY KEY (id),
+  CONSTRAINT user_sets_user_id_set_id_key UNIQUE (user_id, set_id),
+  CONSTRAINT user_sets_collection_goal_check CHECK (
+    collection_goal = ANY (ARRAY['normal'::text, 'masterset'::text, 'grandmasterset'::text])
+  ),
+  CONSTRAINT user_sets_set_id_fkey FOREIGN KEY (set_id)
+    REFERENCES public.sets(set_id) ON DELETE CASCADE
+);
+
+-- user_subscriptions (Stripe subscription / tier for a user)
+CREATE TABLE public.user_subscriptions (
+  id                      uuid        NOT NULL DEFAULT gen_random_uuid(),
+  user_id                 uuid        NOT NULL,
+  tier                    text        NOT NULL DEFAULT 'free',
+  billing_period          text,
+  current_period_start    timestamptz,
+  current_period_end      timestamptz,
+  stripe_customer_id      text,
+  stripe_subscription_id  text,
+  created_at              timestamptz NOT NULL DEFAULT now(),
+  updated_at              timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT user_subscriptions_pkey PRIMARY KEY (id),
+  CONSTRAINT user_subscriptions_user_id_key UNIQUE (user_id),
+  CONSTRAINT user_subscriptions_tier_check CHECK (
+    tier = ANY (ARRAY['free'::text, 'pro'::text])
+  ),
+  CONSTRAINT user_subscriptions_billing_period_check CHECK (
+    billing_period = ANY (ARRAY['monthly'::text, 'annual'::text])
+  ),
+  CONSTRAINT user_subscriptions_user_id_fkey FOREIGN KEY (user_id)
+    REFERENCES public.users(id) ON DELETE CASCADE
+);
+
+-- wanted_cards (cards a user wants to acquire)
+CREATE TABLE public.wanted_cards (
+  id          uuid        NOT NULL DEFAULT gen_random_uuid(),
+  user_id     uuid        NOT NULL,
+  card_id     uuid        NOT NULL,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT wanted_cards_pkey PRIMARY KEY (id),
+  CONSTRAINT wanted_cards_user_card_key UNIQUE (user_id, card_id),
+  CONSTRAINT wanted_cards_user_id_fkey FOREIGN KEY (user_id)
+    REFERENCES public.users(id) ON DELETE CASCADE,
+  CONSTRAINT wanted_cards_card_id_fkey FOREIGN KEY (card_id)
+    REFERENCES public.cards(id) ON DELETE CASCADE
+);
 
 
--- ── RLS POLICIES ──────────────────────────────────────────────
+-- ─────────────────────────────────────────────────────────────────────────────
+-- VIEWS
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Flat list of all accepted friend pairs (bidirectional)
+CREATE OR REPLACE VIEW public.accepted_friends AS
+  SELECT friendships.requester_id AS user_id,
+         friendships.addressee_id AS friend_id
+    FROM friendships
+   WHERE friendships.status = 'accepted'::text
+  UNION ALL
+  SELECT friendships.addressee_id AS user_id,
+         friendships.requester_id AS friend_id
+    FROM friendships
+   WHERE friendships.status = 'accepted'::text;
+
+-- Convenience view: user_id → tier (mirrors user_subscriptions)
+CREATE OR REPLACE VIEW public.user_tiers AS
+  SELECT user_id,
+         tier
+    FROM user_subscriptions;
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- TRIGGERS
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TRIGGER handle_updated_at_friendships
+  BEFORE UPDATE ON public.friendships
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+CREATE TRIGGER handle_updated_at_set_products
+  BEFORE UPDATE ON public.set_products
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+CREATE TRIGGER stories_updated_at
+  BEFORE UPDATE ON public.stories
+  FOR EACH ROW EXECUTE FUNCTION public.stories_set_updated_at();
+
+CREATE TRIGGER handle_updated_at_trade_proposals
+  BEFORE UPDATE ON public.trade_proposals
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+CREATE TRIGGER handle_updated_at_user_sealed_products
+  BEFORE UPDATE ON public.user_sealed_products
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+CREATE TRIGGER user_subscriptions_updated_at
+  BEFORE UPDATE ON public.user_subscriptions
+  FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+
+CREATE TRIGGER handle_new_user_admin_friendship
+  AFTER INSERT ON public.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user_admin_friendship();
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- ROW LEVEL SECURITY
+-- ─────────────────────────────────────────────────────────────────────────────
+
+ALTER TABLE public.achievements             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.card_variant_availability ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.card_variant_images       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.cards                     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.friendships               ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.missing_card_suggestions  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.set_products              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sets                      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.stories                   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.trade_proposal_items      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.trade_proposals           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_achievements         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_card_activity_log    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_card_list_items      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_card_lists           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_card_variants        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_cards                ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_graded_cards         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_sealed_products      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_sets                 ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_subscriptions        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users                     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.variant_suggestions       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.variants                  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.wanted_cards              ENABLE ROW LEVEL SECURITY;
 
 -- achievements
-create policy "Everyone can view achievements"
-    on public.achievements for select using (true);
+CREATE POLICY "Everyone can view achievements"
+  ON public.achievements FOR SELECT USING (true);
 
 -- card_variant_availability
-create policy "cva_read_all"
-    on public.card_variant_availability for select using (true);
+CREATE POLICY "cva_read_all"
+  ON public.card_variant_availability FOR SELECT USING (true);
 
 -- card_variant_images
-create policy "cvi_read_all"
-    on public.card_variant_images for select using (true);
-
--- friendships
-create policy "friendships_requester_insert"
-    on public.friendships for insert with check (auth.uid() = requester_id);
-create policy "friendships_parties_select"
-    on public.friendships for select using (auth.uid() = requester_id or auth.uid() = addressee_id);
-create policy "friendships_parties_update"
-    on public.friendships for update using (auth.uid() = requester_id or auth.uid() = addressee_id);
-create policy "friendships_parties_delete"
-    on public.friendships for delete using (auth.uid() = requester_id or auth.uid() = addressee_id);
-create policy "friendships_admin_all"
-    on public.friendships for all using (public.is_admin());
-
--- set_products
-create policy "set_products_public_read"
-    on public.set_products for select using (true);
-create policy "set_products_admin_insert"
-    on public.set_products for insert with check (public.is_admin());
-create policy "set_products_admin_update"
-    on public.set_products for update using (public.is_admin());
-create policy "set_products_admin_delete"
-    on public.set_products for delete using (public.is_admin());
-
--- sets
-create policy "Everyone can view sets"
-    on public.sets for select using (true);
-
--- trade_proposal_items
-create policy "trade_proposal_items_select"
-    on public.trade_proposal_items for select
-    using (exists (
-        select 1 from trade_proposals p
-        where p.id = trade_proposal_items.proposal_id
-          and (p.proposer_id = auth.uid() or p.receiver_id = auth.uid())
-    ));
-create policy "trade_proposal_items_insert"
-    on public.trade_proposal_items for insert
-    with check (exists (
-        select 1 from trade_proposals p
-        where p.id = trade_proposal_items.proposal_id
-          and p.proposer_id = auth.uid()
-    ));
-create policy "trade_proposal_items_admin_all"
-    on public.trade_proposal_items for all using (public.is_admin());
-
--- trade_proposals
-create policy "trade_proposals_parties_select"
-    on public.trade_proposals for select using (auth.uid() = proposer_id or auth.uid() = receiver_id);
-create policy "trade_proposals_proposer_insert"
-    on public.trade_proposals for insert with check (auth.uid() = proposer_id);
-create policy "trade_proposals_parties_update"
-    on public.trade_proposals for update using (auth.uid() = proposer_id or auth.uid() = receiver_id);
-create policy "trade_proposals_admin_all"
-    on public.trade_proposals for all using (public.is_admin());
-
--- user_achievements
-create policy "User achievements are viewable by everyone"
-    on public.user_achievements for select using (true);
-create policy "Users can insert their own achievements"
-    on public.user_achievements for insert with check (auth.uid() = user_id);
-
--- user_card_activity_log
-create policy "Users can view their own card activity log."
-    on public.user_card_activity_log for select using (auth.uid() = user_id);
-
--- user_card_list_items
-create policy "user_card_list_items_select"
-    on public.user_card_list_items for select
-    using (exists (
-        select 1 from user_card_lists l
-        where l.id = user_card_list_items.list_id
-          and (l.user_id = auth.uid() or l.is_public = true)
-    ));
-create policy "user_card_list_items_owner_insert"
-    on public.user_card_list_items for insert
-    with check (exists (
-        select 1 from user_card_lists l
-        where l.id = user_card_list_items.list_id
-          and l.user_id = auth.uid()
-    ));
-create policy "user_card_list_items_owner_delete"
-    on public.user_card_list_items for delete
-    using (exists (
-        select 1 from user_card_lists l
-        where l.id = user_card_list_items.list_id
-          and l.user_id = auth.uid()
-    ));
-create policy "user_card_list_items_admin_all"
-    on public.user_card_list_items for all using (public.is_admin());
-
--- user_card_lists
-create policy "user_card_lists_owner_select"
-    on public.user_card_lists for select using (auth.uid() = user_id or is_public = true);
-create policy "user_card_lists_owner_insert"
-    on public.user_card_lists for insert with check (auth.uid() = user_id);
-create policy "user_card_lists_owner_update"
-    on public.user_card_lists for update using (auth.uid() = user_id);
-create policy "user_card_lists_owner_delete"
-    on public.user_card_lists for delete using (auth.uid() = user_id);
-create policy "user_card_lists_admin_all"
-    on public.user_card_lists for all using (public.is_admin());
-
--- user_card_variants
-create policy "Authenticated users can view any user's card variants"
-    on public.user_card_variants for select using (auth.role() = 'authenticated');
-create policy "Users can manage their variants"
-    on public.user_card_variants for all using (auth.uid() = user_id);
-
--- user_cards
-create policy "Users can update their own cards."
-    on public.user_cards for update using (auth.uid() = user_id);
-
--- user_graded_cards
-create policy "user_graded_cards_select_own"
-    on public.user_graded_cards for select using (auth.uid() = user_id);
-create policy "user_graded_cards_insert_own"
-    on public.user_graded_cards for insert with check (auth.uid() = user_id);
-create policy "user_graded_cards_update_own"
-    on public.user_graded_cards for update using (auth.uid() = user_id);
-create policy "user_graded_cards_delete_own"
-    on public.user_graded_cards for delete using (auth.uid() = user_id);
-create policy "user_graded_cards_admin_all"
-    on public.user_graded_cards for all using (public.is_admin());
-
--- user_sealed_products
-create policy "Users can view their own sealed products."
-    on public.user_sealed_products for select using (auth.uid() = user_id);
-create policy "Users can insert their own sealed products."
-    on public.user_sealed_products for insert with check (auth.uid() = user_id);
-create policy "Users can update their own sealed products."
-    on public.user_sealed_products for update using (auth.uid() = user_id);
-create policy "Users can delete their own sealed products."
-    on public.user_sealed_products for delete using (auth.uid() = user_id);
-
--- user_sets
-create policy "Authenticated users can view any user's sets"
-    on public.user_sets for select using (auth.role() = 'authenticated');
-
--- users
-create policy "Users can view their own profile"
-    on public.users for select using (auth.uid() = id);
-create policy "Authenticated users can view any profile"
-    on public.users for select using (auth.role() = 'authenticated');
-create policy "Admins can view all users"
-    on public.users for select using (public.is_admin());
-create policy "Users can insert own profile"
-    on public.users for insert with check (auth.uid() = id);
-create policy "Users can update own profile"
-    on public.users for update using (auth.uid() = id);
-
--- variant_suggestions
-create policy "Everyone can view variant suggestions"
-    on public.variant_suggestions for select using (true);
-create policy "Authenticated users can create variant suggestions"
-    on public.variant_suggestions for insert with check (auth.uid() = created_by);
-create policy "Admins can update variant suggestions"
-    on public.variant_suggestions for update using (public.is_admin());
-
--- variants
-create policy "Everyone can view variants"
-    on public.variants for select using (true);
-create policy "Admins can manage variants"
-    on public.variants for all using (public.is_admin());
-
--- wanted_cards
-create policy "wanted_cards_owner_select"
-    on public.wanted_cards for select using (auth.uid() = user_id);
-create policy "wanted_cards_owner_insert"
-    on public.wanted_cards for insert with check (auth.uid() = user_id);
-create policy "wanted_cards_owner_delete"
-    on public.wanted_cards for delete using (auth.uid() = user_id);
-create policy "wanted_cards_admin_all"
-    on public.wanted_cards for all using (public.is_admin());
-
--- stories
-create policy "stories_public_select"
-    on public.stories for select using (is_published = true);
-create policy "stories_admin_all"
-    on public.stories for all using (public.is_admin());
-
--- user_subscriptions
-create policy "user_subscriptions_owner_select"
-    on public.user_subscriptions for select using (auth.uid() = user_id);
-create policy "user_subscriptions_admin_all"
-    on public.user_subscriptions for all using (public.is_admin());
-
-
--- ── INDEXES ───────────────────────────────────────────────────
-
--- card_variant_availability
-create index if not exists idx_cva_card_id    on public.card_variant_availability(card_id);
-create index if not exists idx_cva_variant_id on public.card_variant_availability(variant_id);
-
--- card_variant_images
-create index if not exists idx_cvi_card_id    on public.card_variant_images(card_id);
-create index if not exists idx_cvi_variant_id on public.card_variant_images(variant_id);
+CREATE POLICY "cvi_read_all"
+  ON public.card_variant_images FOR SELECT USING (true);
 
 -- cards
-create index if not exists cards_api_id_idx
-    on public.cards(api_id) where api_id is not null;
-create index if not exists cards_default_variant_idx
-    on public.cards(default_variant_id);
-create index if not exists cards_source_card_id_idx
-    on public.cards(source_card_id) where source_card_id is not null;
-create index if not exists idx_cards_name   on public.cards(name);
-create index if not exists idx_cards_set_id on public.cards(set_id);
-create index if not exists cards_tcggo_id_idx
-    on public.cards(tcggo_id) where tcggo_id is not null;
+CREATE POLICY "Anyone can view cards"
+  ON public.cards FOR SELECT USING (true);
+CREATE POLICY "Admins can manage cards"
+  ON public.cards FOR ALL USING (is_admin());
 
 -- friendships
-create index if not exists friendships_requester_idx
-    on public.friendships(requester_id, status);
-create index if not exists friendships_addressee_idx
-    on public.friendships(addressee_id, status);
-create index if not exists friendships_accepted_requester_idx
-    on public.friendships(requester_id) where status = 'accepted';
-create index if not exists friendships_accepted_addressee_idx
-    on public.friendships(addressee_id) where status = 'accepted';
+CREATE POLICY "friendships_parties_select"
+  ON public.friendships FOR SELECT
+  USING ((auth.uid() = requester_id) OR (auth.uid() = addressee_id));
+CREATE POLICY "friendships_requester_insert"
+  ON public.friendships FOR INSERT
+  WITH CHECK (auth.uid() = requester_id);
+CREATE POLICY "friendships_parties_update"
+  ON public.friendships FOR UPDATE
+  USING ((auth.uid() = requester_id) OR (auth.uid() = addressee_id));
+CREATE POLICY "friendships_parties_delete"
+  ON public.friendships FOR DELETE
+  USING ((auth.uid() = requester_id) OR (auth.uid() = addressee_id));
+CREATE POLICY "friendships_admin_all"
+  ON public.friendships FOR ALL USING (is_admin());
+
+-- missing_card_suggestions
+CREATE POLICY "public_insert_missing_card_suggestions"
+  ON public.missing_card_suggestions FOR INSERT
+  WITH CHECK (true);
+CREATE POLICY "admin_select_missing_card_suggestions"
+  ON public.missing_card_suggestions FOR SELECT
+  USING (EXISTS (
+    SELECT 1 FROM users
+    WHERE users.id = auth.uid() AND users.role = 'admin'::text
+  ));
+CREATE POLICY "admin_update_missing_card_suggestions"
+  ON public.missing_card_suggestions FOR UPDATE
+  USING (EXISTS (
+    SELECT 1 FROM users
+    WHERE users.id = auth.uid() AND users.role = 'admin'::text
+  ));
 
 -- set_products
-create index if not exists set_products_set_id_idx
-    on public.set_products(set_id);
-create index if not exists set_products_product_type_idx
-    on public.set_products(product_type);
+CREATE POLICY "set_products_public_read"
+  ON public.set_products FOR SELECT USING (true);
+CREATE POLICY "set_products_admin_insert"
+  ON public.set_products FOR INSERT WITH CHECK (is_admin());
+CREATE POLICY "set_products_admin_update"
+  ON public.set_products FOR UPDATE USING (is_admin());
+CREATE POLICY "set_products_admin_delete"
+  ON public.set_products FOR DELETE USING (is_admin());
 
 -- sets
-create index if not exists sets_release_date_idx
-    on public.sets(release_date desc);
-create index if not exists sets_series_idx
-    on public.sets(series);
-
--- trade_proposal_items
-create index if not exists trade_proposal_items_proposal_idx
-    on public.trade_proposal_items(proposal_id);
-
--- trade_proposals
-create index if not exists trade_proposals_proposer_idx
-    on public.trade_proposals(proposer_id, status);
-create index if not exists trade_proposals_receiver_idx
-    on public.trade_proposals(receiver_id, status);
-
--- user_achievements
-create index if not exists user_achievements_user_id_idx
-    on public.user_achievements(user_id);
-
--- user_card_activity_log
-create index if not exists idx_card_activity_log_user_changed
-    on public.user_card_activity_log(user_id, changed_at desc);
-
--- user_card_list_items
-create index if not exists user_card_list_items_list_id_idx
-    on public.user_card_list_items(list_id);
-create index if not exists user_card_list_items_card_id_idx
-    on public.user_card_list_items(card_id);
-
--- user_card_lists
-create index if not exists user_card_lists_user_id_idx
-    on public.user_card_lists(user_id);
-
--- user_card_variants
-create index if not exists user_card_variants_user_id_idx
-    on public.user_card_variants(user_id);
-create index if not exists user_card_variants_card_id_idx
-    on public.user_card_variants(card_id);
-create index if not exists user_card_variants_variant_id_idx
-    on public.user_card_variants(variant_id);
-create index if not exists ucv_user_id_updated_at_idx
-    on public.user_card_variants(user_id, updated_at desc);
-
--- user_graded_cards
-create index if not exists user_graded_cards_user_id_idx
-    on public.user_graded_cards(user_id);
-create index if not exists user_graded_cards_card_id_idx
-    on public.user_graded_cards(card_id);
-create index if not exists user_graded_cards_user_card_idx
-    on public.user_graded_cards(user_id, card_id);
-
--- user_sealed_products
-create index if not exists usp_user_id_idx
-    on public.user_sealed_products(user_id);
-create index if not exists usp_product_id_idx
-    on public.user_sealed_products(product_id);
-create index if not exists usp_user_id_updated_at_idx
-    on public.user_sealed_products(user_id, updated_at desc);
-
--- user_sets
-create index if not exists user_sets_collection_goal_idx
-    on public.user_sets(collection_goal);
-
--- variants
-create index if not exists variants_key_idx
-    on public.variants(key);
-create index if not exists variants_color_idx
-    on public.variants(color);
-create index if not exists variants_is_official_idx
-    on public.variants(is_official);
-create index if not exists variants_sort_order_idx
-    on public.variants(sort_order);
-create index if not exists idx_variants_card_id
-    on public.variants(card_id);
+CREATE POLICY "Everyone can view sets"
+  ON public.sets FOR SELECT USING (true);
 
 -- stories
-create index if not exists stories_published_at_idx
-    on public.stories(published_at desc) where is_published = true;
-create index if not exists stories_slug_idx
-    on public.stories(slug);
+CREATE POLICY "stories_public_select"
+  ON public.stories FOR SELECT USING (is_published = true);
+
+-- trade_proposal_items
+CREATE POLICY "trade_proposal_items_select"
+  ON public.trade_proposal_items FOR SELECT
+  USING (EXISTS (
+    SELECT 1 FROM trade_proposals p
+    WHERE p.id = trade_proposal_items.proposal_id
+      AND (p.proposer_id = auth.uid() OR p.receiver_id = auth.uid())
+  ));
+CREATE POLICY "trade_proposal_items_insert"
+  ON public.trade_proposal_items FOR INSERT
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM trade_proposals p
+    WHERE p.id = trade_proposal_items.proposal_id
+      AND p.proposer_id = auth.uid()
+  ));
+CREATE POLICY "trade_proposal_items_admin_all"
+  ON public.trade_proposal_items FOR ALL USING (is_admin());
+
+-- trade_proposals
+CREATE POLICY "trade_proposals_parties_select"
+  ON public.trade_proposals FOR SELECT
+  USING ((auth.uid() = proposer_id) OR (auth.uid() = receiver_id));
+CREATE POLICY "trade_proposals_proposer_insert"
+  ON public.trade_proposals FOR INSERT
+  WITH CHECK (auth.uid() = proposer_id);
+CREATE POLICY "trade_proposals_parties_update"
+  ON public.trade_proposals FOR UPDATE
+  USING ((auth.uid() = proposer_id) OR (auth.uid() = receiver_id));
+CREATE POLICY "trade_proposals_admin_all"
+  ON public.trade_proposals FOR ALL USING (is_admin());
+
+-- user_achievements
+CREATE POLICY "User achievements are viewable by everyone"
+  ON public.user_achievements FOR SELECT USING (true);
+CREATE POLICY "User achievements are viewable by everyone."
+  ON public.user_achievements FOR SELECT USING (true);
+CREATE POLICY "Users can insert their own achievements"
+  ON public.user_achievements FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+-- user_card_activity_log
+CREATE POLICY "Users can view their own card activity log."
+  ON public.user_card_activity_log FOR SELECT
+  USING (auth.uid() = user_id);
+
+-- user_card_list_items
+CREATE POLICY "user_card_list_items_select"
+  ON public.user_card_list_items FOR SELECT
+  USING (EXISTS (
+    SELECT 1 FROM user_card_lists l
+    WHERE l.id = user_card_list_items.list_id
+      AND (l.user_id = auth.uid() OR l.is_public = true)
+  ));
+CREATE POLICY "user_card_list_items_owner_insert"
+  ON public.user_card_list_items FOR INSERT
+  WITH CHECK (EXISTS (
+    SELECT 1 FROM user_card_lists l
+    WHERE l.id = user_card_list_items.list_id
+      AND l.user_id = auth.uid()
+  ));
+CREATE POLICY "user_card_list_items_owner_delete"
+  ON public.user_card_list_items FOR DELETE
+  USING (EXISTS (
+    SELECT 1 FROM user_card_lists l
+    WHERE l.id = user_card_list_items.list_id
+      AND l.user_id = auth.uid()
+  ));
+CREATE POLICY "user_card_list_items_admin_all"
+  ON public.user_card_list_items FOR ALL USING (is_admin());
+
+-- user_card_lists
+CREATE POLICY "user_card_lists_owner_select"
+  ON public.user_card_lists FOR SELECT
+  USING ((auth.uid() = user_id) OR (is_public = true));
+CREATE POLICY "user_card_lists_owner_insert"
+  ON public.user_card_lists FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "user_card_lists_owner_update"
+  ON public.user_card_lists FOR UPDATE
+  USING (auth.uid() = user_id);
+CREATE POLICY "user_card_lists_owner_delete"
+  ON public.user_card_lists FOR DELETE
+  USING (auth.uid() = user_id);
+CREATE POLICY "user_card_lists_admin_all"
+  ON public.user_card_lists FOR ALL USING (is_admin());
+
+-- user_card_variants
+CREATE POLICY "Authenticated users can view any user's card variants"
+  ON public.user_card_variants FOR SELECT
+  USING (auth.role() = 'authenticated'::text);
+CREATE POLICY "Users can manage their variants"
+  ON public.user_card_variants FOR ALL
+  USING (auth.uid() = user_id);
+
+-- user_cards
+CREATE POLICY "Users can view their own cards"
+  ON public.user_cards FOR SELECT
+  USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own cards"
+  ON public.user_cards FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own cards."
+  ON public.user_cards FOR UPDATE
+  USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own cards"
+  ON public.user_cards FOR DELETE
+  USING (auth.uid() = user_id);
+CREATE POLICY "Admins can manage all user_cards"
+  ON public.user_cards FOR ALL USING (is_admin());
+
+-- user_graded_cards
+CREATE POLICY "user_graded_cards_select_own"
+  ON public.user_graded_cards FOR SELECT
+  USING (auth.uid() = user_id);
+CREATE POLICY "user_graded_cards_insert_own"
+  ON public.user_graded_cards FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "user_graded_cards_update_own"
+  ON public.user_graded_cards FOR UPDATE
+  USING (auth.uid() = user_id);
+CREATE POLICY "user_graded_cards_delete_own"
+  ON public.user_graded_cards FOR DELETE
+  USING (auth.uid() = user_id);
+CREATE POLICY "user_graded_cards_admin_all"
+  ON public.user_graded_cards FOR ALL USING (is_admin());
+
+-- user_sealed_products
+CREATE POLICY "Users can view their own sealed products."
+  ON public.user_sealed_products FOR SELECT
+  USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert their own sealed products."
+  ON public.user_sealed_products FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own sealed products."
+  ON public.user_sealed_products FOR UPDATE
+  USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own sealed products."
+  ON public.user_sealed_products FOR DELETE
+  USING (auth.uid() = user_id);
+
+-- user_sets
+CREATE POLICY "Authenticated users can view any user's sets"
+  ON public.user_sets FOR SELECT
+  USING (auth.role() = 'authenticated'::text);
+CREATE POLICY "Users can insert their own sets"
+  ON public.user_sets FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update their own sets"
+  ON public.user_sets FOR UPDATE
+  USING (auth.uid() = user_id);
+CREATE POLICY "Users can delete their own sets"
+  ON public.user_sets FOR DELETE
+  USING (auth.uid() = user_id);
+CREATE POLICY "Admins can manage all user_sets"
+  ON public.user_sets FOR ALL USING (is_admin());
 
 -- user_subscriptions
-create index if not exists user_subscriptions_user_id_idx
-    on public.user_subscriptions(user_id);
+CREATE POLICY "Users can read their own subscription"
+  ON public.user_subscriptions FOR SELECT
+  USING (auth.uid() = user_id);
+CREATE POLICY "Service role can manage all subscriptions"
+  ON public.user_subscriptions FOR ALL
+  USING (auth.role() = 'service_role'::text)
+  WITH CHECK (auth.role() = 'service_role'::text);
+
+-- users
+CREATE POLICY "Users can view their own profile"
+  ON public.users FOR SELECT
+  USING (auth.uid() = id);
+CREATE POLICY "Authenticated users can view any profile"
+  ON public.users FOR SELECT
+  USING (auth.role() = 'authenticated'::text);
+CREATE POLICY "Admins can view all users"
+  ON public.users FOR SELECT
+  USING (is_admin());
+CREATE POLICY "Users can insert own profile"
+  ON public.users FOR INSERT
+  WITH CHECK (auth.uid() = id);
+CREATE POLICY "Users can update own profile"
+  ON public.users FOR UPDATE
+  USING (auth.uid() = id);
+
+-- variant_suggestions
+CREATE POLICY "Everyone can view variant suggestions"
+  ON public.variant_suggestions FOR SELECT USING (true);
+CREATE POLICY "Authenticated users can create variant suggestions"
+  ON public.variant_suggestions FOR INSERT
+  WITH CHECK (auth.uid() = created_by);
+CREATE POLICY "Admins can update variant suggestions"
+  ON public.variant_suggestions FOR UPDATE
+  USING (is_admin());
+
+-- variants
+CREATE POLICY "Everyone can view variants"
+  ON public.variants FOR SELECT USING (true);
+CREATE POLICY "Admins can manage variants"
+  ON public.variants FOR ALL USING (is_admin());
 
 -- wanted_cards
-create index if not exists wanted_cards_user_id_idx
-    on public.wanted_cards(user_id);
-create index if not exists wanted_cards_card_id_idx
-    on public.wanted_cards(card_id);
+CREATE POLICY "wanted_cards_owner_select"
+  ON public.wanted_cards FOR SELECT
+  USING (auth.uid() = user_id);
+CREATE POLICY "wanted_cards_owner_insert"
+  ON public.wanted_cards FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "wanted_cards_owner_delete"
+  ON public.wanted_cards FOR DELETE
+  USING (auth.uid() = user_id);
+CREATE POLICY "wanted_cards_admin_all"
+  ON public.wanted_cards FOR ALL USING (is_admin());
 
 
--- ── DEFAULT VARIANT SEED DATA ─────────────────────────────────
--- Safe to re-run (ON CONFLICT DO NOTHING via the unique key constraint).
-insert into public.variants (name, key, color, is_quick_add, sort_order, is_official) values
-    ('Normal',       'normal',     'green',  true, 1, true),
-    ('Reverse Holo', 'reverse',    'blue',   true, 2, true),
-    ('Holo Rare',    'holo',       'purple', true, 3, true),
-    ('Pokeball',     'pokeball',   'red',    true, 4, true),
-    ('Masterball',   'masterball', 'yellow', true, 5, true)
-on conflict (key) do nothing;
+-- ─────────────────────────────────────────────────────────────────────────────
+-- INDEXES
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- achievements
+CREATE UNIQUE INDEX achievements_name_key ON public.achievements USING btree (name);
+
+-- card_variant_availability
+CREATE INDEX idx_cva_card_id    ON public.card_variant_availability USING btree (card_id);
+CREATE INDEX idx_cva_variant_id ON public.card_variant_availability USING btree (variant_id);
+
+-- card_variant_images
+CREATE INDEX idx_cvi_card_id    ON public.card_variant_images USING btree (card_id);
+CREATE INDEX idx_cvi_variant_id ON public.card_variant_images USING btree (variant_id);
+
+-- cards
+CREATE INDEX idx_cards_name               ON public.cards USING btree (name);
+CREATE INDEX idx_cards_set_id             ON public.cards USING btree (set_id);
+CREATE INDEX cards_default_variant_idx    ON public.cards USING btree (default_variant_id);
+CREATE UNIQUE INDEX cards_api_id_idx      ON public.cards USING btree (api_id) WHERE (api_id IS NOT NULL);
+CREATE INDEX cards_source_card_id_idx     ON public.cards USING btree (source_card_id) WHERE (source_card_id IS NOT NULL);
+CREATE INDEX cards_tcggo_id_idx           ON public.cards USING btree (tcggo_id) WHERE (tcggo_id IS NOT NULL);
+
+-- friendships
+CREATE INDEX friendships_requester_idx          ON public.friendships USING btree (requester_id, status);
+CREATE INDEX friendships_addressee_idx          ON public.friendships USING btree (addressee_id, status);
+CREATE INDEX friendships_accepted_requester_idx ON public.friendships USING btree (requester_id) WHERE (status = 'accepted'::text);
+CREATE INDEX friendships_accepted_addressee_idx ON public.friendships USING btree (addressee_id) WHERE (status = 'accepted'::text);
+
+-- missing_card_suggestions
+CREATE INDEX missing_card_suggestions_status_created_idx
+  ON public.missing_card_suggestions USING btree (status, created_at DESC);
+
+-- set_products
+CREATE INDEX set_products_set_id_idx      ON public.set_products USING btree (set_id);
+CREATE INDEX set_products_product_type_idx ON public.set_products USING btree (product_type);
+
+-- sets
+CREATE INDEX idx_sets_game          ON public.sets USING btree (game);
+CREATE INDEX sets_release_date_idx  ON public.sets USING btree (release_date DESC);
+CREATE INDEX sets_series_idx        ON public.sets USING btree (series);
+
+-- stories
+CREATE INDEX stories_slug_idx       ON public.stories USING btree (slug);
+CREATE INDEX stories_published_at_idx ON public.stories USING btree (published_at DESC) WHERE (is_published = true);
+
+-- trade_proposal_items
+CREATE INDEX trade_proposal_items_proposal_idx ON public.trade_proposal_items USING btree (proposal_id);
+
+-- trade_proposals
+CREATE INDEX trade_proposals_proposer_idx ON public.trade_proposals USING btree (proposer_id, status);
+CREATE INDEX trade_proposals_receiver_idx ON public.trade_proposals USING btree (receiver_id, status);
+
+-- user_achievements
+CREATE INDEX user_achievements_user_id_idx ON public.user_achievements USING btree (user_id);
+
+-- user_card_activity_log
+CREATE INDEX idx_card_activity_log_user_changed
+  ON public.user_card_activity_log USING btree (user_id, changed_at DESC);
+
+-- user_card_list_items
+CREATE INDEX user_card_list_items_list_id_idx ON public.user_card_list_items USING btree (list_id);
+CREATE INDEX user_card_list_items_card_id_idx ON public.user_card_list_items USING btree (card_id);
+
+-- user_card_lists
+CREATE INDEX user_card_lists_user_id_idx ON public.user_card_lists USING btree (user_id);
+
+-- user_card_variants
+CREATE UNIQUE INDEX user_card_variants_unique    ON public.user_card_variants USING btree (user_id, card_id, variant_id);
+CREATE INDEX user_card_variants_user_id_idx      ON public.user_card_variants USING btree (user_id);
+CREATE INDEX user_card_variants_card_id_idx      ON public.user_card_variants USING btree (card_id);
+CREATE INDEX user_card_variants_variant_id_idx   ON public.user_card_variants USING btree (variant_id);
+CREATE INDEX ucv_user_id_updated_at_idx          ON public.user_card_variants USING btree (user_id, updated_at DESC);
+
+-- user_cards
+CREATE UNIQUE INDEX user_cards_user_id_card_id_key ON public.user_cards USING btree (user_id, card_id);
+
+-- user_graded_cards
+CREATE UNIQUE INDEX user_graded_cards_unique       ON public.user_graded_cards USING btree (user_id, card_id, variant_id, grading_company, grade);
+CREATE INDEX user_graded_cards_user_id_idx         ON public.user_graded_cards USING btree (user_id);
+CREATE INDEX user_graded_cards_card_id_idx         ON public.user_graded_cards USING btree (card_id);
+CREATE INDEX user_graded_cards_user_card_idx       ON public.user_graded_cards USING btree (user_id, card_id);
+
+-- user_sealed_products
+CREATE UNIQUE INDEX user_sealed_products_user_id_product_id_key
+  ON public.user_sealed_products USING btree (user_id, product_id);
+CREATE INDEX usp_user_id_idx         ON public.user_sealed_products USING btree (user_id);
+CREATE INDEX usp_product_id_idx      ON public.user_sealed_products USING btree (product_id);
+CREATE INDEX usp_user_id_updated_at_idx ON public.user_sealed_products USING btree (user_id, updated_at DESC);
+
+-- user_sets
+CREATE UNIQUE INDEX user_sets_user_id_set_id_key ON public.user_sets USING btree (user_id, set_id);
+CREATE INDEX user_sets_collection_goal_idx       ON public.user_sets USING btree (collection_goal);
+
+-- user_subscriptions
+CREATE UNIQUE INDEX user_subscriptions_user_id_key ON public.user_subscriptions USING btree (user_id);
+CREATE INDEX user_subscriptions_user_id_idx        ON public.user_subscriptions USING btree (user_id);
+
+-- variant_suggestions
+-- (only pkey index — generated automatically)
+
+-- variants
+CREATE INDEX idx_variants_card_id   ON public.variants USING btree (card_id);
+CREATE INDEX variants_key_idx       ON public.variants USING btree (key);
+CREATE INDEX variants_color_idx     ON public.variants USING btree (color);
+CREATE INDEX variants_is_official_idx ON public.variants USING btree (is_official);
+CREATE INDEX variants_sort_order_idx  ON public.variants USING btree (sort_order);
+
+-- wanted_cards
+CREATE UNIQUE INDEX wanted_cards_user_card_key ON public.wanted_cards USING btree (user_id, card_id);
+CREATE INDEX wanted_cards_user_id_idx          ON public.wanted_cards USING btree (user_id);
+CREATE INDEX wanted_cards_card_id_idx          ON public.wanted_cards USING btree (card_id);

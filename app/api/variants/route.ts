@@ -393,7 +393,7 @@ export async function POST(request: NextRequest) {
       // 1. Global variant catalogue
       const { data: variants, error: variantsError } = await supabaseAdmin
         .from('variants')
-        .select('id, name, key, description, color, short_label, is_quick_add, sort_order, is_official, card_id, created_by, created_at')
+        .select('id, name, key, description, color, short_label, is_quick_add, sort_order, is_official, card_id, show_as_dot, created_by, created_at')
         .eq('is_official', true)
         .is('card_id', null)
         .order('sort_order', { ascending: true })
@@ -431,7 +431,7 @@ export async function POST(request: NextRequest) {
       // 3. Card-specific variants
       const { data: cardSpecificRows, error: cardSpecificErr } = await supabaseAdmin
         .from('variants')
-        .select('id, name, key, description, color, short_label, is_quick_add, sort_order, is_official, card_id, created_by, created_at')
+        .select('id, name, key, description, color, short_label, is_quick_add, sort_order, is_official, card_id, show_as_dot, created_by, created_at')
         .in('card_id', cardIdList)
 
       if (cardSpecificErr) {
@@ -578,9 +578,10 @@ export async function POST(request: NextRequest) {
             ...v,
             quantity: q[v.id] || 0,
             variant_image_url: batchVariantImageMap[cId]?.[v.id] ?? null,
-            // dot flag: global variants always shown as dots; card-specific only when
-            // the admin explicitly added them to an override via the ⚙️ panel.
-            is_configured_as_dot: v.card_id == null || hasOverride,
+            // dot flag: driven by the per-variant show_as_dot DB column.
+            // Global variants default to true (backfilled in migration).
+            // Card-specific variants default to false until admin enables them.
+            is_configured_as_dot: v.show_as_dot ?? (v.card_id == null),
           }))
 
           // Distribute null-variant graded totals to the quick-add (or first) variant.
@@ -602,12 +603,12 @@ export async function POST(request: NextRequest) {
 
       const grouped: Record<string, VariantWithQuantity[]> = {}
       cardIdList.forEach(cId => {
-        const hasOverride = !!(overrideMap[cId]?.size > 0)
         grouped[cId] = variantsForCard(cId).map((v: Variant) => ({
           ...v,
           quantity: 0,
           variant_image_url: batchVariantImageMap[cId]?.[v.id] ?? null,
-          is_configured_as_dot: v.card_id == null || hasOverride,
+          // dot flag: driven by the per-variant show_as_dot DB column.
+          is_configured_as_dot: v.show_as_dot ?? (v.card_id == null),
         }))
       })
       const r = NextResponse.json(grouped)
@@ -654,7 +655,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
-    const { id, sort_order, name, short_label, description, color } = body
+    const { id, sort_order, name, short_label, description, color, show_as_dot } = body
 
     if (!id) {
       return NextResponse.json({ error: 'id required' }, { status: 400 })
@@ -667,6 +668,7 @@ export async function PATCH(request: NextRequest) {
     if (short_label  !== undefined) updates.short_label  = short_label?.trim()  || null
     if (description  !== undefined) updates.description  = description?.trim()  || null
     if (color        !== undefined) updates.color        = color
+    if (show_as_dot  !== undefined) updates.show_as_dot  = show_as_dot
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'No updatable fields provided' }, { status: 400 })
